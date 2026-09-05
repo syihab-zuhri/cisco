@@ -1,5 +1,5 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { Monitor, Network, Router, Settings, Terminal, Trash2 } from 'lucide-react';
+import { Cable, Laptop, Monitor, Network, Router, Server, Settings, Terminal, Trash2 } from 'lucide-react';
 import { type DeviceData } from '../../types/network';
 import { useAppStore } from '../../store/useAppStore';
 
@@ -15,8 +15,14 @@ export function DeviceNode({ id, data, selected }: NodeProps) {
     switch (deviceData.type) {
       case 'pc':
         return <Monitor className="h-6 w-6 text-sky-400" />;
+      case 'laptop':
+        return <Laptop className="h-6 w-6 text-cyan-400" />;
+      case 'server':
+        return <Server className="h-6 w-6 text-violet-400" />;
       case 'switch':
         return <Network className="h-6 w-6 text-emerald-400" />;
+      case 'hub':
+        return <Cable className="h-6 w-6 text-orange-400" />;
       case 'router':
         return <Router className="h-6 w-6 text-amber-400" />;
     }
@@ -111,7 +117,7 @@ export function DeviceNode({ id, data, selected }: NodeProps) {
                 className="!h-3.5 !w-3.5 !rounded-full !border-0 !opacity-0 !pointer-events-none"
               />
               <span className="mt-1 text-[9px] font-mono font-medium text-gray-400 pointer-events-none">
-                {deviceData.type === 'switch' ? `f${idx + 1}` : port.id}
+                {deviceData.type === 'switch' || deviceData.type === 'hub' ? `f${idx + 1}` : port.id}
               </span>
             </div>
           );

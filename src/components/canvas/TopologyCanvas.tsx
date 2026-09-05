@@ -76,7 +76,10 @@ export function TopologyCanvas() {
         <MiniMap
           nodeColor={(n) => {
             if (n.data?.type === 'pc') return '#38BDF8';
+            if (n.data?.type === 'laptop') return '#22D3EE';
+            if (n.data?.type === 'server') return '#A78BFA';
             if (n.data?.type === 'switch') return '#10B981';
+            if (n.data?.type === 'hub') return '#FB923C';
             return '#F59E0B';
           }}
           className="!border-[#374151] !bg-[#111827]"

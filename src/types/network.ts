@@ -1,4 +1,18 @@
-export type DeviceType = 'pc' | 'switch' | 'router';
+export type DeviceType = 'pc' | 'laptop' | 'server' | 'switch' | 'hub' | 'router';
+
+/** Perangkat end-host yang berperilaku seperti PC (host L3 biasa). */
+export const HOST_DEVICE_TYPES: DeviceType[] = ['pc', 'laptop', 'server'];
+
+/** Perangkat L2 yang bisa menjadi perantara jalur (switch belajar CAM; hub murni repeater). */
+export const L2_INTERMEDIATE_TYPES: DeviceType[] = ['switch', 'hub'];
+
+export function isHostType(type: DeviceType): boolean {
+  return HOST_DEVICE_TYPES.includes(type);
+}
+
+export function isL2Intermediate(type: DeviceType): boolean {
+  return L2_INTERMEDIATE_TYPES.includes(type);
+}
 
 export interface PhysicalPort {
   id: string; // e.g. "fa0", "fa0/0"

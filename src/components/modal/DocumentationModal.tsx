@@ -127,7 +127,7 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
                   Apa Saja yang Bisa Dilakukan oleh Web Ini?
                 </h3>
                 <p className="text-xs text-gray-300 leading-relaxed">
-                  OpenPacket adalah simulator jaringan komputer interaktif client-side yang dirancang sebagai alternatif ringan untuk media belajar praktikum jaringan komputer dan penelitian skripsi tanpa perlu menginstal aplikasi berat seperti Cisco Packet Tracer. Dokumentasi ini mencerminkan kondisi implementasi versi <b>1.0.2</b>.
+                  OpenPacket adalah simulator jaringan komputer interaktif client-side yang dirancang sebagai alternatif ringan untuk media belajar praktikum jaringan komputer dan penelitian skripsi tanpa perlu menginstal aplikasi berat seperti Cisco Packet Tracer. Dokumentasi ini mencerminkan kondisi implementasi versi <b>1.0.3</b>.
                 </p>
 
                 <div className="grid grid-cols-2 gap-3.5 pt-2">
@@ -136,10 +136,10 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
                       1. Manipulasi Topologi Interaktif
                     </h4>
                     <ul className="text-xs text-gray-300 space-y-1.5 list-disc list-inside">
-                      <li>Drag-and-drop perangkat: PC Host, Switch L2 (8 Port), dan Router L3 (3 Port).</li>
+                      <li>Drag-and-drop 6 jenis perangkat: PC Host, Laptop, Server, Switch L2 (8 Port), Hub (8 Port, repeater murni), dan Router L3 (3 Port).</li>
                       <li>Pengkabelan fisik otomatis dengan aturan ketat <b>Port Singularity (1 kabel per port)</b>; melepas kabel otomatis menurunkan kedua port ke Link DOWN.</li>
                       <li>Garis kabel berpendar neon dilengkapi label port interaktif di atas kabel.</li>
-                      <li>Katalog template siap pakai untuk berbagai arsitektur topologi.</li>
+                      <li>8 katalog template siap pakai: dari P2P dasar hingga dual-router dengan static route.</li>
                     </ul>
                   </div>
 

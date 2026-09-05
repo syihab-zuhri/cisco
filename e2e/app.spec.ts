@@ -29,7 +29,7 @@ test.describe('OpenPacket happy path', () => {
     await page.goto('/');
     await expect(page.getByText('OpenPacket')).toBeVisible();
 
-    await page.getByRole('button', { name: /End Device/ }).click();
+    await page.getByRole('button', { name: /PC Host/ }).click();
     await expect(page.getByText('PC-1', { exact: true })).toBeVisible();
 
     await page.getByRole('button', { name: /Switch L2/ }).click();
@@ -65,7 +65,7 @@ test.describe('OpenPacket happy path', () => {
   test('modal konfigurasi GUI menyimpan IP dan tampil di node', async ({ page }) => {
     await page.goto('/');
 
-    await page.getByRole('button', { name: /End Device/ }).click();
+    await page.getByRole('button', { name: /PC Host/ }).click();
     await page.locator('button[title="Konfigurasi Perangkat (GUI)"]').first().click();
 
     await page.getByPlaceholder('e.g. 192.168.1.10').fill('192.168.1.77');

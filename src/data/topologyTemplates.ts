@@ -334,7 +334,7 @@ export const TOPOLOGY_TEMPLATES: TopologyTemplate[] = [
     id: 'two-routers-wan',
     name: 'Dual Router Point-to-Point (WAN Link)',
     category: 'Routing L3',
-    description: '2 Router Cisco terhubung via kabel serial/point-to-point (Subnet WAN 10.0.0.0/30) menghubungkan Site-A dan Site-B.',
+    description: '2 Router terhubung via link point-to-point (Subnet WAN 10.0.0.0/30) dengan static route — demo ping antar-site dengan TTL berkurang 2.',
     nodes: [
       {
         id: 'r1-sitea',
@@ -349,6 +349,7 @@ export const TOPOLOGY_TEMPLATES: TopologyTemplate[] = [
             { id: 'fa0/1', name: 'FastEthernet 0/1', status: 'up', ipAddress: '192.168.10.1', subnetMask: '255.255.255.0', macAddress: '00:50:79:W1:00:02', connectedEdgeId: 'edge-pca-r1', connectedToNodeId: 'pc-sitea', connectedToPortId: 'fa0' },
             { id: 'fa0/2', name: 'FastEthernet 0/2', status: 'down', macAddress: '00:50:79:W1:00:03' },
           ],
+          routes: [{ network: '192.168.20.0', subnetMask: '255.255.255.0', nextHop: '10.0.0.2', interfaceId: 'fa0/0' }],
           arpTable: {},
         },
       },
@@ -365,6 +366,7 @@ export const TOPOLOGY_TEMPLATES: TopologyTemplate[] = [
             { id: 'fa0/1', name: 'FastEthernet 0/1', status: 'up', ipAddress: '192.168.20.1', subnetMask: '255.255.255.0', macAddress: '00:50:79:W2:00:02', connectedEdgeId: 'edge-pcb-r2', connectedToNodeId: 'pc-siteb', connectedToPortId: 'fa0' },
             { id: 'fa0/2', name: 'FastEthernet 0/2', status: 'down', macAddress: '00:50:79:W2:00:03' },
           ],
+          routes: [{ network: '192.168.10.0', subnetMask: '255.255.255.0', nextHop: '10.0.0.1', interfaceId: 'fa0/0' }],
           arpTable: {},
         },
       },
@@ -528,7 +530,7 @@ export const TOPOLOGY_TEMPLATES: TopologyTemplate[] = [
     id: 'mesh-redundant-switch',
     name: 'Redundant Ring/Mesh Switch',
     category: 'LAN',
-    description: 'Topologi loop/cincin 3 Switch L2 untuk pengamatan bridging dan flooding broadcast.',
+    description: 'Topologi cincin 3 Switch L2. Engine memilih jalur terpendek (BFS) tanpa STP — cocok untuk mengamati redundansi jalur.',
     nodes: [
       {
         id: 'sw-a',
@@ -595,6 +597,150 @@ export const TOPOLOGY_TEMPLATES: TopologyTemplate[] = [
       { id: 'edge-swa-swc', source: 'sw-a', target: 'sw-c', sourceHandle: 'fa0/2', targetHandle: 'fa0/1', type: 'networkCable', data: { sourcePortName: 'fa0/2', targetPortName: 'fa0/1' } },
       { id: 'edge-swb-swc', source: 'sw-b', target: 'sw-c', sourceHandle: 'fa0/2', targetHandle: 'fa0/2', type: 'networkCable', data: { sourcePortName: 'fa0/2', targetPortName: 'fa0/2' } },
       { id: 'edge-pca-swa', source: 'pc-a', target: 'sw-a', sourceHandle: 'fa0', targetHandle: 'fa0/3', type: 'networkCable', data: { sourcePortName: 'fa0', targetPortName: 'fa0/3' } },
+    ],
+  },
+
+  // 7. Small Office LAN with Server & Laptop (komponen baru)
+  {
+    id: 'small-office-server',
+    name: 'Kantor Kecil: Server + Laptop + PC',
+    category: 'LAN',
+    description: 'LAN kantor kecil: File Server, Laptop, dan PC Host berbagi satu subnet 192.168.1.0/24 via Switch L2 — demo ARP & warm-cache antar 3 host.',
+    nodes: [
+      {
+        id: 'sw-office',
+        type: 'deviceNode',
+        position: { x: 380, y: 140 },
+        data: {
+          id: 'sw-office',
+          label: 'Switch-1',
+          type: 'switch',
+          ports: [
+            { id: 'fa0/1', name: 'FastEthernet 0/1', status: 'up', macAddress: '00:50:79:OF:01:01', connectedEdgeId: 'edge-srv-sw', connectedToNodeId: 'srv-1', connectedToPortId: 'fa0' },
+            { id: 'fa0/2', name: 'FastEthernet 0/2', status: 'up', macAddress: '00:50:79:OF:01:02', connectedEdgeId: 'edge-lap-sw', connectedToNodeId: 'lap-1', connectedToPortId: 'fa0' },
+            { id: 'fa0/3', name: 'FastEthernet 0/3', status: 'up', macAddress: '00:50:79:OF:01:03', connectedEdgeId: 'edge-pc-sw', connectedToNodeId: 'pc-1', connectedToPortId: 'fa0' },
+            { id: 'fa0/4', name: 'FastEthernet 0/4', status: 'down', macAddress: '00:50:79:OF:01:04' },
+            { id: 'fa0/5', name: 'FastEthernet 0/5', status: 'down', macAddress: '00:50:79:OF:01:05' },
+            { id: 'fa0/6', name: 'FastEthernet 0/6', status: 'down', macAddress: '00:50:79:OF:01:06' },
+            { id: 'fa0/7', name: 'FastEthernet 0/7', status: 'down', macAddress: '00:50:79:OF:01:07' },
+            { id: 'fa0/8', name: 'FastEthernet 0/8', status: 'down', macAddress: '00:50:79:OF:01:08' },
+          ],
+          macTable: {},
+        },
+      },
+      {
+        id: 'srv-1',
+        type: 'deviceNode',
+        position: { x: 120, y: 320 },
+        data: {
+          id: 'srv-1',
+          label: 'File-Server',
+          type: 'server',
+          ports: [{ id: 'fa0', name: 'FastEthernet 0', status: 'up', ipAddress: '192.168.1.50', subnetMask: '255.255.255.0', macAddress: '00:50:79:SV:01:01', connectedEdgeId: 'edge-srv-sw', connectedToNodeId: 'sw-office', connectedToPortId: 'fa0/1' }],
+          arpTable: {},
+        },
+      },
+      {
+        id: 'lap-1',
+        type: 'deviceNode',
+        position: { x: 400, y: 340 },
+        data: {
+          id: 'lap-1',
+          label: 'Laptop-1',
+          type: 'laptop',
+          ports: [{ id: 'fa0', name: 'FastEthernet 0', status: 'up', ipAddress: '192.168.1.20', subnetMask: '255.255.255.0', macAddress: '00:50:79:LP:01:01', connectedEdgeId: 'edge-lap-sw', connectedToNodeId: 'sw-office', connectedToPortId: 'fa0/2' }],
+          arpTable: {},
+        },
+      },
+      {
+        id: 'pc-1',
+        type: 'deviceNode',
+        position: { x: 660, y: 320 },
+        data: {
+          id: 'pc-1',
+          label: 'PC-1',
+          type: 'pc',
+          ports: [{ id: 'fa0', name: 'FastEthernet 0', status: 'up', ipAddress: '192.168.1.10', subnetMask: '255.255.255.0', macAddress: '00:50:79:PC:01:01', connectedEdgeId: 'edge-pc-sw', connectedToNodeId: 'sw-office', connectedToPortId: 'fa0/3' }],
+          arpTable: {},
+        },
+      },
+    ],
+    edges: [
+      { id: 'edge-srv-sw', source: 'srv-1', target: 'sw-office', sourceHandle: 'fa0', targetHandle: 'fa0/1', type: 'networkCable', data: { sourcePortName: 'fa0', targetPortName: 'fa0/1' } },
+      { id: 'edge-lap-sw', source: 'lap-1', target: 'sw-office', sourceHandle: 'fa0', targetHandle: 'fa0/2', type: 'networkCable', data: { sourcePortName: 'fa0', targetPortName: 'fa0/2' } },
+      { id: 'edge-pc-sw', source: 'pc-1', target: 'sw-office', sourceHandle: 'fa0', targetHandle: 'fa0/3', type: 'networkCable', data: { sourcePortName: 'fa0', targetPortName: 'fa0/3' } },
+    ],
+  },
+
+  // 8. Hub Lab (repeater murni — tanpa CAM learning)
+  {
+    id: 'hub-collision-lab',
+    name: 'Lab Hub (Repeater Murni)',
+    category: 'Dasar',
+    description: '3 PC terhubung via Hub 8 port. Bandingkan dengan Switch: hub tidak belajar CAM table — semua frame hanya di-repeat, cocok untuk demo collision domain.',
+    nodes: [
+      {
+        id: 'hub-1',
+        type: 'deviceNode',
+        position: { x: 380, y: 140 },
+        data: {
+          id: 'hub-1',
+          label: 'Hub-1',
+          type: 'hub',
+          ports: [
+            { id: 'fa0/1', name: 'FastEthernet 0/1', status: 'up', macAddress: '00:50:79:HB:01:01', connectedEdgeId: 'edge-hub-pc1', connectedToNodeId: 'pc-hub-1', connectedToPortId: 'fa0' },
+            { id: 'fa0/2', name: 'FastEthernet 0/2', status: 'up', macAddress: '00:50:79:HB:01:02', connectedEdgeId: 'edge-hub-pc2', connectedToNodeId: 'pc-hub-2', connectedToPortId: 'fa0' },
+            { id: 'fa0/3', name: 'FastEthernet 0/3', status: 'up', macAddress: '00:50:79:HB:01:03', connectedEdgeId: 'edge-hub-pc3', connectedToNodeId: 'pc-hub-3', connectedToPortId: 'fa0' },
+            { id: 'fa0/4', name: 'FastEthernet 0/4', status: 'down', macAddress: '00:50:79:HB:01:04' },
+            { id: 'fa0/5', name: 'FastEthernet 0/5', status: 'down', macAddress: '00:50:79:HB:01:05' },
+            { id: 'fa0/6', name: 'FastEthernet 0/6', status: 'down', macAddress: '00:50:79:HB:01:06' },
+            { id: 'fa0/7', name: 'FastEthernet 0/7', status: 'down', macAddress: '00:50:79:HB:01:07' },
+            { id: 'fa0/8', name: 'FastEthernet 0/8', status: 'down', macAddress: '00:50:79:HB:01:08' },
+          ],
+          macTable: {},
+        },
+      },
+      {
+        id: 'pc-hub-1',
+        type: 'deviceNode',
+        position: { x: 120, y: 330 },
+        data: {
+          id: 'pc-hub-1',
+          label: 'PC-1',
+          type: 'pc',
+          ports: [{ id: 'fa0', name: 'FastEthernet 0', status: 'up', ipAddress: '192.168.1.10', subnetMask: '255.255.255.0', macAddress: '00:50:79:H1:01:01', connectedEdgeId: 'edge-hub-pc1', connectedToNodeId: 'hub-1', connectedToPortId: 'fa0/1' }],
+          arpTable: {},
+        },
+      },
+      {
+        id: 'pc-hub-2',
+        type: 'deviceNode',
+        position: { x: 400, y: 330 },
+        data: {
+          id: 'pc-hub-2',
+          label: 'PC-2',
+          type: 'pc',
+          ports: [{ id: 'fa0', name: 'FastEthernet 0', status: 'up', ipAddress: '192.168.1.20', subnetMask: '255.255.255.0', macAddress: '00:50:79:H1:02:01', connectedEdgeId: 'edge-hub-pc2', connectedToNodeId: 'hub-1', connectedToPortId: 'fa0/2' }],
+          arpTable: {},
+        },
+      },
+      {
+        id: 'pc-hub-3',
+        type: 'deviceNode',
+        position: { x: 660, y: 330 },
+        data: {
+          id: 'pc-hub-3',
+          label: 'PC-3',
+          type: 'pc',
+          ports: [{ id: 'fa0', name: 'FastEthernet 0', status: 'up', ipAddress: '192.168.1.30', subnetMask: '255.255.255.0', macAddress: '00:50:79:H1:03:01', connectedEdgeId: 'edge-hub-pc3', connectedToNodeId: 'hub-1', connectedToPortId: 'fa0/3' }],
+          arpTable: {},
+        },
+      },
+    ],
+    edges: [
+      { id: 'edge-hub-pc1', source: 'pc-hub-1', target: 'hub-1', sourceHandle: 'fa0', targetHandle: 'fa0/1', type: 'networkCable', data: { sourcePortName: 'fa0', targetPortName: 'fa0/1' } },
+      { id: 'edge-hub-pc2', source: 'pc-hub-2', target: 'hub-1', sourceHandle: 'fa0', targetHandle: 'fa0/2', type: 'networkCable', data: { sourcePortName: 'fa0', targetPortName: 'fa0/2' } },
+      { id: 'edge-hub-pc3', source: 'pc-hub-3', target: 'hub-1', sourceHandle: 'fa0', targetHandle: 'fa0/3', type: 'networkCable', data: { sourcePortName: 'fa0', targetPortName: 'fa0/3' } },
     ],
   },
 ];

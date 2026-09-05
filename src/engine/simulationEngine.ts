@@ -2,6 +2,7 @@ import {
   type DeviceData,
   type PhysicalPort,
   type TopologyLink,
+  isL2Intermediate,
 } from '../types/network';
 import { isSameSubnet, prefixLength } from '../utils/ipUtils';
 import { type WorkerUIMessage } from '../types/ipc';
@@ -155,7 +156,8 @@ export class HeadlessSimulationEngine {
         if (peerNodeId === targetNodeId) return [...path, hop];
 
         const peerDev = this.devices.get(peerNodeId);
-        if (peerDev && peerDev.type === 'switch' && !visited.has(peerDev.id)) {
+        // Switch maupun hub dapat menjadi hop antara di jalur Layer-2
+        if (peerDev && isL2Intermediate(peerDev.type) && !visited.has(peerDev.id)) {
           visited.add(peerDev.id);
           queue.push({ currentNodeId: peerDev.id, path: [...path, hop] });
         }

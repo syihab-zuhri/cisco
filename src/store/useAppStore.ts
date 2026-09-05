@@ -75,7 +75,7 @@ interface AppStoreState {
 }
 
 const createDefaultPorts = (type: DeviceType): PhysicalPort[] => {
-  if (type === 'pc') {
+  if (type === 'pc' || type === 'laptop' || type === 'server') {
     return [
       {
         id: 'fa0',
@@ -85,7 +85,7 @@ const createDefaultPorts = (type: DeviceType): PhysicalPort[] => {
       },
     ];
   }
-  if (type === 'switch') {
+  if (type === 'switch' || type === 'hub') {
     return Array.from({ length: 8 }, (_, i) => ({
       id: `fa0/${i + 1}`,
       name: `FastEthernet 0/${i + 1}`,
@@ -116,11 +116,25 @@ const createDefaultPorts = (type: DeviceType): PhysicalPort[] => {
   ];
 };
 
-let deviceCounters: Record<DeviceType, number> = {
+const DEVICE_LABEL_PREFIX: Record<DeviceType, string> = {
+  pc: 'PC',
+  laptop: 'Laptop',
+  server: 'Server',
+  switch: 'Switch',
+  hub: 'Hub',
+  router: 'Router',
+};
+
+const EMPTY_DEVICE_COUNTERS: Record<DeviceType, number> = {
   pc: 0,
+  laptop: 0,
+  server: 0,
   switch: 0,
+  hub: 0,
   router: 0,
 };
+
+let deviceCounters: Record<DeviceType, number> = { ...EMPTY_DEVICE_COUNTERS };
 
 export const useAppStore = create<AppStoreState>((set, get) => ({
   nodes: [],
@@ -159,8 +173,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   addDevice: (type, position) => {
     deviceCounters[type] += 1;
-    const prefix = type === 'pc' ? 'PC' : type === 'switch' ? 'Switch' : 'Router';
-    const label = `${prefix}-${deviceCounters[type]}`;
+    const label = `${DEVICE_LABEL_PREFIX[type]}-${deviceCounters[type]}`;
     const id = `${type}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
     const newNode: Node<DeviceData> = {
@@ -375,10 +388,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   loadTopology: (data) => {
     // Sinkronkan counter penamaan dengan label yang dimuat agar tidak ada nama duplikat.
-    const counters: Record<DeviceType, number> = { pc: 0, switch: 0, router: 0 };
+    const counters: Record<DeviceType, number> = { ...EMPTY_DEVICE_COUNTERS };
     for (const n of data.nodes) {
       const match = n.data.label.match(/-(\d+)\s*$/);
-      if (match) {
+      if (match && n.data.type in counters) {
         counters[n.data.type] = Math.max(counters[n.data.type], parseInt(match[1], 10));
       }
     }
@@ -393,7 +406,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   resetTopology: () => {
-    deviceCounters = { pc: 0, switch: 0, router: 0 };
+    deviceCounters = { ...EMPTY_DEVICE_COUNTERS };
     set({
       nodes: [],
       edges: [],

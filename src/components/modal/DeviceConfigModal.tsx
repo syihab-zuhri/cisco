@@ -169,7 +169,7 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
                 </span>
               </div>
 
-              {device.type !== 'switch' && (
+              {device.type !== 'switch' && device.type !== 'hub' && (
                 <>
                   <div className="pt-2 border-t border-gray-800">
                     <label className="block text-xs text-gray-300 mb-1">
@@ -201,8 +201,8 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
             </div>
           )}
 
-          {/* PC Default Gateway */}
-          {device.type === 'pc' && (
+          {/* Default Gateway untuk end device (PC/Laptop/Server) */}
+          {['pc', 'laptop', 'server'].includes(device.type) && (
             <div>
               <label className="block text-xs font-medium text-gray-300 mb-1">
                 Default Gateway

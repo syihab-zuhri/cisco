@@ -372,3 +372,90 @@ describe('HeadlessSimulationEngine (kasus tepi & static route)', () => {
     expect(result.received).toBe(5);
   });
 });
+
+describe('HeadlessSimulationEngine (perangkat baru: laptop, server, hub)', () => {
+  it('ping via hub berfungsi tetapi hub tidak pernah belajar CAM table', async () => {
+    const laptop: DeviceData = {
+      id: 'lap-1',
+      label: 'Laptop-1',
+      type: 'laptop',
+      ports: [
+        { id: 'fa0', name: 'FastEthernet 0', status: 'up', ipAddress: '192.168.1.20', subnetMask: '255.255.255.0', macAddress: '00:50:79:LP:01:01' },
+      ],
+      arpTable: {},
+    };
+    const server: DeviceData = {
+      id: 'srv-1',
+      label: 'File-Server',
+      type: 'server',
+      ports: [
+        { id: 'fa0', name: 'FastEthernet 0', status: 'up', ipAddress: '192.168.1.50', subnetMask: '255.255.255.0', macAddress: '00:50:79:SV:01:01' },
+      ],
+      arpTable: {},
+    };
+    const hub: DeviceData = {
+      id: 'hub-1',
+      label: 'Hub-1',
+      type: 'hub',
+      ports: [
+        { id: 'fa0/1', name: 'FastEthernet 0/1', status: 'up', macAddress: '00:50:79:HB:01:01' },
+        { id: 'fa0/2', name: 'FastEthernet 0/2', status: 'up', macAddress: '00:50:79:HB:01:02' },
+      ],
+      macTable: {},
+    };
+
+    const links = [
+      { sourceNodeId: 'lap-1', sourcePortId: 'fa0', targetNodeId: 'hub-1', targetPortId: 'fa0/1' },
+      { sourceNodeId: 'srv-1', sourcePortId: 'fa0', targetNodeId: 'hub-1', targetPortId: 'fa0/2' },
+    ];
+
+    const engine = new HeadlessSimulationEngine();
+    engine.setTopology([laptop, server, hub], links);
+
+    const result = await engine.executePing('lap-1', '192.168.1.50');
+
+    expect(result.success).toBe(true);
+    const updatedHub = engine.getDevices().find((d) => d.id === 'hub-1');
+    expect(updatedHub?.macTable).toEqual({}); // hub murni repeater, tidak belajar
+    const updatedLaptop = engine.getDevices().find((d) => d.id === 'lap-1');
+    expect(updatedLaptop?.arpTable?.['192.168.1.50']).toBe('00:50:79:SV:01:01');
+  });
+
+  it('laptop & server berperilaku sebagai host biasa di belakang switch', async () => {
+    const laptop: DeviceData = {
+      id: 'lap-1',
+      label: 'Laptop-1',
+      type: 'laptop',
+      ports: [
+        { id: 'fa0', name: 'FastEthernet 0', status: 'up', ipAddress: '192.168.1.20', subnetMask: '255.255.255.0', macAddress: '00:50:79:LP:01:01' },
+      ],
+      arpTable: {},
+    };
+    const server: DeviceData = {
+      id: 'srv-1',
+      label: 'File-Server',
+      type: 'server',
+      ports: [
+        { id: 'fa0', name: 'FastEthernet 0', status: 'up', ipAddress: '192.168.1.50', subnetMask: '255.255.255.0', macAddress: '00:50:79:SV:01:01' },
+      ],
+      arpTable: {},
+    };
+    const sw = makeSwitch('sw-1', '00:50:79:SW:09');
+
+    const links = [
+      { sourceNodeId: 'lap-1', sourcePortId: 'fa0', targetNodeId: 'sw-1', targetPortId: 'fa0/1' },
+      { sourceNodeId: 'srv-1', sourcePortId: 'fa0', targetNodeId: 'sw-1', targetPortId: 'fa0/2' },
+    ];
+
+    const engine = new HeadlessSimulationEngine();
+    engine.setTopology([laptop, server, sw], links);
+
+    const result = await engine.executePing('lap-1', '192.168.1.50');
+    expect(result.success).toBe(true);
+    expect(result.ttl).toBe(128);
+
+    const updatedSw = engine.getDevices().find((d) => d.id === 'sw-1');
+    expect(updatedSw?.macTable?.['00:50:79:LP:01:01']).toBe('fa0/1');
+    expect(updatedSw?.macTable?.['00:50:79:SV:01:01']).toBe('fa0/2');
+  });
+});

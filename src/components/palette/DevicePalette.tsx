@@ -1,8 +1,11 @@
 import { useState } from 'react';
 import {
+  Cable,
+  Laptop,
   Monitor,
   Network,
   Router,
+  Server,
   Plus,
   LayoutTemplate,
   Layers,
@@ -120,8 +123,40 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
                   <Monitor className="h-4 w-4 text-sky-400" />
                 </div>
                 <div className="text-left">
-                  <span className="block text-xs font-medium text-gray-100">End Device</span>
-                  <span className="block text-[10px] text-gray-400">PC Host (1 Port)</span>
+                  <span className="block text-xs font-medium text-gray-100">PC Host</span>
+                  <span className="block text-[10px] text-gray-400">End Device (1 Port)</span>
+                </div>
+              </div>
+              <Plus className="h-4 w-4 text-gray-400" />
+            </button>
+
+            <button
+              onClick={() => handleAdd('laptop')}
+              className="flex items-center justify-between rounded-lg border border-[#374151] bg-[#1F2937] p-2.5 transition-all hover:border-cyan-500 hover:bg-[#374151]"
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="rounded bg-cyan-950/60 p-1.5 border border-cyan-800/50">
+                  <Laptop className="h-4 w-4 text-cyan-400" />
+                </div>
+                <div className="text-left">
+                  <span className="block text-xs font-medium text-gray-100">Laptop</span>
+                  <span className="block text-[10px] text-gray-400">End Device (1 Port)</span>
+                </div>
+              </div>
+              <Plus className="h-4 w-4 text-gray-400" />
+            </button>
+
+            <button
+              onClick={() => handleAdd('server')}
+              className="flex items-center justify-between rounded-lg border border-[#374151] bg-[#1F2937] p-2.5 transition-all hover:border-violet-500 hover:bg-[#374151]"
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="rounded bg-violet-950/60 p-1.5 border border-violet-800/50">
+                  <Server className="h-4 w-4 text-violet-400" />
+                </div>
+                <div className="text-left">
+                  <span className="block text-xs font-medium text-gray-100">Server</span>
+                  <span className="block text-[10px] text-gray-400">End Device (1 Port)</span>
                 </div>
               </div>
               <Plus className="h-4 w-4 text-gray-400" />
@@ -137,7 +172,23 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
                 </div>
                 <div className="text-left">
                   <span className="block text-xs font-medium text-gray-100">Switch L2</span>
-                  <span className="block text-[10px] text-gray-400">8 FE Ports</span>
+                  <span className="block text-[10px] text-gray-400">8 FE Ports (CAM Learning)</span>
+                </div>
+              </div>
+              <Plus className="h-4 w-4 text-gray-400" />
+            </button>
+
+            <button
+              onClick={() => handleAdd('hub')}
+              className="flex items-center justify-between rounded-lg border border-[#374151] bg-[#1F2937] p-2.5 transition-all hover:border-orange-500 hover:bg-[#374151]"
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="rounded bg-orange-950/60 p-1.5 border border-orange-800/50">
+                  <Cable className="h-4 w-4 text-orange-400" />
+                </div>
+                <div className="text-left">
+                  <span className="block text-xs font-medium text-gray-100">Hub</span>
+                  <span className="block text-[10px] text-gray-400">8 FE Ports (Repeater Murni)</span>
                 </div>
               </div>
               <Plus className="h-4 w-4 text-gray-400" />

@@ -31,7 +31,9 @@ export function Toolbar({ onTriggerPing, onOpenDocs }: ToolbarProps) {
   const [pingSource, setPingSource] = useState<string>('');
   const [pingTargetIp, setPingTargetIp] = useState<string>('');
 
-  const pcNodes = nodes.filter((n) => n.data.type === 'pc');
+  const pingableNodes = nodes.filter((n) =>
+    n.data.ports.some((p) => p.ipAddress)
+  );
 
   const handleExportJson = () => {
     const dataStr = JSON.stringify({ nodes, edges }, null, 2);
@@ -141,10 +143,10 @@ export function Toolbar({ onTriggerPing, onOpenDocs }: ToolbarProps) {
           onChange={(e) => setPingSource(e.target.value)}
           className="rounded bg-[#111827] px-2 py-1 text-xs text-gray-200 border border-[#374151] focus:outline-none focus:border-blue-500"
         >
-          <option value="">-- Pilih Host PC --</option>
-          {pcNodes.map((pc) => (
-            <option key={pc.id} value={pc.id}>
-              {pc.data.label} ({pc.data.ports[0]?.ipAddress || 'No IP'})
+          <option value="">-- Pilih Host --</option>
+          {pingableNodes.map((n) => (
+            <option key={n.id} value={n.id}>
+              {n.data.label} ({n.data.ports.find((p) => p.ipAddress)?.ipAddress})
             </option>
           ))}
         </select>

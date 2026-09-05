@@ -37,6 +37,22 @@
 
 ---
 
+## [2026-09-06] — Version 1.0.3 (Komponen Baru & Perluasan Template)
+
+### Added
+- **3 tipe perangkat baru**: `laptop` dan `server` (end device, perilaku host sama dengan PC) serta `hub` (repeater murni 8 port — tidak pernah belajar CAM table, untuk demo collision domain). Palet kini menampilkan 6 jenis perangkat dengan ikon & warna masing-masing.
+- **2 template topologi baru**: "Kantor Kecil: Server + Laptop + PC" (LAN satu subnet 3 host) dan "Lab Hub (Repeater Murni)" (3 PC via hub, pembanding switch). Total 8 template.
+- **Uji integritas template** (`tests/unit/topologyTemplates.test.ts`): setiap edge harus merujuk node/port yang ada, port UP, binding `connectedEdgeId` konsisten dua arah, id unik, dan kategori valid.
+
+### Fixed
+- **Template "Dual Router Point-to-Point (WAN Link)"**: ditambahkan static route dua arah (192.168.20.0/24 via 10.0.0.2 dan sebaliknya) — sebelumnya ping antar-site pasti gagal "No route" karena kedua router tidak punya rute ke LAN site lawan. Deskripsi template mesh disesuaikan (engine memakai jalur terpendek BFS, bukan STP).
+- Ping dari Toolbar kini bisa dipancarkan dari semua host ber-IP (PC, Laptop, Server, router) — sebelumnya hanya PC.
+
+### Status Gate
+- `Gate C` — implementasi P0 berjalan; type-check & unit test hijau (40 test); benchmark paritas Packet Tracer (Sprint 7) belum dieksekusi.
+
+---
+
 ## [2026-09-05] — Version 1.0.2 (Infrastruktur QA: Pause/Resume, Paritas, E2E, CI, Ikon)
 
 ### Added
