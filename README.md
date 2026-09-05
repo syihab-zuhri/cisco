@@ -4,8 +4,8 @@ Simulator jaringan komputer edukatif yang ringan, 100% offline, dan gratis — a
 
 ## Fitur
 
-- **Kanvas topologi drag-and-drop** — 6 jenis perangkat: PC, Laptop, Server, Switch 8 port, Hub 8 port (repeater murni), Router 3 port — dengan kabel 1-port-1-kabel dan indikator link up/down
-- **Simulasi protokol deterministik**: RFC 826 (ARP), RFC 791 (IPv4 subnetting & routing), RFC 792 (ICMP Echo) di Web Worker
+- **Kanvas topologi drag-and-drop** — 8 jenis perangkat: PC, Laptop, Server, Switch 8 port, Hub 8 port (repeater murni), Access Point (radio WiFi), Router 3 port, dan Cloud Internet — dengan kabel 1-port-1-kabel, indikator link up/down, dan asosiasi nirkabel via SSID
+- **Simulasi protokol deterministik**: RFC 826 (ARP), RFC 791 (IPv4 subnetting & routing), RFC 792 (ICMP Echo) di Web Worker — termasuk **ping ke IP publik (8.8.8.8) lewat Cloud Internet tersimulasi** dan **jaringan nirkabel** (AP menjembatani WiFi ↔ kabel)
 - **Animasi paket** (amplop PDU meluncur di kabel, ARP vs ICMP berbeda warna) dengan kontrol kecepatan 0.5x/1x/2x + Pause/Resume
 - **Konfigurasi dual-mode**: form GUI dan terminal Cisco IOS mini (10 perintah P0: `enable`, `configure terminal`, `hostname`, `interface`, `ip address`, `no shutdown`, `shutdown`, `show ip interface brief`, `show ip route`, `ping`) — tersinkronisasi dua arah
 - **Template topologi siap pakai** (P2P, LAN switch, dual-LAN via router, dll.)

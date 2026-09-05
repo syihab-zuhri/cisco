@@ -1,10 +1,21 @@
-export type DeviceType = 'pc' | 'laptop' | 'server' | 'switch' | 'hub' | 'router';
+export type DeviceType =
+  | 'pc'
+  | 'laptop'
+  | 'server'
+  | 'switch'
+  | 'hub'
+  | 'router'
+  | 'accessPoint'
+  | 'cloud';
 
 /** Perangkat end-host yang berperilaku seperti PC (host L3 biasa). */
 export const HOST_DEVICE_TYPES: DeviceType[] = ['pc', 'laptop', 'server'];
 
-/** Perangkat L2 yang bisa menjadi perantara jalur (switch belajar CAM; hub murni repeater). */
-export const L2_INTERMEDIATE_TYPES: DeviceType[] = ['switch', 'hub'];
+/** Perangkat L2 yang bisa menjadi perantara jalur (switch/AP belajar CAM; hub murni repeater). */
+export const L2_INTERMEDIATE_TYPES: DeviceType[] = ['switch', 'hub', 'accessPoint'];
+
+/** Tipe perangkat yang melakukan CAM learning (jembatan L2). */
+export const CAM_LEARNING_TYPES: DeviceType[] = ['switch', 'accessPoint'];
 
 export function isHostType(type: DeviceType): boolean {
   return HOST_DEVICE_TYPES.includes(type);
@@ -14,16 +25,24 @@ export function isL2Intermediate(type: DeviceType): boolean {
   return L2_INTERMEDIATE_TYPES.includes(type);
 }
 
+export function learnsCam(type: DeviceType): boolean {
+  return CAM_LEARNING_TYPES.includes(type);
+}
+
+export type PortKind = 'ethernet' | 'wireless';
+
 export interface PhysicalPort {
-  id: string; // e.g. "fa0", "fa0/0"
-  name: string; // e.g. "FastEthernet 0", "FastEthernet 0/1"
+  id: string; // e.g. "fa0", "fa0/0", "wla0", "radio0"
+  name: string; // e.g. "FastEthernet 0", "Wireless Adapter"
   status: 'up' | 'down';
+  kind?: PortKind; // default 'ethernet' — port radio/klien WiFi memakai 'wireless'
   ipAddress?: string; // e.g. "192.168.1.10"
   subnetMask?: string; // e.g. "255.255.255.0"
   macAddress: string; // e.g. "00:50:79:66:68:01"
   connectedEdgeId?: string;
   connectedToNodeId?: string;
   connectedToPortId?: string;
+  ssid?: string; // hanya port wireless: SSID yang di-broadcast (AP) atau dituju (klien)
 }
 
 export interface RoutingEntry {
@@ -46,12 +65,13 @@ export type DeviceData = {
   arpTable?: Record<string, string>; // IP -> MAC
 };
 
-// Kontrak kabel fisik yang dikirim ke simulation engine (INV-002).
+// Kontrak kabel fisik / asosiasi nirkabel yang dikirim ke simulation engine (INV-002).
 export interface TopologyLink {
   sourceNodeId: string;
   sourcePortId: string;
   targetNodeId: string;
   targetPortId: string;
+  kind?: 'ethernet' | 'wireless';
 }
 
 export interface CableConnection {

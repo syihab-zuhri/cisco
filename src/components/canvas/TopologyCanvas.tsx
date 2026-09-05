@@ -11,6 +11,7 @@ import '@xyflow/react/dist/style.css';
 import { useAppStore } from '../../store/useAppStore';
 import { DeviceNode } from './DeviceNode';
 import { NetworkCableEdge } from './NetworkCableEdge';
+import { WirelessLinkEdge } from './WirelessLinkEdge';
 
 const nodeTypes = {
   deviceNode: DeviceNode,
@@ -18,6 +19,7 @@ const nodeTypes = {
 
 const edgeTypes = {
   networkCable: NetworkCableEdge,
+  wirelessLink: WirelessLinkEdge,
 };
 
 export function TopologyCanvas() {
@@ -27,6 +29,7 @@ export function TopologyCanvas() {
     onNodesChange,
     onEdgesChange,
     connectPorts,
+    associateWireless,
     setSelectedNodeId,
     activePackets,
   } = useAppStore();
@@ -35,12 +38,44 @@ export function TopologyCanvas() {
     if (!params.source || !params.target || !params.sourceHandle || !params.targetHandle) {
       return;
     }
-    connectPorts(
-      params.source,
-      params.sourceHandle,
-      params.target,
-      params.targetHandle
-    );
+
+    const state = useAppStore.getState();
+    const findPort = (nodeId: string, portId: string) =>
+      state.nodes.find((n) => n.id === nodeId)?.data.ports.find((p) => p.id === portId);
+
+    const sourcePort = findPort(params.source, params.sourceHandle);
+    const targetPort = findPort(params.target, params.targetHandle);
+    const sourceIsWireless = sourcePort?.kind === 'wireless';
+    const targetIsWireless = targetPort?.kind === 'wireless';
+
+    // Asosiasi WiFi: port nirkabel hanya boleh ke radio Access Point
+    if (sourceIsWireless || targetIsWireless) {
+      if (!(sourceIsWireless && targetIsWireless)) {
+        state.addSimulationLog(
+          'ERROR',
+          'Port nirkabel hanya bisa terhubung ke radio Access Point.'
+        );
+        return;
+      }
+      const sourceNode = state.nodes.find((n) => n.id === params.source);
+      const targetNode = state.nodes.find((n) => n.id === params.target);
+      const sourceIsAp = sourceNode?.data.type === 'accessPoint';
+      const targetIsAp = targetNode?.data.type === 'accessPoint';
+      if (sourceIsAp === targetIsAp) {
+        state.addSimulationLog('ERROR', 'Asosiasi WiFi butuh satu sisi Access Point.');
+        return;
+      }
+      const ap = sourceIsAp
+        ? { nodeId: params.source, portId: params.sourceHandle }
+        : { nodeId: params.target, portId: params.targetHandle };
+      const client = sourceIsAp
+        ? { nodeId: params.target, portId: params.targetHandle }
+        : { nodeId: params.source, portId: params.sourceHandle };
+      associateWireless(client.nodeId, client.portId, ap.nodeId, ap.portId);
+      return;
+    }
+
+    connectPorts(params.source, params.sourceHandle, params.target, params.targetHandle);
   };
 
   return (
@@ -80,6 +115,8 @@ export function TopologyCanvas() {
             if (n.data?.type === 'server') return '#A78BFA';
             if (n.data?.type === 'switch') return '#10B981';
             if (n.data?.type === 'hub') return '#FB923C';
+            if (n.data?.type === 'accessPoint') return '#E879F9';
+            if (n.data?.type === 'cloud') return '#60A5FA';
             return '#F59E0B';
           }}
           className="!border-[#374151] !bg-[#111827]"

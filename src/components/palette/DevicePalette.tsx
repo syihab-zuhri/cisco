@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import {
   Cable,
+  Cloud,
   Laptop,
   Monitor,
   Network,
@@ -12,6 +13,7 @@ import {
   Sparkles,
   PanelLeftClose,
   PanelLeftOpen,
+  Wifi,
 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { type DeviceType } from '../../types/network';
@@ -195,6 +197,22 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
             </button>
 
             <button
+              onClick={() => handleAdd('accessPoint')}
+              className="flex items-center justify-between rounded-lg border border-[#374151] bg-[#1F2937] p-2.5 transition-all hover:border-fuchsia-500 hover:bg-[#374151]"
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="rounded bg-fuchsia-950/60 p-1.5 border border-fuchsia-800/50">
+                  <Wifi className="h-4 w-4 text-fuchsia-400" />
+                </div>
+                <div className="text-left">
+                  <span className="block text-xs font-medium text-gray-100">Access Point</span>
+                  <span className="block text-[10px] text-gray-400">Radio WiFi + Uplink</span>
+                </div>
+              </div>
+              <Plus className="h-4 w-4 text-gray-400" />
+            </button>
+
+            <button
               onClick={() => handleAdd('router')}
               className="flex items-center justify-between rounded-lg border border-[#374151] bg-[#1F2937] p-2.5 transition-all hover:border-amber-500 hover:bg-[#374151]"
             >
@@ -205,6 +223,22 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
                 <div className="text-left">
                   <span className="block text-xs font-medium text-gray-100">Router L3</span>
                   <span className="block text-[10px] text-gray-400">3 FE Ports (Routed)</span>
+                </div>
+              </div>
+              <Plus className="h-4 w-4 text-gray-400" />
+            </button>
+
+            <button
+              onClick={() => handleAdd('cloud')}
+              className="flex items-center justify-between rounded-lg border border-[#374151] bg-[#1F2937] p-2.5 transition-all hover:border-sky-400 hover:bg-[#374151]"
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="rounded bg-sky-950/60 p-1.5 border border-sky-800/50">
+                  <Cloud className="h-4 w-4 text-sky-300" />
+                </div>
+                <div className="text-left">
+                  <span className="block text-xs font-medium text-gray-100">Cloud Internet</span>
+                  <span className="block text-[10px] text-gray-400">IP Publik Tersimulasi (8.8.8.8)</span>
                 </div>
               </div>
               <Plus className="h-4 w-4 text-gray-400" />

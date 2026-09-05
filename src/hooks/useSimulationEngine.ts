@@ -104,6 +104,7 @@ export async function requestPing(
     sourcePortId: e.sourceHandle ?? 'fa0',
     targetNodeId: e.target,
     targetPortId: e.targetHandle ?? 'fa0',
+    kind: e.type === 'wirelessLink' ? ('wireless' as const) : ('ethernet' as const),
   }));
   w.postMessage({ type: 'INIT_STATE', payload: { devices, links } } as UIWorkerMessage);
 

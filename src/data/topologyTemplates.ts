@@ -5,7 +5,7 @@ export interface TopologyTemplate {
   id: string;
   name: string;
   description: string;
-  category: 'Dasar' | 'LAN' | 'Routing L3' | 'Enterprise';
+  category: 'Dasar' | 'LAN' | 'Routing L3' | 'Enterprise' | 'Nirkabel';
   nodes: Node<DeviceData>[];
   edges: Edge[];
 }
@@ -741,6 +741,200 @@ export const TOPOLOGY_TEMPLATES: TopologyTemplate[] = [
       { id: 'edge-hub-pc1', source: 'pc-hub-1', target: 'hub-1', sourceHandle: 'fa0', targetHandle: 'fa0/1', type: 'networkCable', data: { sourcePortName: 'fa0', targetPortName: 'fa0/1' } },
       { id: 'edge-hub-pc2', source: 'pc-hub-2', target: 'hub-1', sourceHandle: 'fa0', targetHandle: 'fa0/2', type: 'networkCable', data: { sourcePortName: 'fa0', targetPortName: 'fa0/2' } },
       { id: 'edge-hub-pc3', source: 'pc-hub-3', target: 'hub-1', sourceHandle: 'fa0', targetHandle: 'fa0/3', type: 'networkCable', data: { sourcePortName: 'fa0', targetPortName: 'fa0/3' } },
+    ],
+  },
+
+  // 9. WiFi Hotspot Rumah + Internet (Nirkabel + Cloud tersimulasi)
+  {
+    id: 'hotspot-rumah-internet',
+    name: 'WiFi Hotspot Rumah + Internet',
+    category: 'Nirkabel',
+    description: 'Laptop via WiFi + PC via kabel berbagi router rumahan yang tersambung Cloud Internet (default route siap) — langsung coba ping 8.8.8.8!',
+    nodes: [
+      {
+        id: 'cloud-net',
+        type: 'deviceNode',
+        position: { x: 380, y: 60 },
+        data: {
+          id: 'cloud-net',
+          label: 'Cloud',
+          type: 'cloud',
+          ports: [
+            { id: 'wan0', name: 'WAN 0', status: 'up', kind: 'ethernet', ipAddress: '203.0.113.2', subnetMask: '255.255.255.252', macAddress: '00:50:79:CL:01:01', connectedEdgeId: 'edge-cld-rtr', connectedToNodeId: 'rtr-rumah', connectedToPortId: 'fa0/2' },
+            { id: 'wan1', name: 'WAN 1', status: 'down', kind: 'ethernet', macAddress: '00:50:79:CL:01:02' },
+          ],
+          arpTable: {},
+        },
+      },
+      {
+        id: 'rtr-rumah',
+        type: 'deviceNode',
+        position: { x: 380, y: 220 },
+        data: {
+          id: 'rtr-rumah',
+          label: 'Router-Rumah',
+          type: 'router',
+          ports: [
+            { id: 'fa0/0', name: 'FastEthernet 0/0 (LAN)', status: 'up', ipAddress: '192.168.10.1', subnetMask: '255.255.255.0', macAddress: '00:50:79:HR:01:01', connectedEdgeId: 'edge-rtr-ap', connectedToNodeId: 'ap-rumah', connectedToPortId: 'fa0' },
+            { id: 'fa0/1', name: 'FastEthernet 0/1 (LAN)', status: 'up', ipAddress: '192.168.20.1', subnetMask: '255.255.255.0', macAddress: '00:50:79:HR:01:02', connectedEdgeId: 'edge-rtr-pc', connectedToNodeId: 'pc-rumah', connectedToPortId: 'fa0' },
+            { id: 'fa0/2', name: 'FastEthernet 0/2 (WAN)', status: 'up', ipAddress: '203.0.113.1', subnetMask: '255.255.255.252', macAddress: '00:50:79:HR:01:03', connectedEdgeId: 'edge-cld-rtr', connectedToNodeId: 'cloud-net', connectedToPortId: 'wan0' },
+          ],
+          routes: [{ network: '0.0.0.0', subnetMask: '0.0.0.0', nextHop: '203.0.113.2', interfaceId: 'fa0/2' }],
+          arpTable: {},
+        },
+      },
+      {
+        id: 'ap-rumah',
+        type: 'deviceNode',
+        position: { x: 150, y: 330 },
+        data: {
+          id: 'ap-rumah',
+          label: 'AP-Rumah',
+          type: 'accessPoint',
+          ports: [
+            { id: 'radio0', name: 'Radio 0 (2.4 GHz)', status: 'up', kind: 'wireless', macAddress: '00:50:79:AP:01:01', ssid: 'RumahWiFi' },
+            { id: 'fa0', name: 'FastEthernet 0 (Uplink)', status: 'up', kind: 'ethernet', macAddress: '00:50:79:AP:01:02', connectedEdgeId: 'edge-rtr-ap', connectedToNodeId: 'rtr-rumah', connectedToPortId: 'fa0/0' },
+          ],
+          macTable: {},
+        },
+      },
+      {
+        id: 'lap-rumah',
+        type: 'deviceNode',
+        position: { x: 90, y: 520 },
+        data: {
+          id: 'lap-rumah',
+          label: 'Laptop-1',
+          type: 'laptop',
+          defaultGateway: '192.168.10.1',
+          ports: [
+            { id: 'fa0', name: 'FastEthernet 0', status: 'down', kind: 'ethernet', macAddress: '00:50:79:HR:02:01' },
+            { id: 'wla0', name: 'Wireless Adapter', status: 'up', kind: 'wireless', ipAddress: '192.168.10.20', subnetMask: '255.255.255.0', macAddress: '00:50:79:HR:02:02', ssid: 'RumahWiFi', connectedEdgeId: 'edge-lap-ap', connectedToNodeId: 'ap-rumah', connectedToPortId: 'radio0' },
+          ],
+          arpTable: {},
+        },
+      },
+      {
+        id: 'pc-rumah',
+        type: 'deviceNode',
+        position: { x: 660, y: 380 },
+        data: {
+          id: 'pc-rumah',
+          label: 'PC-Kabel',
+          type: 'pc',
+          defaultGateway: '192.168.20.1',
+          ports: [
+            { id: 'fa0', name: 'FastEthernet 0', status: 'up', kind: 'ethernet', ipAddress: '192.168.20.10', subnetMask: '255.255.255.0', macAddress: '00:50:79:HR:03:01', connectedEdgeId: 'edge-rtr-pc', connectedToNodeId: 'rtr-rumah', connectedToPortId: 'fa0/1' },
+            { id: 'wla0', name: 'Wireless Adapter', status: 'down', kind: 'wireless', macAddress: '00:50:79:HR:03:02', ssid: '' },
+          ],
+          arpTable: {},
+        },
+      },
+    ],
+    edges: [
+      { id: 'edge-cld-rtr', source: 'cloud-net', target: 'rtr-rumah', sourceHandle: 'wan0', targetHandle: 'fa0/2', type: 'networkCable', data: { sourcePortName: 'WAN 0', targetPortName: 'fa0/2 (WAN)' } },
+      { id: 'edge-rtr-ap', source: 'rtr-rumah', target: 'ap-rumah', sourceHandle: 'fa0/0', targetHandle: 'fa0', type: 'networkCable', data: { sourcePortName: 'fa0/0 (LAN)', targetPortName: 'fa0 (Uplink)' } },
+      { id: 'edge-rtr-pc', source: 'pc-rumah', target: 'rtr-rumah', sourceHandle: 'fa0', targetHandle: 'fa0/1', type: 'networkCable', data: { sourcePortName: 'fa0', targetPortName: 'fa0/1 (LAN)' } },
+      { id: 'edge-lap-ap', source: 'lap-rumah', target: 'ap-rumah', sourceHandle: 'wla0', targetHandle: 'radio0', type: 'wirelessLink', data: { sourcePortName: 'Wireless Adapter', targetPortName: 'Radio 0', ssid: 'RumahWiFi' } },
+    ],
+  },
+
+  // 10. Kantor Nirkabel (AP + Laptop WiFi, tanpa internet)
+  {
+    id: 'kantor-nirkabel',
+    name: 'Kantor Nirkabel (AP + Switch)',
+    category: 'Nirkabel',
+    description: 'Laptop dan PC kabel berbagi satu LAN 192.168.1.0/24 melalui Access Point yang di-uplink ke Switch — demo ARP & CAM lintas WiFi dan kabel.',
+    nodes: [
+      {
+        id: 'rtr-kantor',
+        type: 'deviceNode',
+        position: { x: 380, y: 70 },
+        data: {
+          id: 'rtr-kantor',
+          label: 'Router-1',
+          type: 'router',
+          ports: [
+            { id: 'fa0/0', name: 'FastEthernet 0/0', status: 'up', ipAddress: '192.168.1.1', subnetMask: '255.255.255.0', macAddress: '00:50:79:KR:01:01', connectedEdgeId: 'edge-rtr-sw', connectedToNodeId: 'sw-kantor', connectedToPortId: 'fa0/1' },
+            { id: 'fa0/1', name: 'FastEthernet 0/1', status: 'down', kind: 'ethernet', macAddress: '00:50:79:KR:01:02' },
+            { id: 'fa0/2', name: 'FastEthernet 0/2', status: 'down', kind: 'ethernet', macAddress: '00:50:79:KR:01:03' },
+          ],
+          routes: [],
+          arpTable: {},
+        },
+      },
+      {
+        id: 'sw-kantor',
+        type: 'deviceNode',
+        position: { x: 380, y: 230 },
+        data: {
+          id: 'sw-kantor',
+          label: 'Switch-1',
+          type: 'switch',
+          ports: [
+            { id: 'fa0/1', name: 'FastEthernet 0/1', status: 'up', macAddress: '00:50:79:KS:01:01', connectedEdgeId: 'edge-rtr-sw', connectedToNodeId: 'rtr-kantor', connectedToPortId: 'fa0/0' },
+            { id: 'fa0/2', name: 'FastEthernet 0/2', status: 'up', macAddress: '00:50:79:KS:01:02', connectedEdgeId: 'edge-ap-sw', connectedToNodeId: 'ap-kantor', connectedToPortId: 'fa0' },
+            { id: 'fa0/3', name: 'FastEthernet 0/3', status: 'up', macAddress: '00:50:79:KS:01:03', connectedEdgeId: 'edge-srv-sw', connectedToNodeId: 'srv-kantor', connectedToPortId: 'fa0' },
+            { id: 'fa0/4', name: 'FastEthernet 0/4', status: 'down', macAddress: '00:50:79:KS:01:04' },
+            { id: 'fa0/5', name: 'FastEthernet 0/5', status: 'down', macAddress: '00:50:79:KS:01:05' },
+            { id: 'fa0/6', name: 'FastEthernet 0/6', status: 'down', macAddress: '00:50:79:KS:01:06' },
+            { id: 'fa0/7', name: 'FastEthernet 0/7', status: 'down', macAddress: '00:50:79:KS:01:07' },
+            { id: 'fa0/8', name: 'FastEthernet 0/8', status: 'down', macAddress: '00:50:79:KS:01:08' },
+          ],
+          macTable: {},
+        },
+      },
+      {
+        id: 'ap-kantor',
+        type: 'deviceNode',
+        position: { x: 140, y: 360 },
+        data: {
+          id: 'ap-kantor',
+          label: 'AP-Kantor',
+          type: 'accessPoint',
+          ports: [
+            { id: 'radio0', name: 'Radio 0 (2.4 GHz)', status: 'up', kind: 'wireless', macAddress: '00:50:79:KA:01:01', ssid: 'KantorWiFi' },
+            { id: 'fa0', name: 'FastEthernet 0 (Uplink)', status: 'up', kind: 'ethernet', macAddress: '00:50:79:KA:01:02', connectedEdgeId: 'edge-ap-sw', connectedToNodeId: 'sw-kantor', connectedToPortId: 'fa0/2' },
+          ],
+          macTable: {},
+        },
+      },
+      {
+        id: 'lap-kantor',
+        type: 'deviceNode',
+        position: { x: 80, y: 540 },
+        data: {
+          id: 'lap-kantor',
+          label: 'Laptop-1',
+          type: 'laptop',
+          defaultGateway: '192.168.1.1',
+          ports: [
+            { id: 'fa0', name: 'FastEthernet 0', status: 'down', kind: 'ethernet', macAddress: '00:50:79:KL:01:01' },
+            { id: 'wla0', name: 'Wireless Adapter', status: 'up', kind: 'wireless', ipAddress: '192.168.1.20', subnetMask: '255.255.255.0', macAddress: '00:50:79:KL:01:02', ssid: 'KantorWiFi', connectedEdgeId: 'edge-lap-ap', connectedToNodeId: 'ap-kantor', connectedToPortId: 'radio0' },
+          ],
+          arpTable: {},
+        },
+      },
+      {
+        id: 'srv-kantor',
+        type: 'deviceNode',
+        position: { x: 660, y: 400 },
+        data: {
+          id: 'srv-kantor',
+          label: 'File-Server',
+          type: 'server',
+          ports: [
+            { id: 'fa0', name: 'FastEthernet 0', status: 'up', kind: 'ethernet', ipAddress: '192.168.1.50', subnetMask: '255.255.255.0', macAddress: '00:50:79:KV:01:01', connectedEdgeId: 'edge-srv-sw', connectedToNodeId: 'sw-kantor', connectedToPortId: 'fa0/3' },
+          ],
+          arpTable: {},
+        },
+      },
+    ],
+    edges: [
+      { id: 'edge-rtr-sw', source: 'rtr-kantor', target: 'sw-kantor', sourceHandle: 'fa0/0', targetHandle: 'fa0/1', type: 'networkCable', data: { sourcePortName: 'fa0/0', targetPortName: 'fa0/1' } },
+      { id: 'edge-ap-sw', source: 'ap-kantor', target: 'sw-kantor', sourceHandle: 'fa0', targetHandle: 'fa0/2', type: 'networkCable', data: { sourcePortName: 'fa0 (Uplink)', targetPortName: 'fa0/2' } },
+      { id: 'edge-srv-sw', source: 'srv-kantor', target: 'sw-kantor', sourceHandle: 'fa0', targetHandle: 'fa0/3', type: 'networkCable', data: { sourcePortName: 'fa0', targetPortName: 'fa0/3' } },
+      { id: 'edge-lap-ap', source: 'lap-kantor', target: 'ap-kantor', sourceHandle: 'wla0', targetHandle: 'radio0', type: 'wirelessLink', data: { sourcePortName: 'Wireless Adapter', targetPortName: 'Radio 0', ssid: 'KantorWiFi' } },
     ],
   },
 ];

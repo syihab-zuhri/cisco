@@ -1,5 +1,17 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { Cable, Laptop, Monitor, Network, Router, Server, Settings, Terminal, Trash2 } from 'lucide-react';
+import {
+  Cable,
+  Cloud,
+  Laptop,
+  Monitor,
+  Network,
+  Router,
+  Server,
+  Settings,
+  Terminal,
+  Trash2,
+  Wifi,
+} from 'lucide-react';
 import { type DeviceData } from '../../types/network';
 import { useAppStore } from '../../store/useAppStore';
 
@@ -23,6 +35,10 @@ export function DeviceNode({ id, data, selected }: NodeProps) {
         return <Network className="h-6 w-6 text-emerald-400" />;
       case 'hub':
         return <Cable className="h-6 w-6 text-orange-400" />;
+      case 'accessPoint':
+        return <Wifi className="h-6 w-6 text-fuchsia-400" />;
+      case 'cloud':
+        return <Cloud className="h-6 w-6 text-sky-300" />;
       case 'router':
         return <Router className="h-6 w-6 text-amber-400" />;
     }
@@ -96,6 +112,12 @@ export function DeviceNode({ id, data, selected }: NodeProps) {
       <div className="mt-3 flex w-full flex-wrap justify-around gap-2 border-t border-gray-700/60 pt-2.5 nodrag">
         {deviceData.ports.map((port, idx) => {
           const isUp = port.status === 'up';
+          const isWireless = port.kind === 'wireless';
+          const handleColor = isWireless
+            ? '!bg-violet-400 shadow-violet-500/50 ring-2 ring-violet-500/40'
+            : isUp
+            ? '!bg-emerald-400 shadow-emerald-500/50 ring-2 ring-emerald-500/30'
+            : '!bg-amber-500 hover:!bg-amber-400 ring-1 ring-amber-500/20';
           return (
             <div key={port.id} className="relative flex flex-col items-center">
               {/* React Flow Handles: Source and Target */}
@@ -103,12 +125,10 @@ export function DeviceNode({ id, data, selected }: NodeProps) {
                 type="source"
                 position={Position.Bottom}
                 id={port.id}
-                className={`!h-3.5 !w-3.5 !rounded-full !border-2 !border-gray-900 transition-all shadow-md cursor-crosshair ${
-                  isUp
-                    ? '!bg-emerald-400 shadow-emerald-500/50 ring-2 ring-emerald-500/30'
-                    : '!bg-amber-500 hover:!bg-amber-400 ring-1 ring-amber-500/20'
+                className={`!h-3.5 !w-3.5 !rounded-full !border-2 !border-gray-900 transition-all shadow-md cursor-crosshair ${handleColor} ${
+                  isWireless && !isUp ? 'opacity-50' : ''
                 }`}
-                title={`${port.name} (${isUp ? 'Link UP (Terhubung)' : 'Link DOWN (Kosong)'})`}
+                title={`${port.name}${port.ssid ? ` (SSID: ${port.ssid})` : ''} (${isUp ? 'Link UP' : 'Link DOWN'})`}
               />
               <Handle
                 type="target"
@@ -117,7 +137,11 @@ export function DeviceNode({ id, data, selected }: NodeProps) {
                 className="!h-3.5 !w-3.5 !rounded-full !border-0 !opacity-0 !pointer-events-none"
               />
               <span className="mt-1 text-[9px] font-mono font-medium text-gray-400 pointer-events-none">
-                {deviceData.type === 'switch' || deviceData.type === 'hub' ? `f${idx + 1}` : port.id}
+                {isWireless
+                  ? 'wifi'
+                  : deviceData.type === 'switch' || deviceData.type === 'hub'
+                  ? `f${idx + 1}`
+                  : port.id}
               </span>
             </div>
           );

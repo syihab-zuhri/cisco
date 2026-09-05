@@ -459,3 +459,144 @@ describe('HeadlessSimulationEngine (perangkat baru: laptop, server, hub)', () =>
     expect(updatedSw?.macTable?.['00:50:79:SV:01:01']).toBe('fa0/2');
   });
 });
+
+describe('HeadlessSimulationEngine (nirkabel & cloud internet)', () => {
+  function buildWirelessLan() {
+    const laptop: DeviceData = {
+      id: 'lap-1',
+      label: 'Laptop-1',
+      type: 'laptop',
+      ports: [
+        { id: 'fa0', name: 'FastEthernet 0', status: 'down', kind: 'ethernet', macAddress: '00:50:79:LP:02:01' },
+        { id: 'wla0', name: 'Wireless Adapter', status: 'up', kind: 'wireless', ipAddress: '192.168.1.20', subnetMask: '255.255.255.0', macAddress: '00:50:79:LP:02:02', ssid: 'KantorWiFi' },
+      ],
+      arpTable: {},
+    };
+    const ap: DeviceData = {
+      id: 'ap-1',
+      label: 'AP-1',
+      type: 'accessPoint',
+      ports: [
+        { id: 'radio0', name: 'Radio 0', status: 'up', kind: 'wireless', macAddress: '00:50:79:AP:02:01', ssid: 'KantorWiFi' },
+        { id: 'fa0', name: 'FastEthernet 0 (Uplink)', status: 'up', kind: 'ethernet', macAddress: '00:50:79:AP:02:02' },
+      ],
+      macTable: {},
+    };
+    const pc1 = makePc('pc-1', '192.168.1.10', '00:50:79:AA:BB:01');
+    const sw = makeSwitch('sw-1', '00:50:79:SW:07');
+
+    const links = [
+      { sourceNodeId: 'lap-1', sourcePortId: 'wla0', targetNodeId: 'ap-1', targetPortId: 'radio0', kind: 'wireless' as const },
+      { sourceNodeId: 'ap-1', sourcePortId: 'fa0', targetNodeId: 'sw-1', targetPortId: 'fa0/1' },
+      { sourceNodeId: 'sw-1', sourcePortId: 'fa0/2', targetNodeId: 'pc-1', targetPortId: 'fa0' },
+    ];
+    return { devices: [laptop, ap, sw, pc1], links, ap };
+  }
+
+  it('ping dari laptop WiFi ke PC kabel melalui AP — AP belajar CAM di radio & uplink', async () => {
+    const { devices, links, ap } = buildWirelessLan();
+    const engine = new HeadlessSimulationEngine();
+    engine.setTopology(devices, links);
+
+    const result = await engine.executePing('lap-1', '192.168.1.10');
+
+    expect(result.success).toBe(true);
+    expect(result.ttl).toBe(128);
+    const updatedAp = engine.getDevices().find((d) => d.id === ap.id);
+    expect(updatedAp?.macTable?.['00:50:79:LP:02:02']).toBe('radio0');
+    expect(updatedAp?.macTable?.['00:50:79:AA:BB:01']).toBe('fa0');
+  });
+
+  it('ping IP publik 8.8.8.8 via cloud: TTL 126 & rtt 2ms (1 router + latensi WAN)', async () => {
+    const pc = makePc('pc-1', '192.168.1.10', '00:50:79:AA:BB:01', '192.168.1.1');
+    const router: DeviceData = {
+      id: 'r-1', label: 'R1', type: 'router',
+      ports: [
+        { id: 'fa0/0', name: 'FastEthernet 0/0', status: 'up', ipAddress: '192.168.1.1', subnetMask: '255.255.255.0', macAddress: '00:50:79:R1:01' },
+        { id: 'fa0/2', name: 'FastEthernet 0/2 (WAN)', status: 'up', ipAddress: '203.0.113.1', subnetMask: '255.255.255.252', macAddress: '00:50:79:R1:02' },
+      ],
+      routes: [{ network: '0.0.0.0', subnetMask: '0.0.0.0', nextHop: '203.0.113.2', interfaceId: 'fa0/2' }],
+      arpTable: {},
+    };
+    const cloud: DeviceData = {
+      id: 'cloud-1', label: 'Cloud', type: 'cloud',
+      ports: [
+        { id: 'wan0', name: 'WAN 0', status: 'up', ipAddress: '203.0.113.2', subnetMask: '255.255.255.252', macAddress: '00:50:79:CL:01' },
+      ],
+      arpTable: {},
+    };
+    const links = [
+      { sourceNodeId: 'pc-1', sourcePortId: 'fa0', targetNodeId: 'r-1', targetPortId: 'fa0/0' },
+      { sourceNodeId: 'r-1', sourcePortId: 'fa0/2', targetNodeId: 'cloud-1', targetPortId: 'wan0' },
+    ];
+    const engine = new HeadlessSimulationEngine();
+    engine.setTopology([pc, router, cloud], links);
+
+    const result = await engine.executePing('pc-1', '8.8.8.8');
+
+    expect(result.success).toBe(true);
+    expect(result.ttl).toBe(126); // 128 - 1 router - 1 hop cloud
+    expect(result.rttMs).toBe(2);
+    expect(result.logs.join('\n')).toContain('IP publik 8.8.8.8');
+  });
+
+  it('ping IP publik tanpa default route gagal "No route"', async () => {
+    const pc = makePc('pc-1', '192.168.1.10', '00:50:79:AA:BB:01', '192.168.1.1');
+    const router: DeviceData = {
+      id: 'r-1', label: 'R1', type: 'router',
+      ports: [
+        { id: 'fa0/0', name: 'FastEthernet 0/0', status: 'up', ipAddress: '192.168.1.1', subnetMask: '255.255.255.0', macAddress: '00:50:79:R1:01' },
+        { id: 'fa0/2', name: 'FastEthernet 0/2 (WAN)', status: 'up', ipAddress: '203.0.113.1', subnetMask: '255.255.255.252', macAddress: '00:50:79:R1:02' },
+      ],
+      routes: [],
+      arpTable: {},
+    };
+    const cloud: DeviceData = {
+      id: 'cloud-1', label: 'Cloud', type: 'cloud',
+      ports: [{ id: 'wan0', name: 'WAN 0', status: 'up', ipAddress: '203.0.113.2', subnetMask: '255.255.255.252', macAddress: '00:50:79:CL:01' }],
+      arpTable: {},
+    };
+    const engine = new HeadlessSimulationEngine();
+    engine.setTopology(
+      [pc, router, cloud],
+      [
+        { sourceNodeId: 'pc-1', sourcePortId: 'fa0', targetNodeId: 'r-1', targetPortId: 'fa0/0' },
+        { sourceNodeId: 'r-1', sourcePortId: 'fa0/2', targetNodeId: 'cloud-1', targetPortId: 'wan0' },
+      ]
+    );
+
+    const result = await engine.executePing('pc-1', '8.8.8.8');
+    expect(result.success).toBe(false);
+    expect(result.logs.join('\n')).toContain('No route to host 8.8.8.8');
+  });
+
+  it('ping IP publik tidak dikenal ditolak cloud dengan pesan eksplisit', async () => {
+    const pc = makePc('pc-1', '192.168.1.10', '00:50:79:AA:BB:01', '192.168.1.1');
+    const router: DeviceData = {
+      id: 'r-1', label: 'R1', type: 'router',
+      ports: [
+        { id: 'fa0/0', name: 'FastEthernet 0/0', status: 'up', ipAddress: '192.168.1.1', subnetMask: '255.255.255.0', macAddress: '00:50:79:R1:01' },
+        { id: 'fa0/2', name: 'FastEthernet 0/2 (WAN)', status: 'up', ipAddress: '203.0.113.1', subnetMask: '255.255.255.252', macAddress: '00:50:79:R1:02' },
+      ],
+      routes: [{ network: '0.0.0.0', subnetMask: '0.0.0.0', nextHop: '203.0.113.2', interfaceId: 'fa0/2' }],
+      arpTable: {},
+    };
+    const cloud: DeviceData = {
+      id: 'cloud-1', label: 'Cloud', type: 'cloud',
+      ports: [{ id: 'wan0', name: 'WAN 0', status: 'up', ipAddress: '203.0.113.2', subnetMask: '255.255.255.252', macAddress: '00:50:79:CL:01' }],
+      arpTable: {},
+    };
+    const engine = new HeadlessSimulationEngine();
+    engine.setTopology(
+      [pc, router, cloud],
+      [
+        { sourceNodeId: 'pc-1', sourcePortId: 'fa0', targetNodeId: 'r-1', targetPortId: 'fa0/0' },
+        { sourceNodeId: 'r-1', sourcePortId: 'fa0/2', targetNodeId: 'cloud-1', targetPortId: 'wan0' },
+      ]
+    );
+
+    const result = await engine.executePing('pc-1', '9.9.9.9');
+    expect(result.success).toBe(false);
+    expect(result.logs.join('\n')).toContain('tidak dikenal di internet tersimulasi');
+  });
+});

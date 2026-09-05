@@ -3,6 +3,7 @@ import {
   type PhysicalPort,
   type TopologyLink,
   isL2Intermediate,
+  learnsCam,
 } from '../types/network';
 import { isSameSubnet, prefixLength } from '../utils/ipUtils';
 import { type WorkerUIMessage } from '../types/ipc';
@@ -11,6 +12,12 @@ type LogLevel = 'INFO' | 'ARP' | 'ICMP' | 'ERROR' | 'SUCCESS';
 
 /** TTL awal Windows/iOS default (Packet Tracer memakai 128). */
 const INITIAL_TTL = 128;
+
+/**
+ * IP publik tersimulasi yang "dimiliki" Cloud Internet (INV-008: 100% offline —
+ * tidak ada request jaringan sungguhan, cloud menjawab secara deterministik).
+ */
+export const CLOUD_PUBLIC_IPS = ['8.8.8.8', '1.1.1.1'] as const;
 
 interface L2Hop {
   fromNodeId: string;
@@ -171,6 +178,15 @@ export class HeadlessSimulationEngine {
       const port = dev.ports.find((p) => p.ipAddress === ip);
       if (port) return { dev, port };
     }
+    // IP publik tersimulasi dimiliki oleh perangkat Cloud Internet
+    if ((CLOUD_PUBLIC_IPS as readonly string[]).includes(ip)) {
+      for (const dev of this.devices.values()) {
+        if (dev.type === 'cloud') {
+          const port = dev.ports.find((p) => p.status === 'up') ?? dev.ports[0];
+          if (port) return { dev, port };
+        }
+      }
+    }
     return null;
   }
 
@@ -265,7 +281,7 @@ export class HeadlessSimulationEngine {
 
     for (const hop of path) {
       const sw = this.devices.get(hop.toNodeId);
-      if (sw && sw.type === 'switch') {
+      if (sw && learnsCam(sw.type)) {
         sw.macTable = sw.macTable || {};
         if (!sw.macTable[sender.port.macAddress]) {
           sw.macTable[sender.port.macAddress] = hop.toPortId;
@@ -282,27 +298,27 @@ export class HeadlessSimulationEngine {
     owner.dev.arpTable = owner.dev.arpTable || {};
     owner.dev.arpTable[sender.port.ipAddress!] = sender.port.macAddress;
 
-    if (animate) {
-      this.log('ARP', `${owner.dev.label}: IP cocok (${nextHopIp})! Mengirimkan ARP Reply (Unicast)...`);
-      const backwardPath = this.reversePath(path);
-      for (const hop of backwardPath) {
-        await this.emitHop(
-          hop,
-          'ARP_REP',
-          'ARP',
-          `ARP Reply: ${nextHopIp} is at ${owner.port.macAddress}`
-        );
-        const sw = this.devices.get(hop.toNodeId);
-        if (sw && sw.type === 'switch') {
-          sw.macTable = sw.macTable || {};
-          sw.macTable[owner.port.macAddress] = sw.macTable[owner.port.macAddress] ?? hop.toPortId;
-          this.log(
-            'INFO',
-            `${sw.label}: CAM Table belajar MAC ${owner.port.macAddress} pada port ${hop.toPortId}`
+      if (animate) {
+        this.log('ARP', `${owner.dev.label}: IP cocok (${nextHopIp})! Mengirimkan ARP Reply (Unicast)...`);
+        const backwardPath = this.reversePath(path);
+        for (const hop of backwardPath) {
+          await this.emitHop(
+            hop,
+            'ARP_REP',
+            'ARP',
+            `ARP Reply: ${nextHopIp} is at ${owner.port.macAddress}`
           );
+          const sw = this.devices.get(hop.toNodeId);
+          if (sw && learnsCam(sw.type)) {
+            sw.macTable = sw.macTable || {};
+            sw.macTable[owner.port.macAddress] = sw.macTable[owner.port.macAddress] ?? hop.toPortId;
+            this.log(
+              'INFO',
+              `${sw.label}: CAM Table belajar MAC ${owner.port.macAddress} pada port ${hop.toPortId}`
+            );
+          }
         }
       }
-    }
 
     sender.dev.arpTable[nextHopIp] = owner.port.macAddress;
     this.log('ARP', `${sender.dev.label}: ARP Cache diperbarui: ${nextHopIp} -> ${owner.port.macAddress}`);
@@ -364,10 +380,33 @@ export class HeadlessSimulationEngine {
       requestPath.push(...path);
 
       if (next.nextHopIp === targetIp) {
-        // Sampai di host tujuan — buat Echo Reply
+        // Sampai di perangkat tujuan
         const routerCount = this.countInteriorRouters(requestPath);
-        const replyTtl = INITIAL_TTL - routerCount;
         const returnPath = this.reversePath(requestPath);
+
+        // Cloud Internet menjawab untuk IP publik tersimulasi (TTL/RTT termasuk hop WAN)
+        if (owner.dev.type === 'cloud') {
+          const replyTtl = INITIAL_TTL - routerCount - 1;
+          const rttMs = routerCount + 1;
+          this.log(
+            'ICMP',
+            `${owner.dev.label}: Menerima paket untuk IP publik ${targetIp}. Membalas ICMP Echo Reply...`
+          );
+          if (animate) {
+            for (const hop of returnPath) {
+              await this.emitHop(
+                hop,
+                'ICMP_REP',
+                'ICMP',
+                `ICMP Echo Reply: ${targetIp} -> ${source.port.ipAddress}`
+              );
+            }
+          }
+          return { ok: true, rttMs, replyTtl };
+        }
+
+        // Host biasa membalas Echo Reply
+        const replyTtl = INITIAL_TTL - routerCount;
 
         this.log('ICMP', `${owner.dev.label}: Menerima Echo Request. Membalas dengan ICMP Echo Reply...`);
         if (animate) {
@@ -383,8 +422,37 @@ export class HeadlessSimulationEngine {
         return { ok: true, rttMs: routerCount, replyTtl };
       }
 
-      // Transit: pemilik nextHopIp haruslah router
+      // Transit: pemilik nextHopIp haruslah router — atau Cloud untuk IP publik
       const router = owner.dev;
+      if (router.type === 'cloud') {
+        // Cloud menerima paket yang ditujukan ke IP publik tersimulasi
+        if (!(CLOUD_PUBLIC_IPS as readonly string[]).includes(targetIp)) {
+          return {
+            ok: false,
+            rttMs: 0,
+            replyTtl: 0,
+            error: `${router.label}: IP ${targetIp} tidak dikenal di internet tersimulasi.`,
+          };
+        }
+        const routerCount = this.countInteriorRouters(requestPath);
+        const replyTtl = INITIAL_TTL - routerCount - 1;
+        const rttMs = routerCount + 1;
+        this.log(
+          'ICMP',
+          `${router.label}: Menerima paket untuk IP publik ${targetIp}. Membalas ICMP Echo Reply...`
+        );
+        if (animate) {
+          for (const hop of this.reversePath(requestPath)) {
+            await this.emitHop(
+              hop,
+              'ICMP_REP',
+              'ICMP',
+              `ICMP Echo Reply: ${targetIp} -> ${source.port.ipAddress}`
+            );
+          }
+        }
+        return { ok: true, rttMs, replyTtl };
+      }
       if (router.type !== 'router') {
         return {
           ok: false,

@@ -61,3 +61,98 @@ describe('useAppStore — integritas status port saat penghapusan perangkat', ()
     expect(useAppStore.getState().nodes).toHaveLength(2);
   });
 });
+
+describe('useAppStore — asosiasi WiFi (INV-003 amandemen: radio 1-ke-N)', () => {
+  beforeEach(() => {
+    useAppStore.getState().resetTopology();
+  });
+
+  function addClientAndAp(clientSsid = 'OpenPacket-WiFi') {
+    const store = useAppStore.getState();
+    store.addDevice('laptop', { x: 0, y: 0 });
+    store.addDevice('accessPoint', { x: 200, y: 0 });
+    const { nodes } = useAppStore.getState();
+    const laptop = nodes.find((n) => n.data.type === 'laptop')!;
+    const ap = nodes.find((n) => n.data.type === 'accessPoint')!;
+    if (clientSsid !== undefined) {
+      store.updatePortConfig(laptop.id, 'wla0', { ssid: clientSsid });
+    }
+    return { laptop, ap };
+  }
+
+  it('SSID cocok → asosiasi terbentuk, wla0 UP, edge wirelessLink dibuat', () => {
+    const { laptop, ap } = addClientAndAp();
+    const ok = useAppStore.getState().associateWireless(laptop.id, 'wla0', ap.id, 'radio0');
+    expect(ok).toBe(true);
+
+    const state = useAppStore.getState();
+    expect(state.edges).toHaveLength(1);
+    expect(state.edges[0].type).toBe('wirelessLink');
+    const wla0 = state.nodes.find((n) => n.id === laptop.id)!.data.ports.find((p) => p.id === 'wla0')!;
+    expect(wla0.status).toBe('up');
+    expect(wla0.connectedEdgeId).toBe(state.edges[0].id);
+    // Radio AP tidak menyimpan binding (1-ke-N)
+    const radio = state.nodes.find((n) => n.id === ap.id)!.data.ports.find((p) => p.id === 'radio0')!;
+    expect(radio.connectedEdgeId).toBeUndefined();
+    expect(radio.status).toBe('up');
+  });
+
+  it('SSID tidak cocok → asosiasi ditolak', () => {
+    const { laptop, ap } = addClientAndAp('SsidLain');
+    const ok = useAppStore.getState().associateWireless(laptop.id, 'wla0', ap.id, 'radio0');
+    expect(ok).toBe(false);
+    expect(useAppStore.getState().edges).toHaveLength(0);
+  });
+
+  it('radio AP melayani banyak klien sekaligus (1-ke-N)', () => {
+    const store = useAppStore.getState();
+    store.addDevice('accessPoint', { x: 200, y: 0 });
+    store.addDevice('laptop', { x: 0, y: 0 });
+    store.addDevice('laptop', { x: 0, y: 100 });
+    const nodes = useAppStore.getState().nodes;
+    const ap = nodes.find((n) => n.data.type === 'accessPoint')!;
+    const laptops = nodes.filter((n) => n.data.type === 'laptop');
+    for (const lap of laptops) {
+      store.updatePortConfig(lap.id, 'wla0', { ssid: 'OpenPacket-WiFi' });
+      expect(store.associateWireless(lap.id, 'wla0', ap.id, 'radio0')).toBe(true);
+    }
+    expect(useAppStore.getState().edges.filter((e) => e.type === 'wirelessLink')).toHaveLength(2);
+  });
+
+  it('disconnectEdge asosiasi hanya menurunkan sisi klien; radio AP tetap up', () => {
+    const { laptop, ap } = addClientAndAp();
+    useAppStore.getState().associateWireless(laptop.id, 'wla0', ap.id, 'radio0');
+    const edgeId = useAppStore.getState().edges[0].id;
+
+    useAppStore.getState().disconnectEdge(edgeId);
+
+    const state = useAppStore.getState();
+    const wla0 = state.nodes.find((n) => n.id === laptop.id)!.data.ports.find((p) => p.id === 'wla0')!;
+    const radio = state.nodes.find((n) => n.id === ap.id)!.data.ports.find((p) => p.id === 'radio0')!;
+    expect(wla0.status).toBe('down');
+    expect(radio.status).toBe('up'); // radio tetap menyala
+    expect(state.edges).toHaveLength(0);
+  });
+
+  it('syncWirelessAssociation: SSID baru memindahkan klien; SSID kosong memutus', () => {
+    const { laptop, ap } = addClientAndAp();
+    useAppStore.getState().associateWireless(laptop.id, 'wla0', ap.id, 'radio0');
+    expect(useAppStore.getState().edges).toHaveLength(1);
+
+    // SSID dikosongkan → asosiasi diputus
+    useAppStore.getState().updatePortConfig(laptop.id, 'wla0', { ssid: '' });
+    useAppStore.getState().syncWirelessAssociation(laptop.id, 'wla0');
+    expect(useAppStore.getState().edges).toHaveLength(0);
+
+    // SSID cocok lagi → asosiasi terbentuk kembali
+    useAppStore.getState().updatePortConfig(laptop.id, 'wla0', { ssid: 'OpenPacket-WiFi' });
+    useAppStore.getState().syncWirelessAssociation(laptop.id, 'wla0');
+    expect(useAppStore.getState().edges).toHaveLength(1);
+  });
+
+  it('connectPorts menolak port nirkabel', () => {
+    const { laptop, ap } = addClientAndAp();
+    expect(useAppStore.getState().connectPorts(laptop.id, 'wla0', ap.id, 'radio0')).toBe(false);
+    expect(useAppStore.getState().edges).toHaveLength(0);
+  });
+});

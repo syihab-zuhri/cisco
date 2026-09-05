@@ -100,4 +100,25 @@ test.describe('OpenPacket happy path', () => {
       timeout: 30_000,
     });
   });
+
+  test('template hotspot rumah: ping 8.8.8.8 dari laptop via WiFi + cloud', async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.goto('/');
+
+    await page.getByRole('button', { name: 'Template' }).click();
+    const hotspotCard = page.locator('div.group', { hasText: 'WiFi Hotspot Rumah' });
+    await hotspotCard.getByRole('button', { name: 'Terapkan' }).click();
+
+    await expect(page.getByText('Laptop-1', { exact: true })).toBeVisible();
+    await expect(page.getByText('Cloud', { exact: true })).toBeVisible();
+
+    // Ping dari laptop (via WiFi) ke IP publik tersimulasi
+    await page.locator('select').selectOption('lap-rumah');
+    await page.getByPlaceholder(/Target IP/).fill('8.8.8.8');
+    await page.getByRole('button', { name: 'Send Ping' }).click();
+
+    await expect(page.getByText(/Ping ke 8\.8\.8\.8 selesai: 4\/4/)).toBeVisible({
+      timeout: 60_000,
+    });
+  });
 });

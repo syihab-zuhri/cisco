@@ -37,6 +37,25 @@
 
 ---
 
+## [2026-09-06] — Version 1.1.0 (Jaringan Nirkabel & Cloud Internet)
+
+### Added
+- **Jaringan nirkabel**: perangkat baru **Access Point** (port `radio0` ber-SSID + uplink kabel) dan **adapter WiFi `wla0`** di PC/Laptop. Asosiasi otomatis saat SSID klien = SSID AP (via form konfigurasi) atau drag-to-connect tervalidasi SSID. AP menjembatani WiFi ↔ kabel sebagai bridge L2 dengan CAM learning. Edge nirkabel baru `wirelessLink` (garis putus-putus ungu ber-SSID) dengan animasi paket penuh.
+- **Cloud Internet tersimulasi**: perangkat **Cloud** "memiliki" IP publik `8.8.8.8` & `1.1.1.1`. Ping ke IP publik dijawab cloud secara deterministik (TTL = 128 − jumlah router − 1 hop WAN; RTT = router + 1 ms). Router diarahkan ke cloud lewat **default route `0.0.0.0/0`** — tanpa route, ping publik gagal "No route" (perilaku router nyata). 100% offline (INV-008 terjaga).
+- **Editor Static Route di form konfigurasi router** — aksi `addStaticRoute`/`removeStaticRoute` yang sebelumnya tanpa UI kini dapat dipakai, termasuk untuk default route.
+- **2 template baru (kategori "Nirkabel")**: "WiFi Hotspot Rumah + Internet" (cloud—router—AP—laptop WiFi + PC kabel, ping 8.8.8.8 langsung jalan) dan "Kantor Nirkabel" (router—switch—AP—laptop WiFi + server). Total 10 template.
+- Test baru: AP bridge + CAM lintas WiFi/kabel, ping cloud (sukses/tanpa route/IP tak dikenal), asosiasi WiFi store (SSID cocok/tolak/1-ke-N/disconnect klien-saja/sync), integritas template wireless-aware, dan E2E "template hotspot → ping 8.8.8.8 dari laptop". Total **53 unit test + 5 E2E**.
+
+### Decisions (disetujui pemilik project lewat rencana v1.1.0)
+1. **INV-003 (amandemen)**: port ethernet tetap 1-kabel-1-port; **port radio bersifat 1-ke-N** — hanya sisi klien yang menyimpan binding, radio AP tidak. `disconnectEdge` pada asosiasi hanya menurunkan sisi klien (radio AP tetap menyala).
+2. **Internet = cloud tersimulasi**, bukan request jaringan nyata — menjaga INV-008 (graceful offline) & NFR-004 (nol request eksternal). Server web/DNS tersimulasi & Wireless Router rumahan = kandidat iterasi berikutnya; radius sinyal & DHCP (P1) ditunda.
+3. Migrasi otomatis: topologi lama yang di-load mendapat port `wla0` pada PC/Laptop yang belum memilikinya.
+
+### Status Gate
+- `Gate C` — implementasi P0 berjalan; type-check & unit test hijau (53 test, 5 E2E); benchmark paritas Packet Tracer (Sprint 7) belum dieksekusi.
+
+---
+
 ## [2026-09-06] — Version 1.0.4 (Hotfix: Status Port Setelah Hapus Perangkat)
 
 ### Fixed

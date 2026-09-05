@@ -8,7 +8,7 @@ import { TOPOLOGY_TEMPLATES } from '../../src/data/topologyTemplates';
  */
 describe('Integritas template topologi', () => {
   it('setiap edge merujuk node & port yang ada, port UP, binding konsisten', () => {
-    expect(TOPOLOGY_TEMPLATES.length).toBeGreaterThanOrEqual(8);
+    expect(TOPOLOGY_TEMPLATES.length).toBeGreaterThanOrEqual(10);
 
     for (const tpl of TOPOLOGY_TEMPLATES) {
       const byId = new Map(tpl.nodes.map((n) => [n.id, n]));
@@ -27,10 +27,25 @@ describe('Integritas template topologi', () => {
 
         expect(srcPort!.status, `${ctx}: port sumber UP`).toBe('up');
         expect(tgtPort!.status, `${ctx}: port target UP`).toBe('up');
-        expect(srcPort!.connectedEdgeId, `${ctx}: binding sumber konsisten`).toBe(edge.id);
-        expect(tgtPort!.connectedEdgeId, `${ctx}: binding target konsisten`).toBe(edge.id);
-        expect(srcPort!.connectedToNodeId).toBe(tgt!.id);
-        expect(tgtPort!.connectedToNodeId).toBe(src!.id);
+
+        // INV-003 + amandemen nirkabel: port ethernet wajib terikat 1-to-1;
+        // port wireless boleh tak terikat (radio AP 1-ke-N), tapi bila terikat harus konsisten.
+        const checkBinding = (
+          side: 'sumber' | 'target',
+          port: NonNullable<typeof srcPort>,
+          peerId: string
+        ) => {
+          if (port.kind !== 'wireless') {
+            expect(port.connectedEdgeId, `${ctx}: binding ${side} konsisten`).toBe(edge.id);
+          } else if (port.connectedEdgeId !== undefined) {
+            expect(port.connectedEdgeId, `${ctx}: binding wireless ${side} konsisten`).toBe(edge.id);
+          }
+          if (port.connectedToNodeId !== undefined) {
+            expect(port.connectedToNodeId, `${ctx}: peer ${side} konsisten`).toBe(peerId);
+          }
+        };
+        checkBinding('sumber', srcPort!, tgt!.id);
+        checkBinding('target', tgtPort!, src!.id);
       }
     }
   });
@@ -38,7 +53,7 @@ describe('Integritas template topologi', () => {
   it('id template unik dan kategori valid', () => {
     const ids = TOPOLOGY_TEMPLATES.map((t) => t.id);
     expect(new Set(ids).size).toBe(ids.length);
-    const validCategories = ['Dasar', 'LAN', 'Routing L3', 'Enterprise'];
+    const validCategories = ['Dasar', 'LAN', 'Routing L3', 'Enterprise', 'Nirkabel'];
     for (const t of TOPOLOGY_TEMPLATES) {
       expect(validCategories).toContain(t.category);
     }

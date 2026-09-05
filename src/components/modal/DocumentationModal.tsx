@@ -40,9 +40,9 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <span className="rounded bg-blue-950/60 px-2 py-0.5 text-[10px] text-blue-300 border border-blue-800/50 font-mono">
-              Dokumentasi v1.0.2
-            </span>
+              <span className="rounded bg-blue-950/60 px-2 py-0.5 text-[10px] text-blue-300 border border-blue-800/50 font-mono">
+                Dokumentasi v1.1.0
+              </span>
             <button
               onClick={onClose}
               className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-800 hover:text-white transition-colors"
@@ -136,10 +136,10 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
                       1. Manipulasi Topologi Interaktif
                     </h4>
                     <ul className="text-xs text-gray-300 space-y-1.5 list-disc list-inside">
-                      <li>Drag-and-drop 6 jenis perangkat: PC Host, Laptop, Server, Switch L2 (8 Port), Hub (8 Port, repeater murni), dan Router L3 (3 Port).</li>
-                      <li>Pengkabelan fisik otomatis dengan aturan ketat <b>Port Singularity (1 kabel per port)</b>; melepas kabel otomatis menurunkan kedua port ke Link DOWN.</li>
-                      <li>Garis kabel berpendar neon dilengkapi label port interaktif di atas kabel.</li>
-                      <li>8 katalog template siap pakai: dari P2P dasar hingga dual-router dengan static route.</li>
+                      <li>Drag-and-drop 8 jenis perangkat: PC, Laptop, Server, Switch L2, Hub, <b>Access Point</b>, Router L3, dan <b>Cloud Internet</b>.</li>
+                      <li>Pengkabelan fisik dengan aturan <b>Port Singularity</b> + <b>asosiasi WiFi via SSID</b> (satu radio AP melayani banyak klien).</li>
+                      <li>Garis kabel & asosiasi nirkabel (garis putus-putus ungu ber-SSID) dengan label port interaktif.</li>
+                      <li>10 katalog template siap pakai: P2P, LAN, routing, dan skenario nirkabel + internet.</li>
                     </ul>
                   </div>
 
@@ -360,6 +360,20 @@ npx cap open android`}
                     <h4 className="font-bold text-rose-300 mb-1">5. Determinisme & Paritas Packet Tracer</h4>
                     <p className="leading-relaxed text-gray-300">
                       Urutan paket selalu deterministik: <b>ARP Request → ARP Reply → ICMP Echo Request → ICMP Echo Reply</b>. Echo pertama dianimasikan penuh hop-per-hop; echo berikutnya memakai cache (cepat, tanpa animasi). Format output mengikuti Packet Tracer: dari PC/Toolbar memakai gaya Windows (<code>Reply from x.x.x.x: bytes=32 time&lt;1ms TTL=128</code>, 4 echo), dari terminal IOS memakai gaya Cisco (<code>!!!!! Success rate is 100 percent (5/5)</code>).
+                    </p>
+                  </div>
+
+                  <div className="rounded-lg bg-[#1E293B] p-3.5 border border-gray-800">
+                    <h4 className="font-bold text-fuchsia-300 mb-1">6. Jaringan Nirkabel (Asosiasi SSID)</h4>
+                    <p className="leading-relaxed text-gray-300">
+                      PC & Laptop memiliki adapter wireless (<code>wla0</code>). Access Point mem-broadcast SSID lewat port <code>radio0</code> dan menjembatani lalu lintas nirkabel ↔ kabel seperti bridge L2 (dengan CAM learning). Asosiasi terbentuk otomatis saat SSID klien <b>sama persis</b> dengan SSID AP — cukup isi SSID di form konfigurasi dan simpan, atau tarik dari port WiFi ke radio AP. Satu radio AP melayani banyak klien (1-ke-N); setiap klien hanya boleh terasosiasi ke satu AP.
+                    </p>
+                  </div>
+
+                  <div className="rounded-lg bg-[#1E293B] p-3.5 border border-gray-800">
+                    <h4 className="font-bold text-sky-300 mb-1">7. Internet Cloud Tersimulasi (INV-008)</h4>
+                    <p className="leading-relaxed text-gray-300">
+                      Perangkat <b>Cloud Internet</b> mewakili dunia luar secara 100% offline — tidak ada request jaringan sungguhan. Cloud " memiliki" IP publik <code>8.8.8.8</code> dan <code>1.1.1.1</code>: arahkan router ke cloud dengan <b>default route</b> <code>0.0.0.0/0</code> (bisa ditambahkan lewat form konfigurasi router, bagian Static Route), lalu ping ke IP publik tersebut akan dijawab dengan TTL & RTT deterministik (TTL = 128 − jumlah router − 1 hop WAN). Tanpa default route, ping publik gagal "No route" — persis perilaku router nyata.
                     </p>
                   </div>
                 </div>
