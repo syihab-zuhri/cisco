@@ -64,7 +64,23 @@ export type SimEffect =
       subnetMask: string;
       gateway: string;
     }
-  | { type: 'NAT_TRANSLATE'; nodeId: string; insideIp: string; globalIp: string; icmpId: number; echoSeq: number };
+  | {
+      type: 'NAT_TRANSLATE';
+      nodeId: string;
+      insideIp: string;
+      globalIp: string;
+      icmpId: number;
+      echoSeq: number;
+    }
+  | {
+      type: 'ROUTE_LEARN';
+      nodeId: string;
+      network: string;
+      subnetMask: string;
+      nextHop: string;
+      interfaceId: string;
+      metric: number;
+    };
 
 /** Satu langkah terjadwal dalam aliran simulasi (deterministik, INV-004). */
 export interface SimEvent {
@@ -79,8 +95,9 @@ export interface SimEvent {
     | 'DHCP_OFFER'
     | 'DHCP_REQUEST'
     | 'DHCP_ACK'
+    | 'RIP_UPDATE'
     | 'LOG';
-  level: 'INFO' | 'ARP' | 'ICMP' | 'ERROR' | 'SUCCESS' | 'DHCP';
+  level: 'INFO' | 'ARP' | 'ICMP' | 'ERROR' | 'SUCCESS' | 'DHCP' | 'RIP';
   message: string;
   hop?: {
     sourceNodeId: string;

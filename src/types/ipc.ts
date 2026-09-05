@@ -52,6 +52,9 @@ export type UIWorkerMessage =
         nodeId: string;
         portId: string;
       };
+    }
+  | {
+      type: 'START_RIP';
     };
 
 export interface DhcpResultPayload {
@@ -60,6 +63,14 @@ export interface DhcpResultPayload {
   portId: string;
   success: boolean;
   assignedIp?: string;
+  logs: string[];
+  outputLines: string[];
+}
+
+export interface RipResultPayload {
+  requestId: string;
+  success: boolean;
+  routesAdded: number;
   logs: string[];
   outputLines: string[];
 }
@@ -122,4 +133,8 @@ export type WorkerUIMessage =
   | {
       type: 'DHCP_RESULT';
       payload: DhcpResultPayload;
+    }
+  | {
+      type: 'RIP_RESULT';
+      payload: RipResultPayload;
     };

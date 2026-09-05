@@ -62,6 +62,10 @@ export interface PhysicalPort {
   ssid?: string; // hanya port wireless: SSID yang di-broadcast (AP) atau dituju (klien)
   dhcpEnabled?: boolean; // klien: minta IP via DHCP (DORA)
   natEnabled?: boolean; // router: NAT/PAT keluar pada interface ini
+  vlanId?: number; // VLAN access port (default 1); trunk membawa semua VLAN
+  portMode?: 'access' | 'trunk';
+  /** Router-on-a-stick: sub-interface tagged per VLAN pada port trunk router. */
+  subInterfaces?: Array<{ vlanId: number; ipAddress: string; subnetMask: string }>;
 }
 
 export interface RoutingEntry {
@@ -69,6 +73,8 @@ export interface RoutingEntry {
   subnetMask: string; // e.g. "255.255.255.0"
   nextHop: string; // e.g. "192.168.1.1" or "Directly Connected"
   interfaceId: string; // e.g. "fa0/0"
+  metric?: number; // RIP hop count (connected = 1)
+  source?: 'static' | 'rip' | 'connected';
 }
 
 // Type alias (bukan interface) agar memenuhi constraint Record<string, unknown>
@@ -82,6 +88,7 @@ export type DeviceData = {
   routes?: RoutingEntry[]; // for Router
   dhcpPools?: Record<string, DhcpPool>; // for Router: portId → pool
   natTable?: NatTranslation[]; // for Router: translasi aktif (ICMP)
+  ripEnabled?: boolean; // for Router: ikut serta RIPv2
   macTable?: Record<string, string>; // for Switch: MAC -> portId
   arpTable?: Record<string, string>; // IP -> MAC
 };
@@ -120,8 +127,9 @@ export interface PacketHopPayload {
     | 'DHCP_DISCOVER'
     | 'DHCP_OFFER'
     | 'DHCP_REQUEST'
-    | 'DHCP_ACK';
-  currentProtocol: 'ARP' | 'ICMP' | 'DHCP';
+    | 'DHCP_ACK'
+    | 'RIP_UPDATE';
+  currentProtocol: 'ARP' | 'ICMP' | 'DHCP' | 'RIP';
   summary: string;
   details?: Record<string, any>;
 }

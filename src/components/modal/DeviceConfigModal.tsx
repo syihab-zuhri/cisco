@@ -1,10 +1,21 @@
 import { useState } from 'react';
 import type { Node } from '@xyflow/react';
-import { X, Save, ShieldCheck, Trash2, Plus, Wifi, Route, Globe, Server } from 'lucide-react';
+import {
+  X,
+  Save,
+  ShieldCheck,
+  Trash2,
+  Plus,
+  Wifi,
+  Route,
+  Globe,
+  Server,
+  Network,
+} from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { isValidIp, isValidSubnetMask } from '../../utils/ipUtils';
 import { type DeviceData } from '../../types/network';
-import { requestDhcp } from '../../hooks/useSimulationEngine';
+import { requestDhcp, requestRip } from '../../hooks/useSimulationEngine';
 
 export function DeviceConfigModal() {
   const activeConfigModalNodeId = useAppStore((s) => s.activeConfigModalNodeId);
@@ -64,6 +75,19 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
     selectedPort?.natEnabled ?? false
   );
 
+  // VLAN (switch port) & sub-interface (router port)
+  const [portVlan, setPortVlan] = useState<number>(selectedPort?.vlanId ?? 1);
+  const [portMode, setPortMode] = useState<'access' | 'trunk'>(
+    selectedPort?.portMode ?? 'access'
+  );
+  const [subIfs, setSubIfs] = useState<Array<{ vlanId: number; ipAddress: string; subnetMask: string }>>(
+    selectedPort?.subInterfaces ? [...selectedPort.subInterfaces] : []
+  );
+  const [subVlan, setSubVlan] = useState<string>('');
+  const [subIp, setSubIp] = useState<string>('');
+  const [subMask, setSubMask] = useState<string>('255.255.255.0');
+  const [ripEnabled, setRipEnabled] = useState<boolean>(device.ripEnabled ?? false);
+
   // Editor static route (router)
   const [routeNetwork, setRouteNetwork] = useState<string>('');
   const [routeMask, setRouteMask] = useState<string>('255.255.255.0');
@@ -77,6 +101,10 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
     setSsid(p?.ssid || '');
     setDhcpClient(p?.dhcpEnabled ?? false);
     setNatEnabled(p?.natEnabled ?? false);
+    setPortVlan(p?.vlanId ?? 1);
+    setPortMode(p?.portMode ?? 'access');
+    setSubIfs(p?.subInterfaces ? [...p.subInterfaces] : []);
+    setRipEnabled(device.ripEnabled ?? false);
     const pool = device.dhcpPools?.[portId];
     setPoolEnabled(pool?.enabled ?? false);
     setPoolNetwork(pool?.network ?? '');
@@ -134,10 +162,18 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
       }
     }
 
+    for (const s of subIfs) {
+      if (!isValidIp(s.ipAddress) || !isValidSubnetMask(s.subnetMask)) {
+        setErrorMsg(`Sub-interface VLAN ${s.vlanId}: IP/mask tidak valid!`);
+        return;
+      }
+    }
+
     // Simpan label & gateway
     updateDeviceConfig(device.id, {
       label,
       defaultGateway: defaultGateway.trim() || undefined,
+      ...(device.type === 'router' ? { ripEnabled } : {}),
     });
 
     if (selectedPort) {
@@ -154,8 +190,11 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
           syncWirelessAssociation(device.id, selectedPort.id);
         }
       } else if (device.type === 'router') {
-        // Router: NAT per port + pool DHCP per interface
-        updatePortConfig(device.id, selectedPort.id, { natEnabled });
+        // Router: NAT per port + pool DHCP per interface + sub-interface VLAN
+        updatePortConfig(device.id, selectedPort.id, {
+          natEnabled,
+          subInterfaces: subIfs.length > 0 ? subIfs : undefined,
+        });
         const pools = { ...(device.dhcpPools ?? {}) };
         pools[selectedPort.id] = {
           enabled: poolEnabled,
@@ -178,6 +217,9 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
           dhcpEnabled: dhcpClient,
           ipAddress: dhcpClient ? undefined : ipAddress.trim() || undefined,
           subnetMask: dhcpClient ? undefined : subnetMask.trim() || undefined,
+          ...(device.type === 'switch'
+            ? { vlanId: portVlan, portMode }
+            : {}),
         });
         if (dhcpClient) {
           addSimulationLog('INFO', `Meminta IP via DHCP pada ${selectedPort.name}...`);
@@ -412,6 +454,114 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
             </div>
           )}
 
+          {/* VLAN untuk port switch */}
+          {selectedPort && device.type === 'switch' && (
+            <div className="rounded-lg bg-[#111827]/70 p-3.5 border border-[#374151]">
+              <label className="flex items-center gap-1.5 text-xs font-medium text-emerald-300 mb-2">
+                <Network className="h-3.5 w-3.5" />
+                VLAN 802.1Q — {selectedPort.name}
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[10px] text-gray-400 mb-1">Mode Port</label>
+                  <select
+                    value={portMode}
+                    onChange={(e) => setPortMode(e.target.value as 'access' | 'trunk')}
+                    className="w-full rounded bg-[#1F2937] px-2 py-1 font-mono text-xs text-gray-100 border border-gray-700 focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="access">access</option>
+                    <option value="trunk">trunk (semua VLAN)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-gray-400 mb-1">VLAN ID</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={4094}
+                    disabled={portMode === 'trunk'}
+                    value={portVlan}
+                    onChange={(e) => setPortVlan(Number(e.target.value))}
+                    className="w-full rounded bg-[#1F2937] px-2 py-1 font-mono text-xs text-gray-100 border border-gray-700 focus:outline-none focus:border-blue-500 disabled:opacity-40"
+                  />
+                </div>
+              </div>
+              <p className="mt-1.5 text-[10px] text-gray-500">
+                Port access hanya berkomunikasi dengan port se-VLAN; port trunk membawa semua VLAN.
+              </p>
+            </div>
+          )}
+
+          {/* Sub-interface router (router-on-a-stick) */}
+          {selectedPort && device.type === 'router' && (
+            <div className="rounded-lg bg-[#111827]/70 p-3.5 border border-[#374151]">
+              <label className="flex items-center gap-1.5 text-xs font-medium text-sky-300 mb-2">
+                <Network className="h-3.5 w-3.5" />
+                Sub-interface VLAN (router-on-a-stick) — {selectedPort.name}
+              </label>
+              {(subIfs.length === 0) && (
+                <div className="text-[10px] text-gray-500 mb-1.5">Belum ada sub-interface.</div>
+              )}
+              <div className="flex flex-col gap-1 mb-2">
+                {subIfs.map((s, idx) => (
+                  <div key={idx} className="flex items-center justify-between rounded bg-black/40 px-2 py-1.5 font-mono text-[10px] text-gray-300 border border-gray-800">
+                    <span>
+                      VLAN {s.vlanId}: {s.ipAddress}/{s.subnetMask}
+                    </span>
+                    <button
+                      onClick={() => setSubIfs(subIfs.filter((_, i) => i !== idx))}
+                      className="rounded p-0.5 text-gray-500 hover:bg-red-950/60 hover:text-red-400"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="grid grid-cols-3 gap-1.5">
+                <input
+                  type="number"
+                  min={1}
+                  max={4094}
+                  placeholder="VLAN"
+                  value={subVlan}
+                  onChange={(e) => setSubVlan(e.target.value)}
+                  className="rounded bg-[#1F2937] px-2 py-1 font-mono text-[10px] text-gray-100 border border-gray-700 focus:outline-none focus:border-blue-500"
+                />
+                <input
+                  type="text"
+                  placeholder="IP (192.168.10.1)"
+                  value={subIp}
+                  onChange={(e) => setSubIp(e.target.value)}
+                  className="rounded bg-[#1F2937] px-2 py-1 font-mono text-[10px] text-gray-100 border border-gray-700 focus:outline-none focus:border-blue-500"
+                />
+                <input
+                  type="text"
+                  placeholder="Mask"
+                  value={subMask}
+                  onChange={(e) => setSubMask(e.target.value)}
+                  className="rounded bg-[#1F2937] px-2 py-1 font-mono text-[10px] text-gray-100 border border-gray-700 focus:outline-none focus:border-blue-500"
+                />
+              </div>
+              <button
+                onClick={() => {
+                  const vlan = Number(subVlan);
+                  if (!vlan || vlan < 1 || vlan > 4094 || !isValidIp(subIp) || !isValidSubnetMask(subMask)) {
+                    setErrorMsg('Sub-interface: VLAN/IP/mask tidak valid!');
+                    return;
+                  }
+                  setSubIfs([...subIfs, { vlanId: vlan, ipAddress: subIp.trim(), subnetMask: subMask.trim() }]);
+                  setSubVlan('');
+                  setSubIp('');
+                  setErrorMsg('');
+                }}
+                className="mt-2 flex items-center gap-1 rounded bg-sky-600/80 px-2.5 py-1 text-[10px] font-medium text-white hover:bg-sky-500"
+              >
+                <Plus className="h-3 w-3" />
+                Tambah Sub-interface
+              </button>
+            </div>
+          )}
+
           {/* Default Gateway untuk end device */}
           {['pc', 'laptop', 'server'].includes(device.type) && (
             <div>
@@ -484,6 +634,34 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
                 <Plus className="h-3 w-3" />
                 Tambah Route
               </button>
+
+              {/* RIPv2 */}
+              <div className="mt-3 pt-2.5 border-t border-gray-800">
+                <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={ripEnabled}
+                    onChange={(e) => setRipEnabled(e.target.checked)}
+                    className="accent-violet-500"
+                  />
+                  <Route className="h-3.5 w-3.5 text-violet-400" />
+                  Aktifkan RIPv2 pada router ini
+                </label>
+                {ripEnabled && (
+                  <button
+                    onClick={() => {
+                      addSimulationLog('INFO', 'Menjalankan konvergensi RIPv2...');
+                      void requestRip().catch((err: unknown) => {
+                        const message = err instanceof Error ? err.message : String(err);
+                        addSimulationLog('ERROR', message === 'SIM_BUSY' ? 'Simulasi lain sedang berjalan.' : `RIP gagal: ${message}`);
+                      });
+                    }}
+                    className="mt-2 rounded bg-violet-600/90 px-2.5 py-1 text-[10px] font-medium text-white hover:bg-violet-500"
+                  >
+                    Jalankan Konvergensi RIP
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>

@@ -741,7 +741,7 @@ describe('planDhcp & NAT/PAT (v1.2.0 fase 2)', () => {
 
     const plan = engine.planDhcp('pc-1', 'fa0');
 
-    const kinds = plan.events.map((e) => e.kind);
+    const kinds: string[] = plan.events.map((e) => e.kind);
     const firstOf = (k: string) => kinds.indexOf(k);
     expect(firstOf('DHCP_DISCOVER')).toBeLessThan(firstOf('DHCP_OFFER'));
     expect(firstOf('DHCP_OFFER')).toBeLessThan(firstOf('DHCP_REQUEST'));
@@ -825,5 +825,119 @@ describe('planDhcp & NAT/PAT (v1.2.0 fase 2)', () => {
     const updatedRouter = engine.getDevices().find((d) => d.id === 'r-1');
     expect(updatedRouter?.natTable?.length).toBeGreaterThan(0);
     expect(updatedRouter?.natTable?.[0].insideIp).toBe('192.168.10.20');
+  });
+});
+
+describe('VLAN 802.1Q, router-on-a-stick & RIPv2 (v1.2.0 fase 3)', () => {
+  function buildVlanLab() {
+    const pc1: DeviceData = {
+      id: 'pc-1', label: 'PC-Staff', type: 'pc', defaultGateway: '192.168.10.1',
+      ports: [
+        { id: 'fa0', name: 'fa0', status: 'up', kind: 'ethernet', vlanId: 10, ipAddress: '192.168.10.10', subnetMask: '255.255.255.0', macAddress: '00:50:79:V1:01:01' },
+      ],
+      arpTable: {},
+    };
+    const pc2: DeviceData = {
+      id: 'pc-2', label: 'PC-Guest', type: 'pc', defaultGateway: '192.168.20.1',
+      ports: [
+        { id: 'fa0', name: 'fa0', status: 'up', kind: 'ethernet', vlanId: 20, ipAddress: '192.168.20.10', subnetMask: '255.255.255.0', macAddress: '00:50:79:V2:01:01' },
+      ],
+      arpTable: {},
+    };
+    const sw: DeviceData = {
+      id: 'sw-1', label: 'SW', type: 'switch',
+      ports: [
+        { id: 'fa0/1', name: 'trunk', status: 'up', kind: 'ethernet', portMode: 'trunk', macAddress: '00:50:79:VS:01' },
+        { id: 'fa0/2', name: 'acc10', status: 'up', kind: 'ethernet', portMode: 'access', vlanId: 10, macAddress: '00:50:79:VS:02' },
+        { id: 'fa0/3', name: 'acc20', status: 'up', kind: 'ethernet', portMode: 'access', vlanId: 20, macAddress: '00:50:79:VS:03' },
+      ],
+      macTable: {},
+    };
+    const router: DeviceData = {
+      id: 'r-1', label: 'R1', type: 'router',
+      ports: [
+        {
+          id: 'fa0/0', name: 'trunk', status: 'up', kind: 'ethernet', portMode: 'trunk', macAddress: '00:50:79:VR:01',
+          subInterfaces: [
+            { vlanId: 10, ipAddress: '192.168.10.1', subnetMask: '255.255.255.0' },
+            { vlanId: 20, ipAddress: '192.168.20.1', subnetMask: '255.255.255.0' },
+          ],
+        },
+      ],
+      routes: [],
+      arpTable: {},
+    };
+    const links = [
+      { sourceNodeId: 'pc-1', sourcePortId: 'fa0', targetNodeId: 'sw-1', targetPortId: 'fa0/2' },
+      { sourceNodeId: 'sw-1', sourcePortId: 'fa0/1', targetNodeId: 'r-1', targetPortId: 'fa0/0' },
+      { sourceNodeId: 'sw-1', sourcePortId: 'fa0/3', targetNodeId: 'pc-2', targetPortId: 'fa0' },
+    ];
+    return { devices: [pc1, pc2, sw, router], links, router };
+  }
+
+  it('VLAN: PC di VLAN 10 dan VLAN 20 tidak bisa saling ping tanpa router', async () => {
+    const { devices, links } = buildVlanLab();
+    const engine = new HeadlessSimulationEngine();
+    engine.setTopology(devices.filter((d) => d.id !== 'r-1'), links.filter((l) => l.targetNodeId !== 'r-1'));
+
+    const result = await engine.executePing('pc-1', '192.168.20.10');
+    expect(result.success).toBe(false);
+    // Gateway (sub-interface router) tidak ada di topologi yang dipangkas ini
+    expect(result.logs.join('\n')).toContain('ARP Request timeout');
+  });
+
+  it('router-on-a-stick: ping lintas VLAN berhasil dengan TTL 127', async () => {
+    const { devices, links } = buildVlanLab();
+    const engine = new HeadlessSimulationEngine();
+    engine.setTopology(devices, links);
+
+    const result = await engine.executePing('pc-1', '192.168.20.10');
+    expect(result.success).toBe(true);
+    expect(result.ttl).toBe(127);
+  });
+
+  it('RIPv2: konvergensi mengisi route antar router, lalu ping lintas site berhasil', async () => {
+    const pcA = makePc('pc-a', '192.168.10.10', '00:50:79:RA:01:01', '192.168.10.1');
+    const pcB = makePc('pc-b', '192.168.20.10', '00:50:79:RB:01:01', '192.168.20.1');
+    const r1: DeviceData = {
+      id: 'r-1', label: 'R1', type: 'router', ripEnabled: true,
+      ports: [
+        { id: 'fa0/0', name: 'LAN A', status: 'up', ipAddress: '192.168.10.1', subnetMask: '255.255.255.0', macAddress: '00:50:79:R1:01' },
+        { id: 'fa0/1', name: 'WAN', status: 'up', ipAddress: '10.0.0.1', subnetMask: '255.255.255.252', macAddress: '00:50:79:R1:02' },
+      ],
+      routes: [], arpTable: {},
+    };
+    const r2: DeviceData = {
+      id: 'r-2', label: 'R2', type: 'router', ripEnabled: true,
+      ports: [
+        { id: 'fa0/0', name: 'WAN', status: 'up', ipAddress: '10.0.0.2', subnetMask: '255.255.255.252', macAddress: '00:50:79:R2:01' },
+        { id: 'fa0/1', name: 'LAN B', status: 'up', ipAddress: '192.168.20.1', subnetMask: '255.255.255.0', macAddress: '00:50:79:R2:02' },
+      ],
+      routes: [], arpTable: {},
+    };
+    const links = [
+      { sourceNodeId: 'pc-a', sourcePortId: 'fa0', targetNodeId: 'r-1', targetPortId: 'fa0/0' },
+      { sourceNodeId: 'r-1', sourcePortId: 'fa0/1', targetNodeId: 'r-2', targetPortId: 'fa0/0' },
+      { sourceNodeId: 'r-2', sourcePortId: 'fa0/1', targetNodeId: 'pc-b', targetPortId: 'fa0' },
+    ];
+    const engine = new HeadlessSimulationEngine();
+    engine.setTopology([pcA, pcB, r1, r2], links);
+
+    // Sebelum konvergensi: ping lintas site gagal (tidak ada rute)
+    const before = await engine.executePing('pc-a', '192.168.20.10');
+    expect(before.success).toBe(false);
+
+    // Konvergensi RIP: rute dipelajari (deterministik)
+    const rip = engine.planRip();
+    expect(rip.summary.success).toBe(true);
+    const routeEffects = rip.events.flatMap((e) => e.effects ?? []).filter((e) => e.type === 'ROUTE_LEARN');
+    expect(routeEffects.length).toBeGreaterThanOrEqual(2);
+    expect(rip.events.some((e) => e.kind === 'RIP_UPDATE')).toBe(true);
+
+    // Setelah konvergensi: ping lintas site berhasil (2 router → TTL 126, rtt 2ms)
+    const after = await engine.executePing('pc-a', '192.168.20.10');
+    expect(after.success).toBe(true);
+    expect(after.ttl).toBe(126);
+    expect(after.rttMs).toBe(2);
   });
 });

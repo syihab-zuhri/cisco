@@ -37,6 +37,22 @@
 
 ---
 
+## [2026-09-06] — Version 1.2.0 (Fase 3: VLAN 802.1Q, Router-on-a-Stick, RIPv2)
+
+Pilar C dari rencana v1.2.0 — rilis final.
+
+### Added
+- **VLAN 802.1Q**: port switch dapat dikonfigurasi `access`/`trunk` + VLAN ID (1–4094) di form konfigurasi. `findL2Path` & cakupan broadcast hanya melewati port se-VLAN; trunk membawa semua VLAN — segmentasi broadcast domain benar-benar berpengaruh pada konektivitas.
+- **Inter-VLAN routing (router-on-a-stick)**: port router dapat memiliki **sub-interface VLAN** (IP per VLAN); connected-network matching mencakup sub-interface, PDU di trunk hop menampilkan catatan "802.1Q: frame ter-tag di trunk".
+- **RIPv2 sederhana**: router dapat mengaktifkan RIP + tombol **"Jalankan Konvergensi RIP"**. Algoritma distance-vector deterministik (connected metric 1, learned = metric pengirim + 1, split-horizon sederhana, maks 8 ronde) menghasilkan event `RIP_UPDATE` beranimasi di timeline; rute RIP tercatat (kolom metric/sumber) dan tersinkron ke Table Viewer. Pesan IPC `START_RIP`/`RIP_RESULT`.
+- **2 template baru** (total 12): "Kantor 2 VLAN (Router-on-a-Stick)" dan "Dual Router + RIPv2".
+- Test baru: segmentasi VLAN (diblok/tanpa router), inter-VLAN via router (TTL 127), konvergensi RIP + ping lintas site sesudahnya (TTL 126). Total **66 unit test + 5 E2E**, coverage engine **94,2% lines**.
+
+### Status Gate
+- `Gate C` — v1.2.0 lengkap (3 pilar); benchmark paritas Packet Tracer (Sprint 7) & Mode Lab Praktikum (P1, v1.3) belum dieksekusi.
+
+---
+
 ## [2026-09-06] — Version 1.2.0-beta (Fase 2: DHCP DORA + NAT/PAT)
 
 Pilar B dari rencana v1.2.0.

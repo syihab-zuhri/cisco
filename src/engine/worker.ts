@@ -2,6 +2,7 @@ import { HeadlessSimulationEngine } from './simulationEngine';
 import {
   type DhcpResultPayload,
   type PingResultPayload,
+  type RipResultPayload,
   type UIWorkerMessage,
   type WorkerUIMessage,
 } from '../types/ipc';
@@ -157,6 +158,36 @@ self.onmessage = async (e: MessageEvent<UIWorkerMessage>) => {
             message: plan.summary.success
               ? `DHCP selesai: ${plan.summary.outputLines[0]}`
               : `DHCP gagal: ${plan.summary.outputLines[0]}`,
+          },
+        } as WorkerUIMessage);
+        self.postMessage({
+          type: 'SIMULATION_STATE_SYNC',
+          payload: { devices: engine.getDevices() },
+        } as WorkerUIMessage);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        postError(requestId, message);
+      }
+      break;
+    }
+    case 'START_RIP': {
+      const requestId = `rip-${Date.now()}`;
+      try {
+        const plan = engine.planRip();
+        await playPlan(requestId, plan.events);
+        const payload: RipResultPayload = {
+          requestId,
+          success: plan.summary.success,
+          routesAdded: Number(/(\d+)/.exec(plan.summary.outputLines[0])?.[1] ?? 0),
+          logs: plan.events.filter((ev) => ev.kind === 'LOG').map((ev) => `[${ev.level}] ${ev.message}`),
+          outputLines: plan.summary.outputLines,
+        };
+        self.postMessage({ type: 'RIP_RESULT', payload } as WorkerUIMessage);
+        self.postMessage({
+          type: 'LOG',
+          payload: {
+            type: plan.summary.success ? 'SUCCESS' : 'ERROR',
+            message: plan.summary.outputLines[0],
           },
         } as WorkerUIMessage);
         self.postMessage({

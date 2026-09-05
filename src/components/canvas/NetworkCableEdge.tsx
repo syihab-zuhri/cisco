@@ -7,6 +7,16 @@ import {
 } from '@xyflow/react';
 import { useAppStore } from '../../store/useAppStore';
 
+
+const PROTOCOL_COLORS: Record<string, string> = {
+  ARP: '#10B981',
+  ICMP: '#06B6D4',
+  DHCP: '#F59E0B',
+  RIP: '#A78BFA',
+};
+const packetColor = (protocol: string | undefined): string =>
+  PROTOCOL_COLORS[protocol ?? ''] ?? '#06B6D4';
+
 export function NetworkCableEdge({
   id,
   sourceX,
@@ -72,9 +82,7 @@ export function NetworkCableEdge({
         fill="none"
         stroke={
           activePacket
-            ? activePacket.currentProtocol === 'ARP'
-              ? '#10B981'
-              : '#06B6D4'
+            ? packetColor(activePacket.currentProtocol)
             : isHovered
             ? '#34D399'
             : '#059669'
@@ -92,9 +100,7 @@ export function NetworkCableEdge({
         style={{
           ...style,
           stroke: activePacket
-            ? activePacket.currentProtocol === 'ARP'
-              ? '#34D399'
-              : '#38BDF8'
+            ? packetColor(activePacket.currentProtocol)
             : isHovered
             ? '#34D399'
             : '#10B981',
@@ -106,7 +112,7 @@ export function NetworkCableEdge({
       {/* FLYING ENVELOPE / PACKET ANIMATION ALONG SVG PATH */}
       {activePacket && (
         <g className="pointer-events-none">
-          <circle r="7" fill={activePacket.currentProtocol === 'ARP' ? '#10B981' : '#06B6D4'}>
+          <circle r="7" fill={packetColor(activePacket.currentProtocol)}>
             <animateMotion
               path={edgePath}
               dur="0.8s"
@@ -132,7 +138,7 @@ export function NetworkCableEdge({
               height="16"
               rx="3"
               fill="#0F172A"
-              stroke={activePacket.currentProtocol === 'ARP' ? '#10B981' : '#06B6D4'}
+              stroke={packetColor(activePacket.currentProtocol)}
               strokeWidth="2"
             />
             <line
@@ -140,7 +146,7 @@ export function NetworkCableEdge({
               y1="-6"
               x2="0"
               y2="1"
-              stroke={activePacket.currentProtocol === 'ARP' ? '#10B981' : '#06B6D4'}
+              stroke={packetColor(activePacket.currentProtocol)}
               strokeWidth="1.5"
             />
             <line
@@ -148,7 +154,7 @@ export function NetworkCableEdge({
               y1="-6"
               x2="0"
               y2="1"
-              stroke={activePacket.currentProtocol === 'ARP' ? '#10B981' : '#06B6D4'}
+              stroke={packetColor(activePacket.currentProtocol)}
               strokeWidth="1.5"
             />
           </g>

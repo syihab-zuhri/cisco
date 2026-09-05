@@ -11,6 +11,16 @@ import { useAppStore } from '../../store/useAppStore';
  * Asosiasi nirkabel (klien WiFi <-> radio Access Point): garis putus-putus
  * dengan badge SSID. Animasi paket tetap berjalan di sepanjang asosiasi.
  */
+
+const PROTOCOL_COLORS: Record<string, string> = {
+  ARP: '#10B981',
+  ICMP: '#06B6D4',
+  DHCP: '#F59E0B',
+  RIP: '#A78BFA',
+};
+const packetColor = (protocol: string | undefined): string =>
+  PROTOCOL_COLORS[protocol ?? ''] ?? '#8B5CF6';
+
 export function WirelessLinkEdge({
   id,
   sourceX,
@@ -47,11 +57,7 @@ export function WirelessLinkEdge({
 
   const isForwardDirection = activePacket && activePacket.sourceNodeId === source;
   const shouldShowBadge = Boolean(activePacket || isHovered);
-  const packetColor = activePacket
-    ? activePacket.currentProtocol === 'ARP'
-      ? '#10B981'
-      : '#06B6D4'
-    : '#8B5CF6';
+  const color = activePacket ? packetColor(activePacket.currentProtocol) : '#8B5CF6';
 
   return (
     <>
@@ -69,7 +75,7 @@ export function WirelessLinkEdge({
       <path
         d={edgePath}
         fill="none"
-        stroke={activePacket ? packetColor : isHovered ? '#A78BFA' : '#8B5CF6'}
+        stroke={activePacket ? color : isHovered ? '#A78BFA' : '#8B5CF6'}
         strokeWidth={activePacket || isHovered ? 8 : 6}
         strokeOpacity={activePacket || isHovered ? 0.5 : 0.15}
         strokeDasharray="2 8"
@@ -81,7 +87,7 @@ export function WirelessLinkEdge({
         id={`wifi-path-${id}`}
         path={edgePath}
         style={{
-          stroke: activePacket ? packetColor : isHovered ? '#A78BFA' : '#8B5CF6',
+          stroke: activePacket ? color : isHovered ? '#A78BFA' : '#8B5CF6',
           strokeWidth: activePacket || isHovered ? 3 : 2.5,
           strokeDasharray: '7 6',
         }}
@@ -90,7 +96,7 @@ export function WirelessLinkEdge({
       {/* Paket berjalan di sepanjang asosiasi */}
       {activePacket && (
         <g className="pointer-events-none">
-          <circle r="7" fill={packetColor}>
+          <circle r="7" fill={color}>
             <animateMotion
               path={edgePath}
               dur="0.8s"
@@ -114,11 +120,11 @@ export function WirelessLinkEdge({
               height="16"
               rx="3"
               fill="#0F172A"
-              stroke={packetColor}
+              stroke={color}
               strokeWidth="2"
             />
-            <line x1="-9" y1="-6" x2="0" y2="1" stroke={packetColor} strokeWidth="1.5" />
-            <line x1="9" y1="-6" x2="0" y2="1" stroke={packetColor} strokeWidth="1.5" />
+            <line x1="-9" y1="-6" x2="0" y2="1" stroke={color} strokeWidth="1.5" />
+            <line x1="9" y1="-6" x2="0" y2="1" stroke={color} strokeWidth="1.5" />
           </g>
         </g>
       )}

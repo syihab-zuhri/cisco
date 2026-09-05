@@ -41,7 +41,7 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
           </div>
           <div className="flex items-center gap-2">
               <span className="rounded bg-blue-950/60 px-2 py-0.5 text-[10px] text-blue-300 border border-blue-800/50 font-mono">
-                Dokumentasi v1.1.0
+                Dokumentasi v1.2.0
               </span>
             <button
               onClick={onClose}
@@ -139,7 +139,7 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
                       <li>Drag-and-drop 8 jenis perangkat: PC, Laptop, Server, Switch L2, Hub, <b>Access Point</b>, Router L3, dan <b>Cloud Internet</b>.</li>
                       <li>Pengkabelan fisik dengan aturan <b>Port Singularity</b> + <b>asosiasi WiFi via SSID</b> (satu radio AP melayani banyak klien).</li>
                       <li>Garis kabel & asosiasi nirkabel (garis putus-putus ungu ber-SSID) dengan label port interaktif.</li>
-                      <li>10 katalog template siap pakai: P2P, LAN, routing, dan skenario nirkabel + internet.</li>
+                      <li>10 katalog template siap pakai: P2P, LAN, routing, nirkabel+internet, VLAN, dan RIP.</li>
                     </ul>
                   </div>
 
@@ -193,7 +193,7 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
                       6. Kualitas yang Terukur (Quality Gates)
                     </h4>
                     <ul className="text-xs text-gray-300 space-y-1.5 list-disc list-inside">
-                      <li><b>35 unit test</b> Vitest — coverage engine <b>&gt; 96% lines</b> (target skripsi &gt; 90%).</li>
+                      <li><b>66 unit test</b> Vitest — coverage engine <b>&gt; 94% lines</b> (target skripsi &gt; 90%).</li>
                       <li><b>4 skenario E2E</b> Playwright: tambah perangkat, ping beranimasi, konfigurasi GUI, dan CLI — tanpa console error.</li>
                       <li><b>CI GitHub Actions</b> menjalankan type-check, coverage, build web, E2E, dan build installer Tauri di setiap push.</li>
                     </ul>
@@ -374,6 +374,20 @@ npx cap open android`}
                     <h4 className="font-bold text-sky-300 mb-1">7. Internet Cloud Tersimulasi (INV-008)</h4>
                     <p className="leading-relaxed text-gray-300">
                       Perangkat <b>Cloud Internet</b> mewakili dunia luar secara 100% offline — tidak ada request jaringan sungguhan. Cloud " memiliki" IP publik <code>8.8.8.8</code> dan <code>1.1.1.1</code>: arahkan router ke cloud dengan <b>default route</b> <code>0.0.0.0/0</code> (bisa ditambahkan lewat form konfigurasi router, bagian Static Route), lalu ping ke IP publik tersebut akan dijawab dengan TTL & RTT deterministik (TTL = 128 − jumlah router − 1 hop WAN). Tanpa default route, ping publik gagal "No route" — persis perilaku router nyata.
+                    </p>
+                  </div>
+
+                  <div className="rounded-lg bg-[#1E293B] p-3.5 border border-gray-800">
+                    <h4 className="font-bold text-blue-300 mb-1">8. Simulation Mode, PDU Inspector & Table Viewer</h4>
+                    <p className="leading-relaxed text-gray-300">
+                      Seluruh aliran simulasi direncanakan lebih dulu sebagai <b>daftar event deterministik</b> (maks 500, sim clock per hop) lalu diputar: tombol <b>Step</b> memutar satu event per klik, tab <b>Simulasi</b> menampilkan timeline (event mendatang redup), dan <b>PDU Inspector</b> membongkar header berlapis <b>L2 Ethernet → L3 IPv4 → L4 ARP/ICMP/DHCP</b> per hop — MAC frame ditulis ulang di setiap hop, IP/TTL end-to-end. Tab <b>Tabel</b> menampilkan CAM/ARP/Routing/NAT perangkat terpilih secara live.
+                    </p>
+                  </div>
+
+                  <div className="rounded-lg bg-[#1E293B] p-3.5 border border-gray-800">
+                    <h4 className="font-bold text-amber-300 mb-1">9. DHCP, NAT/PAT, VLAN & RIPv2</h4>
+                    <p className="leading-relaxed text-gray-300">
+                      <b>DHCP</b>: router sebagai server (pool per interface); klien dengan opsi "Obtain IP via DHCP" menjalani Discover → Offer → Request → Ack beranimasi sampai IP/gateway terisi. <b>NAT/PAT</b>: aktifkan pada interface WAN router — src IP di-rewrite ke IP WAN saat menuju cloud, tabel translasi tercatat, dan dibalik kembali di jalur balik. <b>VLAN 802.1Q</b>: port switch access/trunk memisahkan broadcast domain; inter-VLAN lewat <b>router-on-a-stick</b> (sub-interface per VLAN). <b>RIPv2</b>: aktifkan di ≥2 router lalu "Jalankan Konvergensi RIP" — rute dipelajari secara deterministik dengan animasi update di timeline.
                     </p>
                   </div>
                 </div>

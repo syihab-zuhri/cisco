@@ -937,4 +937,180 @@ export const TOPOLOGY_TEMPLATES: TopologyTemplate[] = [
       { id: 'edge-lap-ap', source: 'lap-kantor', target: 'ap-kantor', sourceHandle: 'wla0', targetHandle: 'radio0', type: 'wirelessLink', data: { sourcePortName: 'Wireless Adapter', targetPortName: 'Radio 0', ssid: 'KantorWiFi' } },
     ],
   },
+
+  // 11. Kantor 2 VLAN (Router-on-a-Stick)
+  {
+    id: 'kantor-2-vlan',
+    name: 'Kantor 2 VLAN (Router-on-a-Stick)',
+    category: 'Enterprise',
+    description: 'Segmentasi VLAN 10 (Staff) & VLAN 20 (Guest) dengan satu trunk ke router. Ping lintas VLAN membuktikan inter-VLAN routing.',
+    nodes: [
+      {
+        id: 'r-vlan',
+        type: 'deviceNode',
+        position: { x: 380, y: 70 },
+        data: {
+          id: 'r-vlan',
+          label: 'Router-1',
+          type: 'router',
+          ports: [
+            {
+              id: 'fa0/0', name: 'FastEthernet 0/0 (Trunk)', status: 'up', kind: 'ethernet', portMode: 'trunk',
+              macAddress: '00:50:79:VR:01:01',
+              subInterfaces: [
+                { vlanId: 10, ipAddress: '192.168.10.1', subnetMask: '255.255.255.0' },
+                { vlanId: 20, ipAddress: '192.168.20.1', subnetMask: '255.255.255.0' },
+              ],
+              connectedEdgeId: 'edge-vlan-r-sw', connectedToNodeId: 'sw-vlan', connectedToPortId: 'fa0/1',
+            },
+            { id: 'fa0/1', name: 'FastEthernet 0/1', status: 'down', kind: 'ethernet', macAddress: '00:50:79:VR:01:02' },
+            { id: 'fa0/2', name: 'FastEthernet 0/2', status: 'down', kind: 'ethernet', macAddress: '00:50:79:VR:01:03' },
+          ],
+          routes: [],
+          arpTable: {},
+        },
+      },
+      {
+        id: 'sw-vlan',
+        type: 'deviceNode',
+        position: { x: 380, y: 230 },
+        data: {
+          id: 'sw-vlan',
+          label: 'Switch-1',
+          type: 'switch',
+          ports: [
+            { id: 'fa0/1', name: 'FastEthernet 0/1', status: 'up', kind: 'ethernet', portMode: 'trunk', macAddress: '00:50:79:VS:01:01', connectedEdgeId: 'edge-vlan-r-sw', connectedToNodeId: 'r-vlan', connectedToPortId: 'fa0/0' },
+            { id: 'fa0/2', name: 'FastEthernet 0/2', status: 'up', kind: 'ethernet', portMode: 'access', vlanId: 10, macAddress: '00:50:79:VS:01:02', connectedEdgeId: 'edge-vlan-pc1', connectedToNodeId: 'pc-vlan1', connectedToPortId: 'fa0' },
+            { id: 'fa0/3', name: 'FastEthernet 0/3', status: 'up', kind: 'ethernet', portMode: 'access', vlanId: 20, macAddress: '00:50:79:VS:01:03', connectedEdgeId: 'edge-vlan-pc2', connectedToNodeId: 'pc-vlan2', connectedToPortId: 'fa0' },
+            { id: 'fa0/4', name: 'FastEthernet 0/4', status: 'down', kind: 'ethernet', macAddress: '00:50:79:VS:01:04' },
+            { id: 'fa0/5', name: 'FastEthernet 0/5', status: 'down', kind: 'ethernet', macAddress: '00:50:79:VS:01:05' },
+            { id: 'fa0/6', name: 'FastEthernet 0/6', status: 'down', kind: 'ethernet', macAddress: '00:50:79:VS:01:06' },
+            { id: 'fa0/7', name: 'FastEthernet 0/7', status: 'down', kind: 'ethernet', macAddress: '00:50:79:VS:01:07' },
+            { id: 'fa0/8', name: 'FastEthernet 0/8', status: 'down', kind: 'ethernet', macAddress: '00:50:79:VS:01:08' },
+          ],
+          macTable: {},
+        },
+      },
+      {
+        id: 'pc-vlan1',
+        type: 'deviceNode',
+        position: { x: 130, y: 380 },
+        data: {
+          id: 'pc-vlan1',
+          label: 'PC-Staff',
+          type: 'pc',
+          defaultGateway: '192.168.10.1',
+          ports: [
+            { id: 'fa0', name: 'FastEthernet 0', status: 'up', kind: 'ethernet', vlanId: 10, ipAddress: '192.168.10.10', subnetMask: '255.255.255.0', macAddress: '00:50:79:V1:01:01', connectedEdgeId: 'edge-vlan-pc1', connectedToNodeId: 'sw-vlan', connectedToPortId: 'fa0/2' },
+            { id: 'wla0', name: 'Wireless Adapter', status: 'down', kind: 'wireless', macAddress: '00:50:79:V1:01:02', ssid: '' },
+          ],
+          arpTable: {},
+        },
+      },
+      {
+        id: 'pc-vlan2',
+        type: 'deviceNode',
+        position: { x: 640, y: 380 },
+        data: {
+          id: 'pc-vlan2',
+          label: 'PC-Guest',
+          type: 'pc',
+          defaultGateway: '192.168.20.1',
+          ports: [
+            { id: 'fa0', name: 'FastEthernet 0', status: 'up', kind: 'ethernet', vlanId: 20, ipAddress: '192.168.20.10', subnetMask: '255.255.255.0', macAddress: '00:50:79:V2:01:01', connectedEdgeId: 'edge-vlan-pc2', connectedToNodeId: 'sw-vlan', connectedToPortId: 'fa0/3' },
+            { id: 'wla0', name: 'Wireless Adapter', status: 'down', kind: 'wireless', macAddress: '00:50:79:V2:01:02', ssid: '' },
+          ],
+          arpTable: {},
+        },
+      },
+    ],
+    edges: [
+      { id: 'edge-vlan-r-sw', source: 'r-vlan', target: 'sw-vlan', sourceHandle: 'fa0/0', targetHandle: 'fa0/1', type: 'networkCable', data: { sourcePortName: 'fa0/0 (Trunk)', targetPortName: 'fa0/1 (Trunk)' } },
+      { id: 'edge-vlan-pc1', source: 'pc-vlan1', target: 'sw-vlan', sourceHandle: 'fa0', targetHandle: 'fa0/2', type: 'networkCable', data: { sourcePortName: 'fa0 (VLAN 10)', targetPortName: 'fa0/2 (VLAN 10)' } },
+      { id: 'edge-vlan-pc2', source: 'pc-vlan2', target: 'sw-vlan', sourceHandle: 'fa0', targetHandle: 'fa0/3', type: 'networkCable', data: { sourcePortName: 'fa0 (VLAN 20)', targetPortName: 'fa0/3 (VLAN 20)' } },
+    ],
+  },
+
+  // 12. Dual Router dengan RIPv2
+  {
+    id: 'dual-router-rip',
+    name: 'Dual Router + RIPv2',
+    category: 'Routing L3',
+    description: '2 Router dengan RIPv2 aktif tanpa static route — buka konfigurasi router → "Jalankan Konvergensi RIP", lalu ping lintas site berhasil.',
+    nodes: [
+      {
+        id: 'r-rip1',
+        type: 'deviceNode',
+        position: { x: 220, y: 150 },
+        data: {
+          id: 'r-rip1',
+          label: 'Router-A',
+          type: 'router',
+          ripEnabled: true,
+          ports: [
+            { id: 'fa0/0', name: 'FastEthernet 0/0 (LAN A)', status: 'up', ipAddress: '192.168.10.1', subnetMask: '255.255.255.0', macAddress: '00:50:79:RP:01:01', connectedEdgeId: 'edge-rip-pca', connectedToNodeId: 'pc-ripa', connectedToPortId: 'fa0' },
+            { id: 'fa0/1', name: 'FastEthernet 0/1 (WAN)', status: 'up', ipAddress: '10.0.0.1', subnetMask: '255.255.255.252', macAddress: '00:50:79:RP:01:02', connectedEdgeId: 'edge-rip-r1r2', connectedToNodeId: 'r-rip2', connectedToPortId: 'fa0/1' },
+            { id: 'fa0/2', name: 'FastEthernet 0/2', status: 'down', kind: 'ethernet', macAddress: '00:50:79:RP:01:03' },
+          ],
+          routes: [],
+          arpTable: {},
+        },
+      },
+      {
+        id: 'r-rip2',
+        type: 'deviceNode',
+        position: { x: 560, y: 150 },
+        data: {
+          id: 'r-rip2',
+          label: 'Router-B',
+          type: 'router',
+          ripEnabled: true,
+          ports: [
+            { id: 'fa0/0', name: 'FastEthernet 0/0', status: 'down', kind: 'ethernet', macAddress: '00:50:79:RP:02:01' },
+            { id: 'fa0/1', name: 'FastEthernet 0/1 (WAN)', status: 'up', ipAddress: '10.0.0.2', subnetMask: '255.255.255.252', macAddress: '00:50:79:RP:02:02', connectedEdgeId: 'edge-rip-r1r2', connectedToNodeId: 'r-rip1', connectedToPortId: 'fa0/1' },
+            { id: 'fa0/2', name: 'FastEthernet 0/2 (LAN B)', status: 'up', ipAddress: '192.168.20.1', subnetMask: '255.255.255.0', macAddress: '00:50:79:RP:02:03', connectedEdgeId: 'edge-rip-pcb', connectedToNodeId: 'pc-ripb', connectedToPortId: 'fa0' },
+          ],
+          routes: [],
+          arpTable: {},
+        },
+      },
+      {
+        id: 'pc-ripa',
+        type: 'deviceNode',
+        position: { x: 220, y: 360 },
+        data: {
+          id: 'pc-ripa',
+          label: 'PC-SiteA',
+          type: 'pc',
+          defaultGateway: '192.168.10.1',
+          ports: [
+            { id: 'fa0', name: 'FastEthernet 0', status: 'up', ipAddress: '192.168.10.10', subnetMask: '255.255.255.0', macAddress: '00:50:79:RA:01:01', connectedEdgeId: 'edge-rip-pca', connectedToNodeId: 'r-rip1', connectedToPortId: 'fa0/0' },
+            { id: 'wla0', name: 'Wireless Adapter', status: 'down', kind: 'wireless', macAddress: '00:50:79:RA:01:02', ssid: '' },
+          ],
+          arpTable: {},
+        },
+      },
+      {
+        id: 'pc-ripb',
+        type: 'deviceNode',
+        position: { x: 560, y: 360 },
+        data: {
+          id: 'pc-ripb',
+          label: 'PC-SiteB',
+          type: 'pc',
+          defaultGateway: '192.168.20.1',
+          ports: [
+            { id: 'fa0', name: 'FastEthernet 0', status: 'up', ipAddress: '192.168.20.10', subnetMask: '255.255.255.0', macAddress: '00:50:79:RB:01:01', connectedEdgeId: 'edge-rip-pcb', connectedToNodeId: 'r-rip2', connectedToPortId: 'fa0/2' },
+            { id: 'wla0', name: 'Wireless Adapter', status: 'down', kind: 'wireless', macAddress: '00:50:79:RB:01:02', ssid: '' },
+          ],
+          arpTable: {},
+        },
+      },
+    ],
+    edges: [
+      { id: 'edge-rip-r1r2', source: 'r-rip1', target: 'r-rip2', sourceHandle: 'fa0/1', targetHandle: 'fa0/1', type: 'networkCable', data: { sourcePortName: 'fa0/1 (WAN)', targetPortName: 'fa0/1 (WAN)' } },
+      { id: 'edge-rip-pca', source: 'pc-ripa', target: 'r-rip1', sourceHandle: 'fa0', targetHandle: 'fa0/0', type: 'networkCable', data: { sourcePortName: 'fa0', targetPortName: 'fa0/0 (LAN A)' } },
+      { id: 'edge-rip-pcb', source: 'pc-ripb', target: 'r-rip2', sourceHandle: 'fa0', targetHandle: 'fa0/2', type: 'networkCable', data: { sourcePortName: 'fa0', targetPortName: 'fa0/2 (LAN B)' } },
+    ],
+  },
 ];

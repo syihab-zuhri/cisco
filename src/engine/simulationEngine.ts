@@ -5,7 +5,7 @@ import {
   isL2Intermediate,
   learnsCam,
 } from '../types/network';
-import { isSameSubnet, prefixLength, ipToNumber, numberToIp } from '../utils/ipUtils';
+import { isSameSubnet, prefixLength, ipToNumber, numberToIp, networkAddress } from '../utils/ipUtils';
 import { type WorkerUIMessage } from '../types/ipc';
 import {
   type ArpPacket,
@@ -17,7 +17,7 @@ import {
 } from '../types/protocol';
 import { SimEventQueue } from './eventQueue';
 
-type LogLevel = 'INFO' | 'ARP' | 'ICMP' | 'ERROR' | 'SUCCESS' | 'DHCP';
+type LogLevel = 'INFO' | 'ARP' | 'ICMP' | 'ERROR' | 'SUCCESS' | 'DHCP' | 'RIP';
 
 type EventKind =
   | 'ARP_REQ'
@@ -28,6 +28,7 @@ type EventKind =
   | 'DHCP_OFFER'
   | 'DHCP_REQUEST'
   | 'DHCP_ACK'
+  | 'RIP_UPDATE'
   | 'LOG';
 
 /** TTL awal Windows/iOS default (Packet Tracer memakai 128). */
@@ -151,6 +152,8 @@ export class HeadlessSimulationEngine {
         ? 'ICMP'
         : kind.startsWith('DHCP')
         ? 'DHCP'
+        : kind.startsWith('RIP')
+        ? 'RIP'
         : 'INFO',
       message: summary,
       hop: {
@@ -169,6 +172,17 @@ export class HeadlessSimulationEngine {
 
   private portOf(nodeId: string, portId: string): PhysicalPort | undefined {
     return this.devices.get(nodeId)?.ports.find((p) => p.id === portId);
+  }
+
+  /** Port trunk membawa semua VLAN (port switch trunk atau port router ber-sub-interface). */
+  private isTrunkPort(p: PhysicalPort): boolean {
+    return p.portMode === 'trunk' || (p.subInterfaces?.length ?? 0) > 0;
+  }
+
+  /** Segmen VLAN 802.1Q: dua port access hanya bertetangga bila VLAN-nya sama. */
+  private vlanAllows(a: PhysicalPort, b: PhysicalPort): boolean {
+    if (this.isTrunkPort(a) || this.isTrunkPort(b)) return true;
+    return (a.vlanId ?? 1) === (b.vlanId ?? 1);
   }
 
   private buildFramePdu(
@@ -255,6 +269,13 @@ export class HeadlessSimulationEngine {
           link.sourceNodeId === currentNodeId ? link.targetNodeId : link.sourceNodeId;
         const peerPortId =
           link.sourceNodeId === currentNodeId ? link.targetPortId : link.sourcePortId;
+        const peerDev = this.devices.get(peerNodeId);
+        if (!peerDev) continue;
+
+        // Segmen VLAN 802.1Q: link ditolak bila kedua port access berbeda VLAN
+        const peerPort = peerDev.ports.find((pp) => pp.id === peerPortId);
+        if (peerPort && !this.vlanAllows(p, peerPort)) continue;
+
         const hop: L2Hop = {
           fromNodeId: currentNodeId,
           fromPortId: p.id,
@@ -265,8 +286,7 @@ export class HeadlessSimulationEngine {
 
         if (peerNodeId === targetNodeId) return [...path, hop];
 
-        const peerDev = this.devices.get(peerNodeId);
-        if (peerDev && isL2Intermediate(peerDev.type) && !visited.has(peerDev.id)) {
+        if (isL2Intermediate(peerDev.type) && !visited.has(peerDev.id)) {
           visited.add(peerDev.id);
           queue.push({ currentNodeId: peerDev.id, path: [...path, hop] });
         }
@@ -277,8 +297,11 @@ export class HeadlessSimulationEngine {
 
   private resolveOwner(ip: string): { dev: DeviceData; port: PhysicalPort } | null {
     for (const dev of this.devices.values()) {
-      const port = dev.ports.find((p) => p.ipAddress === ip);
-      if (port) return { dev, port };
+      for (const port of dev.ports) {
+        if (port.ipAddress === ip) return { dev, port };
+        // IP sub-interface (router-on-a-stick) dimiliki port fisiknya
+        if (port.subInterfaces?.some((s) => s.ipAddress === ip)) return { dev, port };
+      }
     }
     // IP publik tersimulasi dimiliki oleh perangkat Cloud Internet
     if ((CLOUD_PUBLIC_IPS as readonly string[]).includes(ip)) {
@@ -313,6 +336,13 @@ export class HeadlessSimulationEngine {
     if (dev.type === 'router') {
       let best: { nextHopIp: string; prefix: number } | null = null;
       for (const p of dev.ports) {
+        // Connected network via sub-interface (router-on-a-stick) — cek semua port
+        for (const s of p.subInterfaces ?? []) {
+          if (isSameSubnet(s.ipAddress, targetIp, s.subnetMask)) {
+            const prefix = prefixLength(s.subnetMask);
+            if (!best || prefix > best.prefix) best = { nextHopIp: targetIp, prefix };
+          }
+        }
         if (!p.ipAddress || !p.subnetMask || p.status !== 'up') continue;
         if (isSameSubnet(p.ipAddress, targetIp, p.subnetMask)) {
           const prefix = prefixLength(p.subnetMask);
@@ -571,6 +601,17 @@ export class HeadlessSimulationEngine {
 
       if (animate) {
         path.forEach((hop, hopIdx) => {
+          const fromPort = this.portOf(hop.fromNodeId, hop.fromPortId);
+          const toPort = this.portOf(hop.toNodeId, hop.toPortId);
+          const notes: string[] = [];
+          if (natInfo) {
+            if (hopIdx === 0) notes.push(`NAT: src ${natInfo.insideIp} di-rewrite ke ${natInfo.globalIp} (TTL ${ttlAtHop})`);
+          } else if (depth > 0) {
+            notes.push(`Diteruskan router ${sender.dev.label} (TTL diturunkan menjadi ${ttlAtHop})`);
+          }
+          if ((fromPort && this.isTrunkPort(fromPort)) || (toPort && this.isTrunkPort(toPort))) {
+            notes.push('802.1Q: frame ter-tag di trunk');
+          }
           const packet: IPv4Packet = {
             srcIp: natInfo ? natInfo.globalIp : source.port.ipAddress!,
             dstIp: targetIp,
@@ -585,13 +626,6 @@ export class HeadlessSimulationEngine {
             sequence: echoIndex + 1,
             payloadBytes: ICMP_PAYLOAD_BYTES,
           };
-          const note = natInfo
-            ? hopIdx === 0
-              ? `NAT: src ${natInfo.insideIp} di-rewrite ke ${natInfo.globalIp} (TTL ${ttlAtHop})`
-              : undefined
-            : depth > 0
-            ? `Diteruskan router ${sender.dev.label} (TTL diturunkan menjadi ${ttlAtHop})`
-            : undefined;
           const effects: NonNullable<SimEvent['effects']> | undefined =
             hopIdx === 0 && natInfo
               ? [
@@ -610,7 +644,7 @@ export class HeadlessSimulationEngine {
             hop,
             'ICMP_REQ',
             `ICMP Echo Request: ${natInfo ? natInfo.globalIp : source.port.ipAddress} -> ${targetIp}${depth > 0 ? ' (diteruskan router)' : ''}`,
-            this.buildFramePdu(hop, 'ICMP_REQ', { packet, icmp, note }),
+            this.buildFramePdu(hop, 'ICMP_REQ', { packet, icmp, note: notes.length > 0 ? notes.join(' · ') : undefined }),
             effects
           );
         });
@@ -846,6 +880,10 @@ export class HeadlessSimulationEngine {
         const peerDev = this.devices.get(peerNodeId);
         if (!peerDev || visited.has(peerNodeId)) continue;
 
+        // Segmen VLAN 802.1Q: link ditolak bila kedua port access berbeda VLAN
+        const peerPort = peerDev.ports.find((pp) => pp.id === peerPortId);
+        if (peerPort && !this.vlanAllows(p, peerPort)) continue;
+
         const hop: L2Hop = {
           fromNodeId: currentNodeId,
           fromPortId: p.id,
@@ -1052,6 +1090,183 @@ export class HeadlessSimulationEngine {
       outputLines: [
         `DHCP: ${offeredIp}/${chosen.pool.mask} diperoleh dari ${chosen.router.label} (gateway ${chosen.iface.ipAddress})`,
       ],
+      sent: 1,
+      received: 1,
+    };
+  }
+
+  /**
+   * Konvergensi RIPv2 sederhana (deterministik): ronde update distance-vector
+   * antar router bertetangga langsung. Connected metric 1; learned = metric
+   * pengirim + 1; split-horizon sederhana (jangan iklankan balik lewat interface
+   * tempat route itu berasal); maksimal 8 ronde.
+   */
+  public planRip(): SimulationPlan {
+    const ctx: PlanContext = { queue: new SimEventQueue(), seq: 0, simTimeMs: 0 };
+    const summary = this.runRip(ctx);
+    return { events: ctx.queue.snapshot(), summary };
+  }
+
+  private runRip(ctx: PlanContext): PingSummary {
+    const fail = (msg: string): PingSummary => ({
+      success: false, rttMs: 0, ttl: 0, logs: [], outputLines: [msg], sent: 0, received: 0,
+    });
+
+    const routers = this.getDevices()
+      .filter((d) => d.type === 'router' && d.ripEnabled)
+      .sort((a, b) => a.id.localeCompare(b.id));
+    if (routers.length < 2) {
+      this.record(ctx, 'ERROR', 'RIP: butuh minimal 2 router dengan RIP aktif.');
+      return fail('RIP: butuh minimal 2 router dengan RIP aktif.');
+    }
+
+    interface RipRoute {
+      network: string;
+      mask: string;
+      metric: number;
+      nextHop: string;
+      interfaceId: string;
+      learned: boolean;
+    }
+    const state = new Map<string, Map<string, RipRoute>>();
+    const seedConnected = (dev: DeviceData): Map<string, RipRoute> => {
+      const m = new Map<string, RipRoute>();
+      for (const p of dev.ports) {
+        if (p.ipAddress && p.subnetMask) {
+          const network = networkAddress(p.ipAddress, p.subnetMask);
+          m.set(`${network}/${p.subnetMask}`, {
+            network, mask: p.subnetMask, metric: 1, nextHop: '0.0.0.0', interfaceId: p.id, learned: false,
+          });
+        }
+        for (const s of p.subInterfaces ?? []) {
+          const network = networkAddress(s.ipAddress, s.subnetMask);
+          m.set(`${network}/${s.subnetMask}`, {
+            network, mask: s.subnetMask, metric: 1, nextHop: '0.0.0.0', interfaceId: p.id, learned: false,
+          });
+        }
+      }
+      // Static route juga diiklankan (sebagai route statis)
+      for (const r of dev.routes ?? []) {
+        if (r.source !== 'rip' && !m.has(`${r.network}/${r.subnetMask}`)) {
+          m.set(`${r.network}/${r.subnetMask}`, {
+            network: r.network, mask: r.subnetMask, metric: r.metric ?? 1,
+            nextHop: r.nextHop, interfaceId: r.interfaceId, learned: false,
+          });
+        }
+      }
+      return m;
+    };
+    for (const r of routers) state.set(r.id, seedConnected(r));
+
+    let routesAdded = 0;
+    const MAX_ROUNDS = 8;
+    for (let round = 1; round <= MAX_ROUNDS; round++) {
+      let changed = false;
+
+      for (const r of routers) {
+        const rState = state.get(r.id)!;
+
+        for (const link of this.links) {
+          let nId: string | null = null;
+          let pr: PhysicalPort | undefined;
+          let pn: PhysicalPort | undefined;
+          if (link.sourceNodeId === r.id) {
+            pr = this.portOf(r.id, link.sourcePortId);
+            pn = this.portOf(link.targetNodeId, link.targetPortId);
+            nId = link.targetNodeId;
+          } else if (link.targetNodeId === r.id) {
+            pr = this.portOf(r.id, link.targetPortId);
+            pn = this.portOf(link.sourceNodeId, link.sourcePortId);
+            nId = link.sourceNodeId;
+          }
+          if (!nId || !pr || !pn || pr.status !== 'up' || pn.status !== 'up') continue;
+          if (!this.vlanAllows(pr, pn)) continue;
+          const neighbor = this.devices.get(nId);
+          if (!neighbor || neighbor.type !== 'router' || !neighbor.ripEnabled) continue;
+
+          const nState = state.get(nId)!;
+          const nextHopIp = pr.ipAddress;
+          if (!nextHopIp) continue;
+
+          for (const [key, route] of rState) {
+            // Split horizon sederhana: jangan iklankan lewat interface asal route
+            if (route.interfaceId === pr.id) continue;
+            const newMetric = route.metric + 1;
+            const existing = nState.get(key);
+            if (existing && (existing.metric <= newMetric || !existing.learned)) continue;
+
+            nState.set(key, {
+              network: route.network,
+              mask: route.mask,
+              metric: newMetric,
+              nextHop: nextHopIp,
+              interfaceId: pn.id,
+              learned: true,
+            });
+            changed = true;
+            routesAdded += 1;
+
+            const hop: L2Hop = {
+              fromNodeId: r.id,
+              fromPortId: pr.id,
+              toNodeId: nId,
+              toPortId: pn.id,
+              kind: link.kind ?? 'ethernet',
+            };
+            const event = this.recordHop(
+              ctx,
+              hop,
+              'RIP_UPDATE',
+              `RIPv2 ronde ${round}: ${r.label} mengirim ${route.network}/${route.mask} (metric ${route.metric}) ke ${neighbor.label} → metric ${newMetric}`,
+              this.buildFramePdu(hop, 'ICMP_REQ', {
+                note: `RIPv2: ${route.network}/${route.mask} metric ${newMetric} via ${nextHopIp}`,
+              })
+            );
+            event.effects = [
+              {
+                type: 'ROUTE_LEARN',
+                nodeId: nId,
+                network: route.network,
+                subnetMask: route.mask,
+                nextHop: nextHopIp,
+                interfaceId: pn.id,
+                metric: newMetric,
+              },
+            ];
+          }
+        }
+      }
+      if (!changed) break;
+    }
+
+    // Terapkan hasil konvergensi ke device state (rute RIP menggantikan rute RIP lama)
+    for (const r of routers) {
+      const ripRoutes = [...(state.get(r.id) ?? new Map<string, RipRoute>())]
+        .filter(([, v]) => v.learned)
+        .map(([, v]) => ({
+          network: v.network,
+          subnetMask: v.mask,
+          nextHop: v.nextHop,
+          interfaceId: v.interfaceId,
+          metric: v.metric,
+          source: 'rip' as const,
+        }));
+      const statics = (r.routes ?? []).filter((rt) => rt.source !== 'rip');
+      r.routes = [...statics, ...ripRoutes];
+    }
+
+    this.record(
+      ctx,
+      'RIP',
+      `RIP: konvergensi selesai — ${routesAdded} route baru dipelajari.`
+    );
+
+    return {
+      success: true,
+      rttMs: 0,
+      ttl: 0,
+      logs: [],
+      outputLines: [`RIP: konvergensi selesai dalam ${routesAdded} route baru.`],
       sent: 1,
       received: 1,
     };

@@ -8,7 +8,7 @@ import { TOPOLOGY_TEMPLATES } from '../../src/data/topologyTemplates';
  */
 describe('Integritas template topologi', () => {
   it('setiap edge merujuk node & port yang ada, port UP, binding konsisten', () => {
-    expect(TOPOLOGY_TEMPLATES.length).toBeGreaterThanOrEqual(10);
+    expect(TOPOLOGY_TEMPLATES.length).toBeGreaterThanOrEqual(12);
 
     for (const tpl of TOPOLOGY_TEMPLATES) {
       const byId = new Map(tpl.nodes.map((n) => [n.id, n]));

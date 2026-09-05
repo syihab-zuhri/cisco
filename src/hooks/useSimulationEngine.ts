@@ -3,6 +3,7 @@ import { useAppStore } from '../store/useAppStore';
 import {
   type DhcpResultPayload,
   type PingResultPayload,
+  type RipResultPayload,
   type UIWorkerMessage,
   type WorkerUIMessage,
 } from '../types/ipc';
@@ -16,6 +17,7 @@ let worker: Worker | null = null;
 let requestSeq = 0;
 const pendingPings = new Map<string, (result: PingResultPayload) => void>();
 const pendingDhcp = new Map<string, (result: DhcpResultPayload) => void>();
+const pendingRip = new Map<string, (result: RipResultPayload) => void>();
 
 function ensureWorker(): Worker {
   if (worker) return worker;
@@ -49,6 +51,15 @@ function ensureWorker(): Worker {
       case 'DHCP_RESULT': {
         const resolver = pendingDhcp.get(msg.payload.requestId);
         pendingDhcp.delete(msg.payload.requestId);
+        resolver?.(msg.payload);
+        store.setSimulationStatus('idle');
+        setTimeout(() => useAppStore.getState().setActivePackets([]), 600);
+        break;
+      }
+
+      case 'RIP_RESULT': {
+        const resolver = pendingRip.get(msg.payload.requestId);
+        pendingRip.delete(msg.payload.requestId);
         resolver?.(msg.payload);
         store.setSimulationStatus('idle');
         setTimeout(() => useAppStore.getState().setActivePackets([]), 600);
@@ -110,6 +121,32 @@ export function simStepNext(): void {
   ensureWorker().postMessage({ type: 'SIM_STEP_NEXT' } as UIWorkerMessage);
 }
 
+/** Menjalankan konvergensi RIPv2 pada semua router dengan RIP aktif. */
+export async function requestRip(): Promise<RipResultPayload> {
+  const store = useAppStore.getState();
+  if (store.simulationStatus === 'running') {
+    throw new Error('SIM_BUSY');
+  }
+
+  const w = ensureWorker();
+  store.setSimulationStatus('running');
+
+  const devices = store.nodes.map((n) => n.data);
+  const links = store.edges.map((e) => ({
+    sourceNodeId: e.source,
+    sourcePortId: e.sourceHandle ?? 'fa0',
+    targetNodeId: e.target,
+    targetPortId: e.targetHandle ?? 'fa0',
+    kind: e.type === 'wirelessLink' ? ('wireless' as const) : ('ethernet' as const),
+  }));
+  w.postMessage({ type: 'INIT_STATE', payload: { devices, links } } as UIWorkerMessage);
+
+  const requestId = `rip-${Date.now()}-${++requestSeq}`;
+  return new Promise<RipResultPayload>((resolve) => {
+    pendingRip.set(requestId, resolve);
+    w.postMessage({ type: 'START_RIP' } as UIWorkerMessage);
+  });
+}
 /** Meminta IP via DHCP (DORA) untuk port klien — router sebagai server. */
 export async function requestDhcp(
   nodeId: string,
