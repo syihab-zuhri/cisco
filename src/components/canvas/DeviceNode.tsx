@@ -1,0 +1,122 @@
+import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { Monitor, Network, Router, Settings, Terminal, Trash2 } from 'lucide-react';
+import { type DeviceData } from '../../types/network';
+import { useAppStore } from '../../store/useAppStore';
+
+export function DeviceNode({ id, data, selected }: NodeProps) {
+  const deviceData = data as unknown as DeviceData;
+  const {
+    deleteNode,
+    setActiveConfigModalNodeId,
+    setActiveCliModalNodeId,
+  } = useAppStore();
+
+  const getDeviceIcon = () => {
+    switch (deviceData.type) {
+      case 'pc':
+        return <Monitor className="h-6 w-6 text-sky-400" />;
+      case 'switch':
+        return <Network className="h-6 w-6 text-emerald-400" />;
+      case 'router':
+        return <Router className="h-6 w-6 text-amber-400" />;
+    }
+  };
+
+  const hasConfiguredIp = deviceData.ports.some((p) => p.ipAddress);
+
+  return (
+    <div
+      className={`group relative flex flex-col items-center rounded-xl border-2 bg-[#1F2937] p-3.5 shadow-xl transition-colors min-w-[150px] cursor-grab active:cursor-grabbing select-none ${
+        selected
+          ? 'border-blue-500 shadow-blue-500/30 ring-2 ring-blue-500/20'
+          : 'border-[#374151] hover:border-gray-500'
+      }`}
+    >
+      {/* Action floating buttons on hover / selected */}
+      <div className="nodrag nopan absolute -top-8 right-0 flex items-center gap-1 rounded bg-[#111827] p-1 border border-[#374151] shadow-md z-30 opacity-90 group-hover:opacity-100">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setActiveConfigModalNodeId(id);
+          }}
+          title="Konfigurasi Perangkat (GUI)"
+          className="rounded p-1 text-gray-300 hover:bg-gray-700 hover:text-white"
+        >
+          <Settings className="h-3.5 w-3.5" />
+        </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setActiveCliModalNodeId(id);
+          }}
+          title="Terminal CLI Cisco"
+          className="rounded p-1 text-gray-300 hover:bg-gray-700 hover:text-green-400"
+        >
+          <Terminal className="h-3.5 w-3.5" />
+        </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            deleteNode(id);
+          }}
+          title="Hapus Perangkat"
+          className="rounded p-1 text-gray-300 hover:bg-red-950/60 hover:text-red-400"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      {/* Device Header - Drag target */}
+      <div className="flex items-center gap-2.5 pointer-events-none">
+        <div className="rounded-lg bg-gray-800/90 p-2 border border-gray-700/80 shadow-inner">
+          {getDeviceIcon()}
+        </div>
+        <div>
+          <span className="block text-xs font-bold text-gray-100">{deviceData.label}</span>
+          <span className="block text-[10px] text-gray-400 uppercase tracking-wider font-mono">
+            {deviceData.type}
+          </span>
+        </div>
+      </div>
+
+      {/* IP / Info Tag */}
+      {hasConfiguredIp && (
+        <div className="mt-2 text-[10px] font-mono text-cyan-300 bg-cyan-950/60 px-2 py-0.5 rounded-full border border-cyan-800/60 font-semibold shadow-xs pointer-events-none">
+          {deviceData.ports.find((p) => p.ipAddress)?.ipAddress}
+        </div>
+      )}
+
+      {/* Physical Ports Handles */}
+      <div className="mt-3 flex w-full flex-wrap justify-around gap-2 border-t border-gray-700/60 pt-2.5 nodrag">
+        {deviceData.ports.map((port, idx) => {
+          const isUp = port.status === 'up';
+          return (
+            <div key={port.id} className="relative flex flex-col items-center">
+              {/* React Flow Handles: Source and Target */}
+              <Handle
+                type="source"
+                position={Position.Bottom}
+                id={port.id}
+                className={`!h-3.5 !w-3.5 !rounded-full !border-2 !border-gray-900 transition-all shadow-md cursor-crosshair ${
+                  isUp
+                    ? '!bg-emerald-400 shadow-emerald-500/50 ring-2 ring-emerald-500/30'
+                    : '!bg-amber-500 hover:!bg-amber-400 ring-1 ring-amber-500/20'
+                }`}
+                title={`${port.name} (${isUp ? 'Link UP (Terhubung)' : 'Link DOWN (Kosong)'})`}
+              />
+              <Handle
+                type="target"
+                position={Position.Bottom}
+                id={port.id}
+                className="!h-3.5 !w-3.5 !rounded-full !border-0 !opacity-0 !pointer-events-none"
+              />
+              <span className="mt-1 text-[9px] font-mono font-medium text-gray-400 pointer-events-none">
+                {deviceData.type === 'switch' ? `f${idx + 1}` : port.id}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}

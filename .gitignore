@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+src-tauri/target/
+
+# Test artifacts
+coverage/
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
+# Editor & OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+Thumbs.db
+.DS_Store
+
+# Env & secrets (INV-007: no hardcoded secrets)
+.env
+.env.*
+*.local
