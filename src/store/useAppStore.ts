@@ -199,19 +199,21 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   deleteNode: (nodeId) => {
-    const { nodes, edges } = get();
-    // find connected edges
-    const connectedEdges = edges.filter(
+    const node = get().nodes.find((n) => n.id === nodeId);
+    const connectedEdges = get().edges.filter(
       (e) => e.source === nodeId || e.target === nodeId
     );
+    // Lepas kabel dulu agar port perangkat lawan kembali ke DOWN...
     connectedEdges.forEach((edge) => get().disconnectEdge(edge.id));
 
-    set({
-      nodes: nodes.filter((n) => n.id !== nodeId),
-      edges: edges.filter((e) => e.source !== nodeId && e.target !== nodeId),
-      selectedNodeId: get().selectedNodeId === nodeId ? null : get().selectedNodeId,
-    });
-    get().addSimulationLog('INFO', `Perangkat ${nodeId} dihapus.`);
+    // ...lalu hapus node dari STATE TERKINI (bukan snapshot lama),
+    // supaya reset status port tidak tertimpa data basi.
+    set((state) => ({
+      nodes: state.nodes.filter((n) => n.id !== nodeId),
+      edges: state.edges.filter((e) => e.source !== nodeId && e.target !== nodeId),
+      selectedNodeId: state.selectedNodeId === nodeId ? null : state.selectedNodeId,
+    }));
+    get().addSimulationLog('INFO', `Perangkat ${node?.data.label ?? nodeId} dihapus.`);
   },
 
   setSelectedNodeId: (id) => set({ selectedNodeId: id }),

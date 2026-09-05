@@ -37,6 +37,16 @@
 
 ---
 
+## [2026-09-06] — Version 1.0.4 (Hotfix: Status Port Setelah Hapus Perangkat)
+
+### Fixed
+- **`deleteNode` memakai snapshot state basi**: menghapus salah satu dari dua perangkat yang terkabel membuat port perangkat **tersisa** tetap tampil `up` (reset Link DOWN oleh `disconnectEdge` tertimpa data lama). Kini node dihapus dari state terkini via updater Zustand. Dilaporkan pengguna saat uji coba 2 laptop; ditutup dengan 3 test regresi (`tests/unit/useAppStore.test.ts`). Log penghapusan kini menampilkan label perangkat, bukan ID teknis.
+
+### Status Gate
+- `Gate C` — implementasi P0 berjalan; type-check & unit test hijau (43 test); benchmark paritas Packet Tracer (Sprint 7) belum dieksekusi.
+
+---
+
 ## [2026-09-06] — Version 1.0.3 (Komponen Baru & Perluasan Template)
 
 ### Added
