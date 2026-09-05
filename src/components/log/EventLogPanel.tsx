@@ -7,34 +7,95 @@ import {
   ChevronDown,
   Maximize2,
   Minimize2,
+  ListTree,
+  Table2,
+  ScrollText,
+  ArrowRight,
 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
+import { type SimEvent } from '../../types/protocol';
+
+type PanelTab = 'log' | 'sim' | 'tables';
+
+const EVENT_KIND_COLORS: Record<string, string> = {
+  ARP_REQ: 'text-emerald-300 bg-emerald-950/60 border-emerald-800/60',
+  ARP_REP: 'text-emerald-200 bg-emerald-900/60 border-emerald-700/60',
+  ICMP_REQ: 'text-cyan-300 bg-cyan-950/60 border-cyan-800/60',
+  ICMP_REP: 'text-cyan-200 bg-cyan-900/60 border-cyan-700/60',
+};
+
+const getBadgeColor = (type: string) => {
+  switch (type) {
+    case 'ARP':
+      return 'text-emerald-400 bg-emerald-950/60 border-emerald-800/60';
+    case 'ICMP':
+      return 'text-cyan-400 bg-cyan-950/60 border-cyan-800/60';
+    case 'ERROR':
+      return 'text-red-400 bg-red-950/60 border-red-800/60';
+    case 'SUCCESS':
+      return 'text-green-400 bg-green-950/60 border-green-800/60';
+    default:
+      return 'text-gray-400 bg-gray-800 border-gray-700';
+  }
+};
+
+function SimTimelineRow({ event, isPlayed, isCurrent, onSelect }: {
+  event: SimEvent;
+  isPlayed: boolean;
+  isCurrent: boolean;
+  onSelect: (event: SimEvent) => void;
+}) {
+  const isHop = event.kind !== 'LOG';
+  const color = isHop
+    ? (EVENT_KIND_COLORS[event.kind] ?? 'text-gray-400 bg-gray-800 border-gray-700')
+    : getBadgeColor(event.level);
+  return (
+    <button
+      onClick={() => onSelect(event)}
+      className={`w-full flex items-start gap-2 leading-relaxed px-1 py-0.5 rounded text-left ${
+        isCurrent ? 'bg-violet-950/50 ring-1 ring-violet-700/60' : 'hover:bg-gray-900/60'
+      } ${isPlayed ? '' : 'opacity-40'}`}
+    >
+      <span className="text-gray-500 shrink-0 font-mono text-[10px] w-14">
+        t={event.simTimeMs}ms
+      </span>
+      <span className={`rounded px-1.5 py-0.2 text-[10px] font-semibold border shrink-0 ${color}`}>
+        {isHop ? event.kind : event.level}
+      </span>
+      <span className="text-gray-300 break-words">{event.message}</span>
+      {event.effects && event.effects.length > 0 && (
+        <span
+          className="ml-auto shrink-0 rounded bg-amber-950/60 border border-amber-800/60 px-1 text-[9px] text-amber-300"
+          title="Event ini mengubah tabel (CAM/ARP)"
+        >
+          table
+        </span>
+      )}
+    </button>
+  );
+}
 
 export function EventLogPanel() {
   const { simulationLogs, clearSimulationLogs } = useAppStore();
+  const {
+    simPlan,
+    simPlayedUpTo,
+    setInspectorEvent,
+    setInspectorOpen,
+    selectedNodeId,
+    nodes,
+  } = useAppStore();
 
   // State tinggi panel (dalam pixel)
   const [height, setHeight] = useState<number>(160);
   const [isCollapsed, setIsCollapsed] = useState<boolean>(false);
   const [isDragging, setIsDragging] = useState<boolean>(false);
+  const [activeTab, setActiveTab] = useState<PanelTab>('log');
 
   const dragStartYRef = useRef<number>(0);
   const dragStartHeightRef = useRef<number>(0);
 
-  const getBadgeColor = (type: string) => {
-    switch (type) {
-      case 'ARP':
-        return 'text-emerald-400 bg-emerald-950/60 border-emerald-800/60';
-      case 'ICMP':
-        return 'text-cyan-400 bg-cyan-950/60 border-cyan-800/60';
-      case 'ERROR':
-        return 'text-red-400 bg-red-950/60 border-red-800/60';
-      case 'SUCCESS':
-        return 'text-green-400 bg-green-950/60 border-green-800/60';
-      default:
-        return 'text-gray-400 bg-gray-800 border-gray-700';
-    }
-  };
+  const selectedDevice = nodes.find((n) => n.id === selectedNodeId)?.data;
 
   // Dragging event handlers
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -88,6 +149,17 @@ export function EventLogPanel() {
     if (isCollapsed) setIsCollapsed(false);
     setHeight((prev) => (prev > 350 ? 160 : 420));
   };
+
+  const handleSelectEvent = (event: SimEvent) => {
+    setInspectorEvent(event);
+    setInspectorOpen(true);
+  };
+
+  const tabs: Array<{ id: PanelTab; label: string; icon: React.ReactNode }> = [
+    { id: 'log', label: 'Log', icon: <ScrollText className="h-3 w-3" /> },
+    { id: 'sim', label: 'Simulasi', icon: <ListTree className="h-3 w-3" /> },
+    { id: 'tables', label: 'Tabel', icon: <Table2 className="h-3 w-3" /> },
+  ];
 
   return (
     <div
@@ -155,8 +227,33 @@ export function EventLogPanel() {
         </div>
       </div>
 
-      {/* Log items stream */}
+      {/* Tab bar */}
       {!isCollapsed && (
+        <div className="flex h-7 items-stretch border-b border-[#374151] bg-[#0d121f] px-2 gap-1">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex items-center gap-1.5 px-2.5 text-[10px] font-semibold uppercase tracking-wider border-b-2 transition-colors ${
+                activeTab === tab.id
+                  ? 'border-blue-500 text-white'
+                  : 'border-transparent text-gray-500 hover:text-gray-300'
+              }`}
+            >
+              {tab.icon}
+              {tab.label}
+            </button>
+          ))}
+          {activeTab === 'sim' && simPlan.length > 0 && (
+            <span className="ml-auto self-center text-[10px] text-gray-500 font-mono">
+              {Math.min(simPlayedUpTo, simPlan.length)}/{simPlan.length} event diputar
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Panel content */}
+      {!isCollapsed && activeTab === 'log' && (
         <div className="flex-1 overflow-y-auto p-2.5 font-mono text-[11px] space-y-1 bg-[#090D16]">
           {simulationLogs.length === 0 ? (
             <div className="text-gray-500 italic py-2 text-center">
@@ -184,6 +281,93 @@ export function EventLogPanel() {
                 </div>
               );
             })
+          )}
+        </div>
+      )}
+
+      {!isCollapsed && activeTab === 'sim' && (
+        <div className="flex-1 overflow-y-auto p-2.5 font-mono text-[11px] space-y-0.5 bg-[#090D16]">
+          {simPlan.length === 0 ? (
+            <div className="text-gray-500 italic py-2 text-center">
+              Belum ada rencana simulasi. Kirim ping — seluruh aliran event akan direncanakan di sini
+              (event redup = belum diputar). Klik event untuk membuka PDU Inspector.
+            </div>
+          ) : (
+            simPlan.map((event) => (
+              <SimTimelineRow
+                key={event.seq}
+                event={event}
+                isPlayed={event.seq <= simPlayedUpTo}
+                isCurrent={event.seq === simPlayedUpTo}
+                onSelect={handleSelectEvent}
+              />
+            ))
+          )}
+        </div>
+      )}
+
+      {!isCollapsed && activeTab === 'tables' && (
+        <div className="flex-1 overflow-y-auto p-2.5 font-mono text-[11px] bg-[#090D16]">
+          {!selectedDevice ? (
+            <div className="text-gray-500 italic py-2 text-center">
+              Pilih perangkat di kanvas untuk melihat tabel CAM, ARP, dan Routing secara real-time.
+            </div>
+          ) : (
+            <div className="grid grid-cols-3 gap-2.5">
+              {/* CAM Table */}
+              <div className="rounded border border-gray-800 bg-black/40 p-2">
+                <div className="text-[10px] font-bold uppercase text-emerald-400 mb-1">
+                  CAM Table — {selectedDevice.label}
+                </div>
+                {Object.keys(selectedDevice.macTable ?? {}).length === 0 ? (
+                  <div className="text-gray-600 italic">(kosong)</div>
+                ) : (
+                  Object.entries(selectedDevice.macTable ?? {}).map(([mac, port]) => (
+                    <div key={mac} className="flex items-center gap-1 text-gray-300">
+                      <span className="truncate">{mac.toLowerCase()}</span>
+                      <ArrowRight className="h-2.5 w-2.5 text-gray-600 shrink-0" />
+                      <span className="text-emerald-300">{port}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* ARP Cache */}
+              <div className="rounded border border-gray-800 bg-black/40 p-2">
+                <div className="text-[10px] font-bold uppercase text-cyan-400 mb-1">
+                  ARP Cache — {selectedDevice.label}
+                </div>
+                {Object.keys(selectedDevice.arpTable ?? {}).length === 0 ? (
+                  <div className="text-gray-600 italic">(kosong)</div>
+                ) : (
+                  Object.entries(selectedDevice.arpTable ?? {}).map(([ip, mac]) => (
+                    <div key={ip} className="flex items-center gap-1 text-gray-300">
+                      <span>{ip}</span>
+                      <ArrowRight className="h-2.5 w-2.5 text-gray-600 shrink-0" />
+                      <span className="text-cyan-300 truncate">{mac.toLowerCase()}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Routing Table */}
+              <div className="rounded border border-gray-800 bg-black/40 p-2">
+                <div className="text-[10px] font-bold uppercase text-amber-400 mb-1">
+                  Routing — {selectedDevice.label}
+                </div>
+                {selectedDevice.type !== 'router' ? (
+                  <div className="text-gray-600 italic">bukan router</div>
+                ) : (selectedDevice.routes ?? []).length === 0 ? (
+                  <div className="text-gray-600 italic">(kosong)</div>
+                ) : (
+                  (selectedDevice.routes ?? []).map((r, idx) => (
+                    <div key={idx} className="text-gray-300 truncate">
+                      {r.network}/{r.subnetMask} → <span className="text-amber-300">{r.nextHop}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
           )}
         </div>
       )}

@@ -37,6 +37,22 @@
 
 ---
 
+## [2026-09-06] — Version 1.2.0-alpha (Fase 1: Mesin Event, Simulation Mode, PDU Inspector, Table Viewer)
+
+Pilar A dari rencana v1.2.0 (disetujui pemilik project). Fase 2 (DHCP + NAT) dan Fase 3 (VLAN + RIPv2) menyusul.
+
+### Added
+- **Arsitektur "plan-then-playback"** (`src/engine/simulationEngine.ts` + `eventQueue.ts` baru): seluruh aliran ping direncanakan lebih dulu menjadi daftar `SimEvent` deterministik (seq + sim clock +1ms/hop, antrean dibatasi 500 event sesuai blueprint), lalu diputar worker dengan pacing/pause. `executePing` dipertahankan sebagai jalur kompatibel — seluruh 53 test lama lulus tanpa perubahan.
+- **Simulation Mode**: tombol **Step** di Toolbar + **Next** per event (mewujudkan TASK-P0-013 "Step" & DSD §5 "advances 1 hop"); pesan IPC baru `ENABLE_STEP_MODE`/`SIM_STEP_NEXT`/`SIM_PLAN`/`EVENT_PLAYED` (INV-002).
+- **Timeline event** di panel bawah (tab **Simulasi**): event mendatang tampil redup sebelum diputar, klik event membuka inspector.
+- **PDU Inspector Drawer**: header berlapis **L2 Ethernet Frame → L3 IPv4 Packet → L4 ARP/ICMP** per hop (`src/types/protocol.ts`), dengan **MAC frame ditulis-ulang per hop** dan TTL menurun di router — mode auto-follow mengikuti paket berjalan.
+- **Table Viewer** (tab **Tabel**): CAM/ARP/Routing perangkat terpilih secara live, diperbarui oleh `effects` (CAM_LEARN/ARP_LEARN) yang ditempel pada event.
+
+### Status Gate
+- `Gate C` — 59 unit test + 5 E2E hijau; coverage engine 93,8% lines.
+
+---
+
 ## [2026-09-06] — Version 1.1.0 (Jaringan Nirkabel & Cloud Internet)
 
 ### Added

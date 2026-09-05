@@ -4,7 +4,8 @@ import {
   type SimulationEventLog,
   type SimulationSpeed,
   type TopologyLink,
-} from '../types/network';
+} from './network';
+import { type SimEvent } from './protocol';
 
 // Messages from UI Main Thread to Simulation Worker
 export type UIWorkerMessage =
@@ -36,6 +37,13 @@ export type UIWorkerMessage =
     }
   | {
       type: 'RESUME_SIMULATION';
+    }
+  | {
+      type: 'ENABLE_STEP_MODE';
+      payload: { enabled: boolean };
+    }
+  | {
+      type: 'SIM_STEP_NEXT';
     };
 
 export interface PingResultPayload {
@@ -77,5 +85,19 @@ export type WorkerUIMessage =
       type: 'SIMULATION_STATE_SYNC';
       payload: {
         devices: DeviceData[];
+      };
+    }
+  | {
+      type: 'SIM_PLAN';
+      payload: {
+        requestId: string;
+        events: SimEvent[];
+      };
+    }
+  | {
+      type: 'EVENT_PLAYED';
+      payload: {
+        requestId: string;
+        event: SimEvent;
       };
     };

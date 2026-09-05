@@ -18,6 +18,7 @@ import {
   type RoutingEntry,
 } from '../types/network';
 import { generateMacAddress } from '../utils/ipUtils';
+import { type SimEvent } from '../types/protocol';
 
 interface AppStoreState {
   // Canvas State
@@ -79,6 +80,20 @@ interface AppStoreState {
   addSimulationLog: (type: SimulationEventLog['type'], message: string) => void;
   clearSimulationLogs: () => void;
   setActivePackets: (packets: PacketHopPayload[]) => void;
+
+  // Simulation Mode (v1.2.0): timeline event, step mode, PDU inspector
+  stepMode: boolean;
+  setStepMode: (enabled: boolean) => void;
+  simPlan: SimEvent[];
+  simPlayedUpTo: number;
+  setSimPlan: (events: SimEvent[]) => void;
+  markSimEventPlayed: (event: SimEvent) => void;
+  inspectorEvent: SimEvent | null;
+  inspectorOpen: boolean;
+  inspectorAutoFollow: boolean;
+  setInspectorEvent: (event: SimEvent | null) => void;
+  setInspectorOpen: (open: boolean) => void;
+  setInspectorAutoFollow: (value: boolean) => void;
 
   // Import / Export / Reset
   loadTopology: (data: { nodes: Node<DeviceData>[]; edges: Edge[] }) => void;
@@ -560,6 +575,53 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   clearSimulationLogs: () => set({ simulationLogs: [] }),
   setActivePackets: (packets) => set({ activePackets: packets }),
 
+  stepMode: false,
+  setStepMode: (enabled) => set({ stepMode: enabled }),
+  simPlan: [],
+  simPlayedUpTo: 0,
+  setSimPlan: (events) =>
+    set({
+      simPlan: events,
+      simPlayedUpTo: 0,
+      inspectorAutoFollow: true,
+      inspectorEvent: events[0] ?? null,
+    }),
+  markSimEventPlayed: (event) => {
+    set((state) => {
+      const next: Partial<AppStoreState> = { simPlayedUpTo: event.seq };
+      if (state.inspectorAutoFollow) next.inspectorEvent = event;
+      return next;
+    });
+
+    // Terapkan efek tabel (CAM/ARP) agar Table Viewer hidup selama playback
+    const effects = event.effects ?? [];
+    if (effects.length > 0) {
+      set((state) => ({
+        nodes: state.nodes.map((node) => {
+          const nodeEffects = effects.filter((e) => e.nodeId === node.id);
+          if (nodeEffects.length === 0) return node;
+          let arpTable = node.data.arpTable;
+          let macTable = node.data.macTable;
+          for (const eff of nodeEffects) {
+            if (eff.type === 'CAM_LEARN') {
+              macTable = { ...(macTable ?? {}), [eff.mac]: eff.portId };
+            } else {
+              arpTable = { ...(arpTable ?? {}), [eff.ip]: eff.mac };
+            }
+          }
+          return { ...node, data: { ...node.data, arpTable, macTable } };
+        }),
+      }));
+    }
+  },
+  inspectorEvent: null,
+  inspectorOpen: false,
+  inspectorAutoFollow: true,
+  setInspectorEvent: (event) =>
+    set({ inspectorEvent: event, inspectorAutoFollow: false }),
+  setInspectorOpen: (open) => set({ inspectorOpen: open }),
+  setInspectorAutoFollow: (value) => set({ inspectorAutoFollow: value }),
+
   loadTopology: (data) => {
     // Sinkronkan counter penamaan dengan label yang dimuat agar tidak ada nama duplikat.
     const counters: Record<DeviceType, number> = { ...EMPTY_DEVICE_COUNTERS };
@@ -617,6 +679,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       simulationLogs: [],
       activePackets: [],
       simulationStatus: 'idle',
+      simPlan: [],
+      simPlayedUpTo: 0,
+      inspectorEvent: null,
+      inspectorOpen: false,
     });
     get().addSimulationLog('INFO', 'Kanvas topologi dibersihkan.');
   },

@@ -53,6 +53,14 @@ function ensureWorker(): Worker {
         });
         break;
 
+      case 'SIM_PLAN':
+        store.setSimPlan(msg.payload.events);
+        break;
+
+      case 'EVENT_PLAYED':
+        store.markSimEventPlayed(msg.payload.event);
+        break;
+
       case 'SIMULATION_STEP':
         // Event internal engine->worker, tidak pernah sampai di UI thread.
         break;
@@ -77,6 +85,18 @@ export function pauseSimulation(): void {
 export function resumeSimulation(): void {
   ensureWorker().postMessage({ type: 'RESUME_SIMULATION' } as UIWorkerMessage);
   useAppStore.getState().setSimulationStatus('running');
+}
+
+export function enableStepMode(enabled: boolean): void {
+  ensureWorker().postMessage({
+    type: 'ENABLE_STEP_MODE',
+    payload: { enabled },
+  } as UIWorkerMessage);
+}
+
+/** Maju satu event dalam step mode (dipanggil tombol "Next Hop"). */
+export function simStepNext(): void {
+  ensureWorker().postMessage({ type: 'SIM_STEP_NEXT' } as UIWorkerMessage);
 }
 
 export interface PingRequestOptions {
@@ -138,6 +158,11 @@ export function useSimulationEngine() {
   useEffect(() => {
     setEngineSpeed(simulationSpeed);
   }, [simulationSpeed]);
+
+  const stepMode = useAppStore((s) => s.stepMode);
+  useEffect(() => {
+    enableStepMode(stepMode);
+  }, [stepMode]);
 
   const triggerPing = (sourceNodeId: string, targetIp: string) => {
     requestPing(sourceNodeId, targetIp, { echoCount: 4, outputStyle: 'windows' }).catch(

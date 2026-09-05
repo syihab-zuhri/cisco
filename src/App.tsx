@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Toolbar } from './components/toolbar/Toolbar';
 import { DevicePalette } from './components/palette/DevicePalette';
 import { TopologyCanvas } from './components/canvas/TopologyCanvas';
+import { PduInspectorDrawer } from './components/canvas/PduInspectorDrawer';
 import { EventLogPanel } from './components/log/EventLogPanel';
 import { DeviceConfigModal } from './components/modal/DeviceConfigModal';
 import { DeviceCliModal } from './components/terminal/DeviceCliModal';
@@ -31,6 +32,7 @@ export default function App() {
         <main className="flex flex-1 flex-col overflow-hidden">
           <div className="flex-1 relative">
             <TopologyCanvas />
+            <PduInspectorDrawer />
           </div>
           <EventLogPanel />
         </main>

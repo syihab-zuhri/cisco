@@ -7,6 +7,14 @@ import {
 } from '../types/network';
 import { isSameSubnet, prefixLength } from '../utils/ipUtils';
 import { type WorkerUIMessage } from '../types/ipc';
+import {
+  type ArpPacket,
+  type IcmpPacket,
+  type IPv4Packet,
+  type PduSnapshot,
+  type SimEvent,
+} from '../types/protocol';
+import { SimEventQueue } from './eventQueue';
 
 type LogLevel = 'INFO' | 'ARP' | 'ICMP' | 'ERROR' | 'SUCCESS';
 
@@ -19,11 +27,16 @@ const INITIAL_TTL = 128;
  */
 export const CLOUD_PUBLIC_IPS = ['8.8.8.8', '1.1.1.1'] as const;
 
+const ICMP_IDENTIFIER = 0x0001;
+const ICMP_PAYLOAD_BYTES = 32;
+const BROADCAST_MAC = 'FF:FF:FF:FF:FF:FF';
+
 interface L2Hop {
   fromNodeId: string;
   fromPortId: string;
   toNodeId: string;
   toPortId: string;
+  kind: 'ethernet' | 'wireless';
 }
 
 export interface PingOptions {
@@ -48,6 +61,18 @@ interface EchoOutcome {
   rttMs: number;
   replyTtl: number;
   error?: string;
+}
+
+/** Konteks perencanaan satu aliran simulasi (deterministik, INV-004). */
+interface PlanContext {
+  queue: SimEventQueue;
+  seq: number;
+  simTimeMs: number;
+}
+
+export interface SimulationPlan {
+  events: SimEvent[];
+  summary: PingSummary;
 }
 
 export class HeadlessSimulationEngine {
@@ -81,31 +106,89 @@ export class HeadlessSimulationEngine {
     return Array.from(this.devices.values());
   }
 
-  private log(level: LogLevel, message: string) {
-    this.onLogCallback?.(level, message);
-  }
+  // ------------------------------------------------------------------
+  // Perencanaan aliran event (plan-then-playback)
+  // ------------------------------------------------------------------
 
-  private async emitHop(
-    hop: L2Hop,
-    type: 'ARP_REQ' | 'ARP_REP' | 'ICMP_REQ' | 'ICMP_REP',
-    currentProtocol: 'ARP' | 'ICMP',
-    summary: string
-  ): Promise<void> {
-    if (!this.onHopCallback) return;
-    await this.onHopCallback({
-      type: 'SIMULATION_STEP',
-      payload: {
-        packetId: `pkt-${++this.packetSeq}`,
-        sourceNodeId: hop.fromNodeId,
-        targetNodeId: hop.toNodeId,
-        sourcePortId: hop.fromPortId,
-        targetPortId: hop.toPortId,
-        type,
-        currentProtocol,
-        summary,
-      },
+  private record(ctx: PlanContext, level: LogLevel, message: string): void {
+    ctx.queue.push({
+      seq: ++ctx.seq,
+      simTimeMs: ctx.simTimeMs,
+      kind: 'LOG',
+      level,
+      message,
     });
   }
+
+  private recordHop(
+    ctx: PlanContext,
+    hop: L2Hop,
+    kind: 'ARP_REQ' | 'ARP_REP' | 'ICMP_REQ' | 'ICMP_REP',
+    summary: string,
+    pdu: PduSnapshot,
+    effects?: SimEvent['effects']
+  ): SimEvent {
+    ctx.simTimeMs += 1;
+    const event: SimEvent = {
+      seq: ++ctx.seq,
+      simTimeMs: ctx.simTimeMs,
+      kind,
+      level: kind.startsWith('ARP') ? 'ARP' : 'ICMP',
+      message: summary,
+      hop: {
+        sourceNodeId: hop.fromNodeId,
+        sourcePortId: hop.fromPortId,
+        targetNodeId: hop.toNodeId,
+        targetPortId: hop.toPortId,
+        kind: hop.kind,
+      },
+      pdu,
+      effects,
+    };
+    ctx.queue.push(event);
+    return event;
+  }
+
+  private portOf(nodeId: string, portId: string): PhysicalPort | undefined {
+    return this.devices.get(nodeId)?.ports.find((p) => p.id === portId);
+  }
+
+  private buildFramePdu(
+    hop: L2Hop,
+    kind: 'ARP_REQ' | 'ARP_REP' | 'ICMP_REQ' | 'ICMP_REP',
+    opts: { arp?: ArpPacket; packet?: IPv4Packet; icmp?: IcmpPacket; note?: string }
+  ): PduSnapshot {
+    const fromPort = this.portOf(hop.fromNodeId, hop.fromPortId);
+    const toPort = this.portOf(hop.toNodeId, hop.toPortId);
+    return {
+      frame: {
+        srcMac: fromPort?.macAddress ?? '00:00:00:00:00:00',
+        dstMac:
+          kind === 'ARP_REQ' ? BROADCAST_MAC : (toPort?.macAddress ?? '00:00:00:00:00:00'),
+        ethertype: kind.startsWith('ARP') ? 'ARP' : 'IPv4',
+      },
+      packet: opts.packet,
+      segment: opts.arp ?? opts.icmp,
+      note: opts.note,
+    };
+  }
+
+  private toHopPayload(ev: SimEvent) {
+    return {
+      packetId: `pkt-${++this.packetSeq}`,
+      sourceNodeId: ev.hop!.sourceNodeId,
+      targetNodeId: ev.hop!.targetNodeId,
+      sourcePortId: ev.hop!.sourcePortId,
+      targetPortId: ev.hop!.targetPortId,
+      type: ev.kind as Exclude<SimEvent['kind'], 'LOG'>,
+      currentProtocol: ev.kind.startsWith('ARP') ? ('ARP' as const) : ('ICMP' as const),
+      summary: ev.message,
+    };
+  }
+
+  // ------------------------------------------------------------------
+  // Topologi & helper L2/L3
+  // ------------------------------------------------------------------
 
   private findLink(nodeId: string, portId: string): TopologyLink | null {
     for (const link of this.links) {
@@ -124,12 +207,13 @@ export class HeadlessSimulationEngine {
         fromPortId: h.toPortId,
         toNodeId: h.fromNodeId,
         toPortId: h.fromPortId,
+        kind: h.kind,
       }));
   }
 
   /**
-   * Menemukan rute Layer 2 antar host/switch menggunakan BFS.
-   * Hanya switch yang bisa menjadi hop antara (sesuai skoped P0: 1 router).
+   * Menemukan rute Layer 2 antar host menggunakan BFS. Switch, hub, dan
+   * Access Point dapat menjadi hop antara.
    */
   private findL2Path(startNodeId: string, targetNodeId: string): L2Hop[] | null {
     if (startNodeId === targetNodeId) return [];
@@ -158,12 +242,12 @@ export class HeadlessSimulationEngine {
           fromPortId: p.id,
           toNodeId: peerNodeId,
           toPortId: peerPortId,
+          kind: link.kind ?? 'ethernet',
         };
 
         if (peerNodeId === targetNodeId) return [...path, hop];
 
         const peerDev = this.devices.get(peerNodeId);
-        // Switch maupun hub dapat menjadi hop antara di jalur Layer-2
         if (peerDev && isL2Intermediate(peerDev.type) && !visited.has(peerDev.id)) {
           visited.add(peerDev.id);
           queue.push({ currentNodeId: peerDev.id, path: [...path, hop] });
@@ -231,7 +315,7 @@ export class HeadlessSimulationEngine {
       return { nextHopIp: best.nextHopIp };
     }
 
-    // Host (PC / switch management)
+    // Host (PC / Laptop / Server / switch management)
     if (isSameSubnet(fromPort.ipAddress!, targetIp, fromPort.subnetMask!)) {
       return { nextHopIp: targetIp };
     }
@@ -244,37 +328,47 @@ export class HeadlessSimulationEngine {
   }
 
   /**
-   * Resolusi RFC 826: cek ARP cache, kalau miss pancarkan ARP Request
-   * sepanjang jalur L2 (switch belajar CAM), hanya pemilik IP yang membalas.
+   * Resolusi RFC 826 sebagai bagian perencanaan: cek ARP cache, kalau miss
+   * jadwalkan ARP Request (broadcast, MAC tujuan FF:FF:FF:FF:FF:FF) sepanjang
+   * jalur L2 — switch/AP belajar CAM (effect) — dan hanya pemilik IP yang membalas.
    */
-  private async resolveArp(
+  private planArp(
+    ctx: PlanContext,
     sender: { dev: DeviceData; port: PhysicalPort },
     nextHopIp: string,
     owner: { dev: DeviceData; port: PhysicalPort },
     path: L2Hop[],
     animate: boolean
-  ): Promise<void> {
+  ): void {
     sender.dev.arpTable = sender.dev.arpTable || {};
     const cached = sender.dev.arpTable[nextHopIp];
     if (cached) {
       if (animate) {
-        this.log('ARP', `${sender.dev.label}: ARP Cache HIT: ${nextHopIp} -> ${cached}`);
+        this.record(ctx, 'ARP', `${sender.dev.label}: ARP Cache HIT: ${nextHopIp} -> ${cached}`);
       }
       return;
     }
 
-    this.log(
+    this.record(
+      ctx,
       'ARP',
       `${sender.dev.label}: ARP Cache MISS untuk IP ${nextHopIp}. Memancarkan ARP Request (Broadcast)...`
     );
 
     if (animate) {
       for (const hop of path) {
-        await this.emitHop(
+        const arp: ArpPacket = {
+          opcode: 1,
+          senderIp: sender.port.ipAddress!,
+          senderMac: sender.port.macAddress,
+          targetIp: nextHopIp,
+        };
+        this.recordHop(
+          ctx,
           hop,
           'ARP_REQ',
-          'ARP',
-          `ARP Request: Who has ${nextHopIp}? Tell ${sender.port.ipAddress}`
+          `ARP Request: Who has ${nextHopIp}? Tell ${sender.port.ipAddress}`,
+          this.buildFramePdu(hop, 'ARP_REQ', { arp })
         );
       }
     }
@@ -286,10 +380,28 @@ export class HeadlessSimulationEngine {
         if (!sw.macTable[sender.port.macAddress]) {
           sw.macTable[sender.port.macAddress] = hop.toPortId;
           if (animate) {
-            this.log(
+            this.record(
+              ctx,
               'INFO',
               `${sw.label}: CAM Table belajar MAC ${sender.port.macAddress} pada port ${hop.toPortId}`
             );
+            // Tempelkan efek CAM_LEARN ke event hop ARP_REQ yang tiba di switch ini
+            const hopEvent = ctx.queue
+              .snapshot()
+              .reverse()
+              .find((e) => e.hop && e.hop.targetNodeId === sw.id && e.kind === 'ARP_REQ');
+            if (hopEvent) {
+              hopEvent.effects = [
+                ...(hopEvent.effects ?? []),
+                {
+                  type: 'CAM_LEARN',
+                  nodeId: sw.id,
+                  mac: sender.port.macAddress,
+                  portId: hop.toPortId,
+                  vlan: 1,
+                },
+              ];
+            }
           }
         }
       }
@@ -298,38 +410,87 @@ export class HeadlessSimulationEngine {
     owner.dev.arpTable = owner.dev.arpTable || {};
     owner.dev.arpTable[sender.port.ipAddress!] = sender.port.macAddress;
 
-      if (animate) {
-        this.log('ARP', `${owner.dev.label}: IP cocok (${nextHopIp})! Mengirimkan ARP Reply (Unicast)...`);
-        const backwardPath = this.reversePath(path);
-        for (const hop of backwardPath) {
-          await this.emitHop(
-            hop,
-            'ARP_REP',
-            'ARP',
-            `ARP Reply: ${nextHopIp} is at ${owner.port.macAddress}`
-          );
-          const sw = this.devices.get(hop.toNodeId);
-          if (sw && learnsCam(sw.type)) {
-            sw.macTable = sw.macTable || {};
-            sw.macTable[owner.port.macAddress] = sw.macTable[owner.port.macAddress] ?? hop.toPortId;
-            this.log(
-              'INFO',
-              `${sw.label}: CAM Table belajar MAC ${owner.port.macAddress} pada port ${hop.toPortId}`
-            );
-          }
+    if (animate) {
+      this.record(
+        ctx,
+        'ARP',
+        `${owner.dev.label}: IP cocok (${nextHopIp})! Mengirimkan ARP Reply (Unicast)...`
+      );
+      const backwardPath = this.reversePath(path);
+      backwardPath.forEach((hop, idx) => {
+        const arp: ArpPacket = {
+          opcode: 2,
+          senderIp: nextHopIp,
+          senderMac: owner.port.macAddress,
+          targetIp: sender.port.ipAddress!,
+          targetMac: sender.port.macAddress,
+        };
+        const effects: NonNullable<SimEvent['effects']> = [];
+        if (idx === 0) {
+          effects.push({
+            type: 'ARP_LEARN',
+            nodeId: owner.dev.id,
+            ip: sender.port.ipAddress!,
+            mac: sender.port.macAddress,
+          });
         }
-      }
+        this.recordHop(
+          ctx,
+          hop,
+          'ARP_REP',
+          `ARP Reply: ${nextHopIp} is at ${owner.port.macAddress}`,
+          this.buildFramePdu(hop, 'ARP_REP', { arp }),
+          effects
+        );
+        const sw = this.devices.get(hop.toNodeId);
+        if (sw && learnsCam(sw.type)) {
+          sw.macTable = sw.macTable || {};
+          sw.macTable[owner.port.macAddress] =
+            sw.macTable[owner.port.macAddress] ?? hop.toPortId;
+          this.record(
+            ctx,
+            'INFO',
+            `${sw.label}: CAM Table belajar MAC ${owner.port.macAddress} pada port ${hop.toPortId}`
+          );
+          const hopEvent = ctx.queue.snapshot().at(-1);
+          hopEvent?.effects?.push({
+            type: 'CAM_LEARN',
+            nodeId: sw.id,
+            mac: owner.port.macAddress,
+            portId: hop.toPortId,
+            vlan: 1,
+          });
+        }
+        if (idx === backwardPath.length - 1) {
+          const lastEvent = ctx.queue.snapshot().at(-1);
+          lastEvent?.effects?.push({
+            type: 'ARP_LEARN',
+            nodeId: sender.dev.id,
+            ip: nextHopIp,
+            mac: owner.port.macAddress,
+          });
+        }
+      });
+    }
 
     sender.dev.arpTable[nextHopIp] = owner.port.macAddress;
-    this.log('ARP', `${sender.dev.label}: ARP Cache diperbarui: ${nextHopIp} -> ${owner.port.macAddress}`);
+    this.record(
+      ctx,
+      'ARP',
+      `${sender.dev.label}: ARP Cache diperbarui: ${nextHopIp} -> ${owner.port.macAddress}`
+    );
   }
 
+  // Dipakai untuk log di luar event hop saat perencanaan (dengan efek samping callback langsung)
+
   /** Satu siklus ICMP Echo Request -> Reply (bolak-balik), dengan TTL & hop router. */
-  private async echoOnce(
+  private planEchoOnce(
+    ctx: PlanContext,
     source: { dev: DeviceData; port: PhysicalPort },
     targetIp: string,
+    echoIndex: number,
     animate: boolean
-  ): Promise<EchoOutcome> {
+  ): EchoOutcome {
     // Ping ke IP sendiri (loopback interface)
     if (source.port.ipAddress === targetIp) {
       return { ok: true, rttMs: 0, replyTtl: INITIAL_TTL };
@@ -337,6 +498,7 @@ export class HeadlessSimulationEngine {
 
     let sender = source;
     let ttl = INITIAL_TTL;
+    let ttlAtHop = INITIAL_TTL;
     const visitedRouters = new Set<string>();
     const requestPath: L2Hop[] = [];
 
@@ -365,15 +527,34 @@ export class HeadlessSimulationEngine {
         };
       }
 
-      await this.resolveArp(sender, next.nextHopIp, owner, path, animate);
+      this.planArp(ctx, sender, next.nextHopIp, owner, path, animate);
 
       if (animate) {
         for (const hop of path) {
-          await this.emitHop(
+          const packet: IPv4Packet = {
+            srcIp: source.port.ipAddress!,
+            dstIp: targetIp,
+            ttl: ttlAtHop,
+            protocol: 'ICMP',
+            id: ICMP_IDENTIFIER,
+          };
+          const icmp: IcmpPacket = {
+            type: 8,
+            code: 0,
+            identifier: ICMP_IDENTIFIER,
+            sequence: echoIndex + 1,
+            payloadBytes: ICMP_PAYLOAD_BYTES,
+          };
+          const note =
+            depth > 0
+              ? `Diteruskan router ${sender.dev.label} (TTL diturunkan menjadi ${ttlAtHop})`
+              : undefined;
+          this.recordHop(
+            ctx,
             hop,
             'ICMP_REQ',
-            'ICMP',
-            `ICMP Echo Request: ${source.port.ipAddress} -> ${targetIp}${depth > 0 ? ' (diteruskan router)' : ''}`
+            `ICMP Echo Request: ${source.port.ipAddress} -> ${targetIp}${depth > 0 ? ' (diteruskan router)' : ''}`,
+            this.buildFramePdu(hop, 'ICMP_REQ', { packet, icmp, note })
           );
         }
       }
@@ -388,36 +569,25 @@ export class HeadlessSimulationEngine {
         if (owner.dev.type === 'cloud') {
           const replyTtl = INITIAL_TTL - routerCount - 1;
           const rttMs = routerCount + 1;
-          this.log(
+          this.record(
+            ctx,
             'ICMP',
             `${owner.dev.label}: Menerima paket untuk IP publik ${targetIp}. Membalas ICMP Echo Reply...`
           );
           if (animate) {
-            for (const hop of returnPath) {
-              await this.emitHop(
-                hop,
-                'ICMP_REP',
-                'ICMP',
-                `ICMP Echo Reply: ${targetIp} -> ${source.port.ipAddress}`
-              );
-            }
+            this.emitReplyHops(ctx, returnPath, source, targetIp, echoIndex, replyTtl, 'cloud');
           }
           return { ok: true, rttMs, replyTtl };
         }
 
-        // Host biasa membalas Echo Reply
         const replyTtl = INITIAL_TTL - routerCount;
-
-        this.log('ICMP', `${owner.dev.label}: Menerima Echo Request. Membalas dengan ICMP Echo Reply...`);
+        this.record(
+          ctx,
+          'ICMP',
+          `${owner.dev.label}: Menerima Echo Request. Membalas dengan ICMP Echo Reply...`
+        );
         if (animate) {
-          for (const hop of returnPath) {
-            await this.emitHop(
-              hop,
-              'ICMP_REP',
-              'ICMP',
-              `ICMP Echo Reply: ${targetIp} -> ${source.port.ipAddress}`
-            );
-          }
+          this.emitReplyHops(ctx, returnPath, source, targetIp, echoIndex, replyTtl, 'host');
         }
         return { ok: true, rttMs: routerCount, replyTtl };
       }
@@ -425,7 +595,6 @@ export class HeadlessSimulationEngine {
       // Transit: pemilik nextHopIp haruslah router — atau Cloud untuk IP publik
       const router = owner.dev;
       if (router.type === 'cloud') {
-        // Cloud menerima paket yang ditujukan ke IP publik tersimulasi
         if (!(CLOUD_PUBLIC_IPS as readonly string[]).includes(targetIp)) {
           return {
             ok: false,
@@ -437,19 +606,13 @@ export class HeadlessSimulationEngine {
         const routerCount = this.countInteriorRouters(requestPath);
         const replyTtl = INITIAL_TTL - routerCount - 1;
         const rttMs = routerCount + 1;
-        this.log(
+        this.record(
+          ctx,
           'ICMP',
           `${router.label}: Menerima paket untuk IP publik ${targetIp}. Membalas ICMP Echo Reply...`
         );
         if (animate) {
-          for (const hop of this.reversePath(requestPath)) {
-            await this.emitHop(
-              hop,
-              'ICMP_REP',
-              'ICMP',
-              `ICMP Echo Reply: ${targetIp} -> ${source.port.ipAddress}`
-            );
-          }
+          this.emitReplyHops(ctx, this.reversePath(requestPath), source, targetIp, echoIndex, replyTtl, 'cloud');
         }
         return { ok: true, rttMs, replyTtl };
       }
@@ -462,14 +625,26 @@ export class HeadlessSimulationEngine {
         };
       }
       if (visitedRouters.has(router.id)) {
-        return { ok: false, rttMs: 0, replyTtl: 0, error: `Routing loop terdeteksi di ${router.label}.` };
+        return {
+          ok: false,
+          rttMs: 0,
+          replyTtl: 0,
+          error: `Routing loop terdeteksi di ${router.label}.`,
+        };
       }
       visitedRouters.add(router.id);
       ttl -= 1;
+      ttlAtHop = ttl;
       if (ttl <= 0) {
-        return { ok: false, rttMs: 0, replyTtl: 0, error: `TTL terlampaui (Time Exceeded) di ${router.label}.` };
+        return {
+          ok: false,
+          rttMs: 0,
+          replyTtl: 0,
+          error: `TTL terlampaui (Time Exceeded) di ${router.label}.`,
+        };
       }
-      this.log(
+      this.record(
+        ctx,
         'ICMP',
         `${router.label}: Menerima paket (TTL sisa ${ttl}). Meneruskan ke subnet tujuan...`
       );
@@ -477,6 +652,47 @@ export class HeadlessSimulationEngine {
     }
 
     return { ok: false, rttMs: 0, replyTtl: 0, error: 'Hop routing melebihi batas kedalaman.' };
+  }
+
+  /** Hop ICMP Reply dengan TTL yang menurun di setiap router pada jalur balik. */
+  private emitReplyHops(
+    ctx: PlanContext,
+    returnPath: L2Hop[],
+    source: { dev: DeviceData; port: PhysicalPort },
+    targetIp: string,
+    echoIndex: number,
+    _replyTtlFinal: number,
+    replier: 'host' | 'cloud'
+  ): void {
+    let ttlReply = INITIAL_TTL;
+    for (const hop of returnPath) {
+      const packet: IPv4Packet = {
+        srcIp: targetIp,
+        dstIp: source.port.ipAddress!,
+        ttl: ttlReply,
+        protocol: 'ICMP',
+        id: ICMP_IDENTIFIER,
+      };
+      const icmp: IcmpPacket = {
+        type: 0,
+        code: 0,
+        identifier: ICMP_IDENTIFIER,
+        sequence: echoIndex + 1,
+        payloadBytes: ICMP_PAYLOAD_BYTES,
+      };
+      this.recordHop(
+        ctx,
+        hop,
+        'ICMP_REP',
+        `ICMP Echo Reply: ${targetIp} -> ${source.port.ipAddress}`,
+        this.buildFramePdu(hop, 'ICMP_REP', { packet, icmp })
+      );
+      const arrivedDev = this.devices.get(hop.toNodeId);
+      if (arrivedDev?.type === 'router') {
+        ttlReply -= 1;
+      }
+    }
+    void replier;
   }
 
   private countInteriorRouters(path: L2Hop[]): number {
@@ -539,78 +755,101 @@ export class HeadlessSimulationEngine {
     return lines;
   }
 
+  // ------------------------------------------------------------------
+  // API publik: planPing (untuk worker/timeline) & executePing (kompatibel test)
+  // ------------------------------------------------------------------
+
   /**
-   * Eksekusi Ping lengkap dari sourceNodeId ke targetIp.
-   * Echo pertama dianimasikan hop-per-hop; echo berikutnya hanya log (deterministik).
+   * Merencanakan seluruh aliran ping menjadi daftar SimEvent deterministik.
+   * Mutasi tabel (CAM/ARP) diterapkan saat perencanaan; efek juga ditempel pada
+   * event agar GUI memperbarui tabel secara live selama playback.
    */
+  public planPing(
+    sourceNodeId: string,
+    targetIp: string,
+    options: PingOptions = {}
+  ): SimulationPlan {
+    const ctx: PlanContext = { queue: new SimEventQueue(), seq: 0, simTimeMs: 0 };
+    const summary = this.runPing(ctx, sourceNodeId, targetIp, options);
+    return { events: ctx.queue.snapshot(), summary };
+  }
+
+  /** Kompatibilitas: jalankan ping secara langsung (tanpa pacing) melalui callback. */
   public async executePing(
     sourceNodeId: string,
     targetIp: string,
     options: PingOptions = {}
   ): Promise<PingSummary> {
-    const echoCount = Math.max(1, options.echoCount ?? 1);
-    const style = options.outputStyle ?? 'windows';
+    const plan = this.planPing(sourceNodeId, targetIp, options);
     const logs: string[] = [];
 
-    // Cermin: seluruh log internal engine ikut terkumpul di logs[] hasil ping
-    // (selain dikirim ke callback untuk Event Log Panel).
-    const outerLog = this.onLogCallback;
-    this.onLogCallback = (level, message) => {
-      logs.push(`[${level}] ${message}`);
-      outerLog?.(level, message);
-    };
-
-    try {
-      return await this.runPing(sourceNodeId, targetIp, { echoCount, style, logs });
-    } finally {
-      this.onLogCallback = outerLog;
+    for (const ev of plan.events) {
+      if (ev.kind === 'LOG') {
+        logs.push(`[${ev.level}] ${ev.message}`);
+        this.onLogCallback?.(ev.level, ev.message);
+      }
+      if (ev.hop) {
+        await this.onHopCallback?.({
+          type: 'SIMULATION_STEP',
+          payload: this.toHopPayload(ev),
+        });
+      }
     }
+
+    return { ...plan.summary, logs };
   }
 
-  private async runPing(
+  private runPing(
+    ctx: PlanContext,
     sourceNodeId: string,
     targetIp: string,
-    ctx: {
-      echoCount: number;
-      style: 'windows' | 'ios';
-      logs: string[];
-    }
-  ): Promise<PingSummary> {
-    const { echoCount, style, logs } = ctx;
+    options: PingOptions
+  ): PingSummary {
+    const echoCount = Math.max(1, options.echoCount ?? 1);
+    const style = options.outputStyle ?? 'windows';
 
     const sourceDev = this.devices.get(sourceNodeId);
     if (!sourceDev) {
-      this.log('ERROR', `Source node ${sourceNodeId} tidak ditemukan.`);
-      return { success: false, rttMs: 0, ttl: 0, logs, outputLines: [], sent: 0, received: 0 };
+      this.record(ctx, 'ERROR', `Source node ${sourceNodeId} tidak ditemukan.`);
+      return {
+        success: false, rttMs: 0, ttl: 0, logs: [], outputLines: [], sent: 0, received: 0,
+      };
     }
 
     const sourcePort = this.chooseSourcePort(sourceDev, targetIp);
     if (!sourcePort) {
-      this.log('ERROR', `${sourceDev.label}: Port belum memiliki konfigurasi IP/Subnet.`);
-      return { success: false, rttMs: 0, ttl: 0, logs, outputLines: [], sent: 0, received: 0 };
+      this.record(ctx, 'ERROR', `${sourceDev.label}: Port belum memiliki konfigurasi IP/Subnet.`);
+      return {
+        success: false, rttMs: 0, ttl: 0, logs: [], outputLines: [], sent: 0, received: 0,
+      };
     }
 
     if (sourcePort.status !== 'up') {
-      this.log('ERROR', `${sourceDev.label}: Kabel tidak terhubung (Link DOWN).`);
-      return { success: false, rttMs: 0, ttl: 0, logs, outputLines: [], sent: 0, received: 0 };
+      this.record(ctx, 'ERROR', `${sourceDev.label}: Kabel tidak terhubung (Link DOWN).`);
+      return {
+        success: false, rttMs: 0, ttl: 0, logs: [], outputLines: [], sent: 0, received: 0,
+      };
     }
 
-    this.log(
+    this.record(
+      ctx,
       'INFO',
       `Memulai PING dari ${sourceDev.label} (${sourcePort.ipAddress}) ke ${targetIp}...`
     );
 
     const outcomes: EchoOutcome[] = [];
     for (let i = 0; i < echoCount; i++) {
-      if (i > 0) this.log('ICMP', `Echo #${i + 1} ke ${targetIp}...`);
-      const outcome = await this.echoOnce(
+      if (i > 0) this.record(ctx, 'ICMP', `Echo #${i + 1} ke ${targetIp}...`);
+      const outcome = this.planEchoOnce(
+        ctx,
         { dev: sourceDev, port: sourcePort },
         targetIp,
+        i,
         i === 0
       );
       outcomes.push(outcome);
       if (!outcome.ok) {
-        this.log('ERROR', outcome.error ?? 'Ping gagal tanpa alasan yang diketahui.');
+        this.record(ctx, 'ERROR', outcome.error ?? 'Ping gagal tanpa alasan yang diketahui.');
         break; // kondisi gagal bersifat deterministik — tidak perlu mengulang
       }
     }
@@ -620,7 +859,8 @@ export class HeadlessSimulationEngine {
 
     if (firstOk) {
       const time = firstOk.rttMs === 0 ? '<1ms' : `${firstOk.rttMs}ms`;
-      this.log(
+      this.record(
+        ctx,
         'SUCCESS',
         `Ping reply diterima dari ${targetIp}: bytes=32 time=${time} TTL=${firstOk.replyTtl}.`
       );
@@ -630,7 +870,7 @@ export class HeadlessSimulationEngine {
       success: received > 0 && received === outcomes.length,
       rttMs: firstOk?.rttMs ?? 0,
       ttl: firstOk?.replyTtl ?? 0,
-      logs,
+      logs: [],
       outputLines: this.buildOutputLines(style, targetIp, outcomes),
       sent: outcomes.length,
       received,

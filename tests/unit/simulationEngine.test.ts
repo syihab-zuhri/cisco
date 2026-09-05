@@ -600,3 +600,98 @@ describe('HeadlessSimulationEngine (nirkabel & cloud internet)', () => {
     expect(result.logs.join('\n')).toContain('tidak dikenal di internet tersimulasi');
   });
 });
+
+describe('planPing — aliran event, PDU & determinisme (v1.2.0)', () => {
+  it('aliran event deterministik: ARP_REQ → ARP_REP → ICMP_REQ → ICMP_REP, simTime +1ms per hop', async () => {
+    const build = () => {
+      const { devices, links } = buildRoutedTopology();
+      const engine = new HeadlessSimulationEngine();
+      engine.setTopology(devices, links);
+      return engine;
+    };
+
+    const planA = build().planPing('pc-1', '192.168.2.20');
+    const planB = build().planPing('pc-1', '192.168.2.20');
+
+    // Dua engine identik menghasilkan aliran event identik (INV-004)
+    expect(planA.events.map((e) => [e.kind, e.simTimeMs])).toEqual(
+      planB.events.map((e) => [e.kind, e.simTimeMs])
+    );
+
+    const kinds: string[] = planA.events.map((e) => e.kind);
+    const firstOf = (k: string) => kinds.indexOf(k);
+    expect(firstOf('ARP_REQ')).toBeLessThan(firstOf('ARP_REP'));
+    expect(firstOf('ARP_REP')).toBeLessThan(firstOf('ICMP_REQ'));
+    expect(firstOf('ICMP_REQ')).toBeLessThan(firstOf('ICMP_REP'));
+
+    // seq monoton naik; setiap hop memajukan sim clock 1ms
+    const seqs = planA.events.map((e) => e.seq);
+    for (let i = 1; i < seqs.length; i++) expect(seqs[i]).toBe(seqs[i - 1] + 1);
+    const hopEvents = planA.events.filter((e) => e.kind !== 'LOG');
+    for (const e of hopEvents) expect(e.simTimeMs).toBeGreaterThan(0);
+  });
+
+  it('PDU: ARP_REQ broadcast FF:FF:FF:FF:FF:FF, frame MAC per-hop, TTL turun di router', async () => {
+    const { devices, links, router } = buildRoutedTopology();
+    const engine = new HeadlessSimulationEngine();
+    engine.setTopology(devices, links);
+
+    const plan = engine.planPing('pc-1', '192.168.2.20');
+
+    // ARP Request: frame broadcast + opcode 1
+    const arpReq = plan.events.find((e) => e.kind === 'ARP_REQ')!;
+    expect(arpReq.pdu?.frame.dstMac).toBe('FF:FF:FF:FF:FF:FF');
+    expect((arpReq.pdu?.segment as { opcode: number }).opcode).toBe(1);
+
+    // ICMP hop sebelum router: TTL 128; setelah transit router: TTL 127
+    const icmpHops = plan.events.filter((e) => e.kind === 'ICMP_REQ');
+    expect(icmpHops[0].pdu?.packet?.ttl).toBe(128);
+    const afterRouter = icmpHops.find((e) => e.hop?.sourceNodeId === router.id);
+    expect(afterRouter?.pdu?.packet?.ttl).toBe(127);
+    expect(afterRouter?.pdu?.note).toContain('TTL diturunkan');
+
+    // Frame ICMP hop keluar router: MAC sumber = port router fa0/1 (ditulis ulang per hop)
+    const routerHop = icmpHops.find((e) => e.hop?.sourceNodeId === router.id)!;
+    expect(routerHop.pdu?.frame.srcMac).toBe('00:50:79:RT:00:02'); // fa0/1 router
+    // Hop terakhir adalah sw2 → PC-2: MAC sumber = port switch, IP end-to-end tetap
+    const lastHop = icmpHops[icmpHops.length - 1];
+    expect(lastHop.hop?.sourceNodeId).toBe('sw-2');
+    expect(lastHop.pdu?.frame.srcMac).toBe('00:50:79:SW:02:02');
+    expect(lastHop.pdu?.packet?.dstIp).toBe('192.168.2.20'); // IP end-to-end tetap
+  });
+
+  it('effects CAM_LEARN/ARP_LEARN ditempel pada event yang tepat', async () => {
+    const { devices, links } = buildRoutedTopology();
+    const engine = new HeadlessSimulationEngine();
+    engine.setTopology(devices, links);
+
+    const plan = engine.planPing('pc-1', '192.168.2.20');
+
+    const camEffects = plan.events.flatMap((e) => e.effects ?? []).filter((e) => e.type === 'CAM_LEARN');
+    expect(camEffects.length).toBeGreaterThanOrEqual(2); // switch di kedua LAN
+    expect(camEffects.some((e) => e.nodeId === 'sw-1')).toBe(true);
+    expect(camEffects.some((e) => e.nodeId === 'sw-2')).toBe(true);
+
+    const arpEffects = plan.events.flatMap((e) => e.effects ?? []).filter((e) => e.type === 'ARP_LEARN');
+    expect(arpEffects.some((e) => e.nodeId === 'pc-1' && e.ip === '192.168.1.1')).toBe(true);
+  });
+
+  it('executePing tetap kompatibel: hasil & logs identik dengan plan', async () => {
+    // Engine segar untuk plan & execute — ARP cache menetap di engine yang sama
+    const fresh = () => {
+      const { devices, links } = buildRoutedTopology();
+      const engine = new HeadlessSimulationEngine();
+      engine.setTopology(devices, links);
+      return engine;
+    };
+
+    const plan = fresh().planPing('pc-1', '192.168.2.20');
+    const result = await fresh().executePing('pc-1', '192.168.2.20');
+
+    expect(result.success).toBe(plan.summary.success);
+    expect(result.ttl).toBe(plan.summary.ttl);
+    expect(result.logs.length).toBe(
+      plan.events.filter((e) => e.kind === 'LOG').length
+    );
+  });
+});

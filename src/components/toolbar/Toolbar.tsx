@@ -7,9 +7,11 @@ import {
   FolderOpen,
   Activity,
   Send,
+  StepForward,
+  ChevronLast,
 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
-import { pauseSimulation, resumeSimulation } from '../../hooks/useSimulationEngine';
+import { pauseSimulation, resumeSimulation, simStepNext } from '../../hooks/useSimulationEngine';
 
 interface ToolbarProps {
   onTriggerPing: (sourceNodeId: string, targetIp: string) => void;
@@ -25,6 +27,8 @@ export function Toolbar({ onTriggerPing, onOpenDocs }: ToolbarProps) {
     simulationSpeed,
     setSimulationSpeed,
     simulationStatus,
+    stepMode,
+    setStepMode,
     addSimulationLog,
   } = useAppStore();
 
@@ -131,6 +135,30 @@ export function Toolbar({ onTriggerPing, onOpenDocs }: ToolbarProps) {
                 Pause
               </>
             )}
+          </button>
+        )}
+
+        {/* Step Mode (v1.2.0): maju satu event per klik */}
+        <button
+          onClick={() => setStepMode(!stepMode)}
+          title="Step Mode: putar simulasi satu event per langkah"
+          className={`flex items-center gap-1 rounded px-2 py-1 text-xs font-medium border ${
+            stepMode
+              ? 'bg-violet-600 text-white border-violet-500'
+              : 'bg-[#1F2937] text-gray-300 border-[#374151] hover:bg-[#374151]'
+          }`}
+        >
+          <StepForward className="h-3 w-3" />
+          Step
+        </button>
+        {stepMode && simulationStatus === 'running' && (
+          <button
+            onClick={simStepNext}
+            title="Putar satu event berikutnya"
+            className="flex items-center gap-1 rounded bg-violet-600 px-2 py-1 text-xs font-medium text-white border border-violet-500 hover:bg-violet-500"
+          >
+            <ChevronLast className="h-3 w-3" />
+            Next
           </button>
         )}
       </div>
