@@ -31,6 +31,23 @@ export function learnsCam(type: DeviceType): boolean {
 
 export type PortKind = 'ethernet' | 'wireless';
 
+/** Pool DHCP pada interface router (blueprint P1: router sebagai DHCP server). */
+export interface DhcpPool {
+  enabled: boolean;
+  network: string; // e.g. "192.168.1.0"
+  mask: string; // e.g. "255.255.255.0"
+  startIp: string; // awal rentang alokasi
+  maxClients: number;
+}
+
+/** Entri translasi NAT/PAT untuk ICMP (router dengan port natEnabled). */
+export interface NatTranslation {
+  insideIp: string; // IP host lokal
+  globalIp: string; // IP WAN router
+  icmpId: number;
+  echoSeq: number;
+}
+
 export interface PhysicalPort {
   id: string; // e.g. "fa0", "fa0/0", "wla0", "radio0"
   name: string; // e.g. "FastEthernet 0", "Wireless Adapter"
@@ -43,6 +60,8 @@ export interface PhysicalPort {
   connectedToNodeId?: string;
   connectedToPortId?: string;
   ssid?: string; // hanya port wireless: SSID yang di-broadcast (AP) atau dituju (klien)
+  dhcpEnabled?: boolean; // klien: minta IP via DHCP (DORA)
+  natEnabled?: boolean; // router: NAT/PAT keluar pada interface ini
 }
 
 export interface RoutingEntry {
@@ -61,6 +80,8 @@ export type DeviceData = {
   ports: PhysicalPort[];
   defaultGateway?: string; // for PC
   routes?: RoutingEntry[]; // for Router
+  dhcpPools?: Record<string, DhcpPool>; // for Router: portId → pool
+  natTable?: NatTranslation[]; // for Router: translasi aktif (ICMP)
   macTable?: Record<string, string>; // for Switch: MAC -> portId
   arpTable?: Record<string, string>; // IP -> MAC
 };
@@ -91,8 +112,16 @@ export interface PacketHopPayload {
   targetNodeId: string;
   sourcePortId: string;
   targetPortId: string;
-  type: 'ARP_REQ' | 'ARP_REP' | 'ICMP_REQ' | 'ICMP_REP';
-  currentProtocol: 'ARP' | 'ICMP';
+  type:
+    | 'ARP_REQ'
+    | 'ARP_REP'
+    | 'ICMP_REQ'
+    | 'ICMP_REP'
+    | 'DHCP_DISCOVER'
+    | 'DHCP_OFFER'
+    | 'DHCP_REQUEST'
+    | 'DHCP_ACK';
+  currentProtocol: 'ARP' | 'ICMP' | 'DHCP';
   summary: string;
   details?: Record<string, any>;
 }

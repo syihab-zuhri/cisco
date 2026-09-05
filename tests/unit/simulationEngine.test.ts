@@ -695,3 +695,135 @@ describe('planPing — aliran event, PDU & determinisme (v1.2.0)', () => {
     );
   });
 });
+
+describe('planDhcp & NAT/PAT (v1.2.0 fase 2)', () => {
+  function buildDhcpLan(withPool = true, occupyIp?: string) {
+    const pc1 = makePc('pc-1', '192.168.1.10', '00:50:79:AA:BB:01');
+    if (occupyIp) {
+      // perangkat lain sudah memakai IP tertentu di dalam pool
+      pc1.ports[0].ipAddress = occupyIp;
+    }
+    const pc2 = makePc('pc-2', '192.168.1.20', '00:50:79:AA:BB:02');
+    const sw = makeSwitch('sw-1', '00:50:79:SW:05');
+    const router: DeviceData = {
+      id: 'r-1',
+      label: 'R1',
+      type: 'router',
+      ports: [
+        { id: 'fa0/0', name: 'FastEthernet 0/0 (LAN)', status: 'up', ipAddress: '192.168.1.1', subnetMask: '255.255.255.0', macAddress: '00:50:79:R1:01' },
+      ],
+      dhcpPools: withPool
+        ? {
+            'fa0/0': {
+              enabled: true,
+              network: '192.168.1.0',
+              mask: '255.255.255.0',
+              startIp: '192.168.1.100',
+              maxClients: 50,
+            },
+          }
+        : {},
+      routes: [],
+      arpTable: {},
+    };
+    const links = [
+      { sourceNodeId: 'pc-1', sourcePortId: 'fa0', targetNodeId: 'sw-1', targetPortId: 'fa0/1' },
+      { sourceNodeId: 'sw-1', sourcePortId: 'fa0/2', targetNodeId: 'r-1', targetPortId: 'fa0/0' },
+      { sourceNodeId: 'sw-1', sourcePortId: 'fa0/3', targetNodeId: 'pc-2', targetPortId: 'fa0' },
+    ];
+    return { devices: [pc1, pc2, sw, router], links };
+  }
+
+  it('DORA: klien memperoleh IP pertama bebas dari pool + gateway via effect DHCP_LEASE', async () => {
+    const { devices, links } = buildDhcpLan();
+    const engine = new HeadlessSimulationEngine();
+    engine.setTopology(devices, links);
+
+    const plan = engine.planDhcp('pc-1', 'fa0');
+
+    const kinds = plan.events.map((e) => e.kind);
+    const firstOf = (k: string) => kinds.indexOf(k);
+    expect(firstOf('DHCP_DISCOVER')).toBeLessThan(firstOf('DHCP_OFFER'));
+    expect(firstOf('DHCP_OFFER')).toBeLessThan(firstOf('DHCP_REQUEST'));
+    expect(firstOf('DHCP_REQUEST')).toBeLessThan(firstOf('DHCP_ACK'));
+
+    const lease = plan.events.flatMap((e) => e.effects ?? []).find((e) => e.type === 'DHCP_LEASE');
+    expect(lease).toBeDefined();
+    expect(lease?.ipAddress).toBe('192.168.1.100');
+    expect(lease?.gateway).toBe('192.168.1.1');
+    expect(plan.summary.success).toBe(true);
+
+    // Engine sudah menerapkan lease saat perencanaan
+    const updatedPc = engine.getDevices().find((d) => d.id === 'pc-1');
+    expect(updatedPc?.ports[0].ipAddress).toBe('192.168.1.100');
+    expect(updatedPc?.defaultGateway).toBe('192.168.1.1');
+  });
+
+  it('alokasi melewati IP yang sudah terpakai', async () => {
+    const { devices, links } = buildDhcpLan(true, '192.168.1.100');
+    const engine = new HeadlessSimulationEngine();
+    engine.setTopology(devices, links);
+
+    const plan = engine.planDhcp('pc-2', 'fa0');
+    const lease = plan.events.flatMap((e) => e.effects ?? []).find((e) => e.type === 'DHCP_LEASE');
+    expect(lease?.ipAddress).toBe('192.168.1.101');
+  });
+
+  it('tanpa pool DHCP di segmen → gagal dengan pesan eksplisit', async () => {
+    const { devices, links } = buildDhcpLan(false);
+    const engine = new HeadlessSimulationEngine();
+    engine.setTopology(devices, links);
+
+    const plan = engine.planDhcp('pc-1', 'fa0');
+    expect(plan.summary.success).toBe(false);
+    expect(plan.events.some((e) => e.level === 'ERROR' && e.message.includes('Tidak ada server DHCP'))).toBe(true);
+  });
+
+  it('NAT: ping publik via router NAT → src di-rewrite, translasi tercatat, dst dikembalikan di jalur balik', async () => {
+    const pc = makePc('pc-1', '192.168.10.20', '00:50:79:AA:BB:01', '192.168.10.1');
+    const router: DeviceData = {
+      id: 'r-1', label: 'R1', type: 'router',
+      ports: [
+        { id: 'fa0/0', name: 'FastEthernet 0/0 (LAN)', status: 'up', ipAddress: '192.168.10.1', subnetMask: '255.255.255.0', macAddress: '00:50:79:R1:01' },
+        { id: 'fa0/2', name: 'FastEthernet 0/2 (WAN)', status: 'up', ipAddress: '203.0.113.1', subnetMask: '255.255.255.252', macAddress: '00:50:79:R1:02', natEnabled: true },
+      ],
+      routes: [{ network: '0.0.0.0', subnetMask: '0.0.0.0', nextHop: '203.0.113.2', interfaceId: 'fa0/2' }],
+      arpTable: {},
+    };
+    const cloud: DeviceData = {
+      id: 'cloud-1', label: 'Cloud', type: 'cloud',
+      ports: [{ id: 'wan0', name: 'WAN 0', status: 'up', ipAddress: '203.0.113.2', subnetMask: '255.255.255.252', macAddress: '00:50:79:CL:01' }],
+      arpTable: {},
+    };
+    const engine = new HeadlessSimulationEngine();
+    engine.setTopology(
+      [pc, router, cloud],
+      [
+        { sourceNodeId: 'pc-1', sourcePortId: 'fa0', targetNodeId: 'r-1', targetPortId: 'fa0/0' },
+        { sourceNodeId: 'r-1', sourcePortId: 'fa0/2', targetNodeId: 'cloud-1', targetPortId: 'wan0' },
+      ]
+    );
+
+    const plan = engine.planPing('pc-1', '8.8.8.8');
+    expect(plan.summary.success).toBe(true);
+
+    // Hop keluar router ke cloud: src sudah di-rewrite ke IP WAN + note NAT
+    const natHop = plan.events.find(
+      (e) => e.kind === 'ICMP_REQ' && e.hop?.sourceNodeId === 'r-1'
+    )!;
+    expect(natHop.pdu?.packet?.srcIp).toBe('203.0.113.1');
+    expect(natHop.pdu?.note).toContain('NAT');
+    expect(natHop.effects?.some((e) => e.type === 'NAT_TRANSLATE')).toBe(true);
+
+    // Jalur balik: sebelum mencapai router dst = IP WAN; sesudah = IP host + note
+    const replies = plan.events.filter((e) => e.kind === 'ICMP_REP');
+    expect(replies[0].pdu?.packet?.dstIp).toBe('203.0.113.1');
+    const afterNat = replies.find((e) => e.pdu?.note?.includes('dikembalikan'));
+    expect(afterNat?.pdu?.packet?.dstIp).toBe('192.168.10.20');
+
+    // Tabel translasi router terisi
+    const updatedRouter = engine.getDevices().find((d) => d.id === 'r-1');
+    expect(updatedRouter?.natTable?.length).toBeGreaterThan(0);
+    expect(updatedRouter?.natTable?.[0].insideIp).toBe('192.168.10.20');
+  });
+});

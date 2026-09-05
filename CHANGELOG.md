@@ -37,6 +37,20 @@
 
 ---
 
+## [2026-09-06] — Version 1.2.0-beta (Fase 2: DHCP DORA + NAT/PAT)
+
+Pilar B dari rencana v1.2.0.
+
+### Added
+- **DHCP (P1 blueprint — router sebagai server)**: pool per-interface di form konfigurasi router (network/mask/start IP/max client) dan toggle **"Obtain IP via DHCP"** di form klien. Aliran **DORA penuh beranimasi** di timeline (Discover → Offer → Request → Ack, UDP 67/68 pada PDU), alokasi deterministik melewati IP terpakai, lease diterapkan live via effect `DHCP_LEASE` (IP/mask/gateway klien terisi otomatis).
+- **NAT/PAT**: checkbox NAT per interface router WAN. Saat ping menuju IP publik lewat interface NAT, src IP di-rewrite ke IP WAN pada PDU (note edukatif), **tabel translasi** terisi (effect `NAT_TRANSLATE`), dan jalur balik menampilkan pembalikan dst ke IP host internal. Tabel NAT tampil di Table Viewer.
+- Pesan IPC baru `START_DHCP`/`DHCP_RESULT`; warna paket DHCP (amber) pada kabel & asosiasi nirkabel.
+
+### Status Gate
+- `Gate C` — 63 unit test + 5 E2E hijau; Fase 3 (VLAN + RIPv2) menyusul.
+
+---
+
 ## [2026-09-06] — Version 1.2.0-alpha (Fase 1: Mesin Event, Simulation Mode, PDU Inspector, Table Viewer)
 
 Pilar A dari rencana v1.2.0 (disetujui pemilik project). Fase 2 (DHCP + NAT) dan Fase 3 (VLAN + RIPv2) menyusul.

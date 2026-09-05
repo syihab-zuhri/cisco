@@ -5,10 +5,11 @@ import {
   isL2Intermediate,
   learnsCam,
 } from '../types/network';
-import { isSameSubnet, prefixLength } from '../utils/ipUtils';
+import { isSameSubnet, prefixLength, ipToNumber, numberToIp } from '../utils/ipUtils';
 import { type WorkerUIMessage } from '../types/ipc';
 import {
   type ArpPacket,
+  type DhcpPacket,
   type IcmpPacket,
   type IPv4Packet,
   type PduSnapshot,
@@ -16,7 +17,18 @@ import {
 } from '../types/protocol';
 import { SimEventQueue } from './eventQueue';
 
-type LogLevel = 'INFO' | 'ARP' | 'ICMP' | 'ERROR' | 'SUCCESS';
+type LogLevel = 'INFO' | 'ARP' | 'ICMP' | 'ERROR' | 'SUCCESS' | 'DHCP';
+
+type EventKind =
+  | 'ARP_REQ'
+  | 'ARP_REP'
+  | 'ICMP_REQ'
+  | 'ICMP_REP'
+  | 'DHCP_DISCOVER'
+  | 'DHCP_OFFER'
+  | 'DHCP_REQUEST'
+  | 'DHCP_ACK'
+  | 'LOG';
 
 /** TTL awal Windows/iOS default (Packet Tracer memakai 128). */
 const INITIAL_TTL = 128;
@@ -123,7 +135,7 @@ export class HeadlessSimulationEngine {
   private recordHop(
     ctx: PlanContext,
     hop: L2Hop,
-    kind: 'ARP_REQ' | 'ARP_REP' | 'ICMP_REQ' | 'ICMP_REP',
+    kind: EventKind,
     summary: string,
     pdu: PduSnapshot,
     effects?: SimEvent['effects']
@@ -133,7 +145,13 @@ export class HeadlessSimulationEngine {
       seq: ++ctx.seq,
       simTimeMs: ctx.simTimeMs,
       kind,
-      level: kind.startsWith('ARP') ? 'ARP' : 'ICMP',
+      level: kind.startsWith('ARP')
+        ? 'ARP'
+        : kind.startsWith('ICMP')
+        ? 'ICMP'
+        : kind.startsWith('DHCP')
+        ? 'DHCP'
+        : 'INFO',
       message: summary,
       hop: {
         sourceNodeId: hop.fromNodeId,
@@ -156,7 +174,7 @@ export class HeadlessSimulationEngine {
   private buildFramePdu(
     hop: L2Hop,
     kind: 'ARP_REQ' | 'ARP_REP' | 'ICMP_REQ' | 'ICMP_REP',
-    opts: { arp?: ArpPacket; packet?: IPv4Packet; icmp?: IcmpPacket; note?: string }
+    opts: { arp?: ArpPacket; packet?: IPv4Packet; icmp?: IcmpPacket; dhcp?: DhcpPacket; note?: string }
   ): PduSnapshot {
     const fromPort = this.portOf(hop.fromNodeId, hop.fromPortId);
     const toPort = this.portOf(hop.toNodeId, hop.toPortId);
@@ -529,10 +547,32 @@ export class HeadlessSimulationEngine {
 
       this.planArp(ctx, sender, next.nextHopIp, owner, path, animate);
 
+      // NAT/PAT: segmen keluar router melalui port natEnabled menuju IP publik —
+      // src IP di-rewrite menjadi IP WAN dan translasi dicatat di tabel router.
+      let natInfo: { routerId: string; globalIp: string; insideIp: string } | null = null;
+      const egressPort = sender.dev.ports.find((p) => p.id === path[0].fromPortId);
+      if (
+        sender.dev.type === 'router' &&
+        (CLOUD_PUBLIC_IPS as readonly string[]).includes(targetIp) &&
+        egressPort?.natEnabled &&
+        egressPort.ipAddress
+      ) {
+        natInfo = { routerId: sender.dev.id, globalIp: egressPort.ipAddress, insideIp: source.port.ipAddress! };
+        sender.dev.natTable = [
+          ...(sender.dev.natTable ?? []).slice(-49),
+          {
+            insideIp: natInfo.insideIp,
+            globalIp: natInfo.globalIp,
+            icmpId: ICMP_IDENTIFIER,
+            echoSeq: echoIndex + 1,
+          },
+        ];
+      }
+
       if (animate) {
-        for (const hop of path) {
+        path.forEach((hop, hopIdx) => {
           const packet: IPv4Packet = {
-            srcIp: source.port.ipAddress!,
+            srcIp: natInfo ? natInfo.globalIp : source.port.ipAddress!,
             dstIp: targetIp,
             ttl: ttlAtHop,
             protocol: 'ICMP',
@@ -545,18 +585,35 @@ export class HeadlessSimulationEngine {
             sequence: echoIndex + 1,
             payloadBytes: ICMP_PAYLOAD_BYTES,
           };
-          const note =
-            depth > 0
-              ? `Diteruskan router ${sender.dev.label} (TTL diturunkan menjadi ${ttlAtHop})`
+          const note = natInfo
+            ? hopIdx === 0
+              ? `NAT: src ${natInfo.insideIp} di-rewrite ke ${natInfo.globalIp} (TTL ${ttlAtHop})`
+              : undefined
+            : depth > 0
+            ? `Diteruskan router ${sender.dev.label} (TTL diturunkan menjadi ${ttlAtHop})`
+            : undefined;
+          const effects: NonNullable<SimEvent['effects']> | undefined =
+            hopIdx === 0 && natInfo
+              ? [
+                  {
+                    type: 'NAT_TRANSLATE',
+                    nodeId: sender.dev.id,
+                    insideIp: natInfo.insideIp,
+                    globalIp: natInfo.globalIp,
+                    icmpId: ICMP_IDENTIFIER,
+                    echoSeq: echoIndex + 1,
+                  },
+                ]
               : undefined;
           this.recordHop(
             ctx,
             hop,
             'ICMP_REQ',
-            `ICMP Echo Request: ${source.port.ipAddress} -> ${targetIp}${depth > 0 ? ' (diteruskan router)' : ''}`,
-            this.buildFramePdu(hop, 'ICMP_REQ', { packet, icmp, note })
+            `ICMP Echo Request: ${natInfo ? natInfo.globalIp : source.port.ipAddress} -> ${targetIp}${depth > 0 ? ' (diteruskan router)' : ''}`,
+            this.buildFramePdu(hop, 'ICMP_REQ', { packet, icmp, note }),
+            effects
           );
-        }
+        });
       }
       requestPath.push(...path);
 
@@ -575,7 +632,7 @@ export class HeadlessSimulationEngine {
             `${owner.dev.label}: Menerima paket untuk IP publik ${targetIp}. Membalas ICMP Echo Reply...`
           );
           if (animate) {
-            this.emitReplyHops(ctx, returnPath, source, targetIp, echoIndex, replyTtl, 'cloud');
+            this.emitReplyHops(ctx, returnPath, source, targetIp, echoIndex, natInfo);
           }
           return { ok: true, rttMs, replyTtl };
         }
@@ -587,7 +644,7 @@ export class HeadlessSimulationEngine {
           `${owner.dev.label}: Menerima Echo Request. Membalas dengan ICMP Echo Reply...`
         );
         if (animate) {
-          this.emitReplyHops(ctx, returnPath, source, targetIp, echoIndex, replyTtl, 'host');
+          this.emitReplyHops(ctx, returnPath, source, targetIp, echoIndex, natInfo);
         }
         return { ok: true, rttMs: routerCount, replyTtl };
       }
@@ -612,7 +669,7 @@ export class HeadlessSimulationEngine {
           `${router.label}: Menerima paket untuk IP publik ${targetIp}. Membalas ICMP Echo Reply...`
         );
         if (animate) {
-          this.emitReplyHops(ctx, this.reversePath(requestPath), source, targetIp, echoIndex, replyTtl, 'cloud');
+          this.emitReplyHops(ctx, this.reversePath(requestPath), source, targetIp, echoIndex, natInfo);
         }
         return { ok: true, rttMs, replyTtl };
       }
@@ -654,21 +711,21 @@ export class HeadlessSimulationEngine {
     return { ok: false, rttMs: 0, replyTtl: 0, error: 'Hop routing melebihi batas kedalaman.' };
   }
 
-  /** Hop ICMP Reply dengan TTL yang menurun di setiap router pada jalur balik. */
+  /** Hop ICMP Reply dengan TTL menurun per router & pembalikan NAT pada jalur balik. */
   private emitReplyHops(
     ctx: PlanContext,
     returnPath: L2Hop[],
     source: { dev: DeviceData; port: PhysicalPort },
     targetIp: string,
     echoIndex: number,
-    _replyTtlFinal: number,
-    replier: 'host' | 'cloud'
+    nat?: { routerId: string; globalIp: string; insideIp: string } | null
   ): void {
     let ttlReply = INITIAL_TTL;
+    let unNatted = !nat;
     for (const hop of returnPath) {
       const packet: IPv4Packet = {
         srcIp: targetIp,
-        dstIp: source.port.ipAddress!,
+        dstIp: unNatted ? source.port.ipAddress! : nat!.globalIp,
         ttl: ttlReply,
         protocol: 'ICMP',
         id: ICMP_IDENTIFIER,
@@ -680,19 +737,25 @@ export class HeadlessSimulationEngine {
         sequence: echoIndex + 1,
         payloadBytes: ICMP_PAYLOAD_BYTES,
       };
+      const note =
+        nat && unNatted && hop.fromNodeId === nat.routerId
+          ? `NAT: dst dikembalikan ke ${nat.insideIp}`
+          : undefined;
       this.recordHop(
         ctx,
         hop,
         'ICMP_REP',
         `ICMP Echo Reply: ${targetIp} -> ${source.port.ipAddress}`,
-        this.buildFramePdu(hop, 'ICMP_REP', { packet, icmp })
+        this.buildFramePdu(hop, 'ICMP_REP', { packet, icmp, note })
       );
       const arrivedDev = this.devices.get(hop.toNodeId);
       if (arrivedDev?.type === 'router') {
         ttlReply -= 1;
       }
+      if (nat && hop.toNodeId === nat.routerId) {
+        unNatted = true;
+      }
     }
-    void replier;
   }
 
   private countInteriorRouters(path: L2Hop[]): number {
@@ -753,6 +816,245 @@ export class HeadlessSimulationEngine {
       if (firstError) lines.push(firstError);
     }
     return lines;
+  }
+
+  /**
+   * Cakupan broadcast Layer-2 dari sebuah node: semua perangkat yang terjangkau
+   * melewati switch/hub/AP, beserta jalur hop ke masing-masing (urutan BFS deterministik).
+   */
+  private broadcastPaths(startNodeId: string): Array<{ dev: DeviceData; path: L2Hop[] }> {
+    const results: Array<{ dev: DeviceData; path: L2Hop[] }> = [];
+    const visited = new Set<string>([startNodeId]);
+    const queue: Array<{ currentNodeId: string; path: L2Hop[] }> = [
+      { currentNodeId: startNodeId, path: [] },
+    ];
+
+    while (queue.length > 0) {
+      const { currentNodeId, path } = queue.shift()!;
+      const dev = this.devices.get(currentNodeId);
+      if (!dev) continue;
+
+      for (const p of dev.ports) {
+        if (p.status !== 'up') continue;
+        const link = this.findLink(currentNodeId, p.id);
+        if (!link) continue;
+
+        const peerNodeId =
+          link.sourceNodeId === currentNodeId ? link.targetNodeId : link.sourceNodeId;
+        const peerPortId =
+          link.sourceNodeId === currentNodeId ? link.targetPortId : link.sourcePortId;
+        const peerDev = this.devices.get(peerNodeId);
+        if (!peerDev || visited.has(peerNodeId)) continue;
+
+        const hop: L2Hop = {
+          fromNodeId: currentNodeId,
+          fromPortId: p.id,
+          toNodeId: peerNodeId,
+          toPortId: peerPortId,
+          kind: link.kind ?? 'ethernet',
+        };
+        results.push({ dev: peerDev, path: [...path, hop] });
+
+        if (isL2Intermediate(peerDev.type)) {
+          visited.add(peerNodeId);
+          queue.push({ currentNodeId: peerNodeId, path: [...path, hop] });
+        }
+      }
+    }
+    return results;
+  }
+
+  /**
+   * Merencanakan aliran DHCP (DORA: Discover → Offer → Request → Ack) untuk
+   * klien yang meminta IP. Router sebagai server (blueprint P1); alokasi
+   * deterministik dari pool interface yang satu segmen dengan klien.
+   */
+  public planDhcp(clientNodeId: string, portId: string): SimulationPlan {
+    const ctx: PlanContext = { queue: new SimEventQueue(), seq: 0, simTimeMs: 0 };
+    const summary = this.runDhcp(ctx, clientNodeId, portId);
+    return { events: ctx.queue.snapshot(), summary };
+  }
+
+  private runDhcp(ctx: PlanContext, clientNodeId: string, portId: string): PingSummary {
+    const client = this.devices.get(clientNodeId);
+    const port = client?.ports.find((p) => p.id === portId);
+    if (!client || !port) {
+      this.record(ctx, 'ERROR', `Klien ${clientNodeId}/${portId} tidak ditemukan.`);
+      return { success: false, rttMs: 0, ttl: 0, logs: [], outputLines: [], sent: 0, received: 0 };
+    }
+
+    this.record(
+      ctx,
+      'DHCP',
+      `${client.label}: Memulai DHCP Discover pada ${port.name} (UDP 68 → 67)...`
+    );
+
+    // Cari kandidat server: router dalam cakupan broadcast dengan pool aktif
+    const scope = this.broadcastPaths(clientNodeId);
+    let chosen: {
+      router: DeviceData;
+      iface: PhysicalPort;
+      pool: { network: string; mask: string; startIp: string; maxClients: number };
+      path: L2Hop[];
+    } | null = null;
+    for (const { dev, path } of scope) {
+      if (dev.type !== 'router') continue;
+      for (const iface of dev.ports) {
+        const pool = dev.dhcpPools?.[iface.id];
+        if (
+          pool?.enabled &&
+          iface.ipAddress &&
+          isSameSubnet(iface.ipAddress, pool.network, pool.mask)
+        ) {
+          chosen = { router: dev, iface, pool, path };
+          break;
+        }
+      }
+      if (chosen) break;
+    }
+
+    if (!chosen) {
+      this.record(ctx, 'ERROR', 'DHCP: Tidak ada server DHCP (pool aktif) di segmen ini.');
+      return {
+        success: false,
+        rttMs: 0,
+        ttl: 0,
+        logs: [],
+        outputLines: ['DHCP: tidak ada server DHCP di segmen ini.'],
+        sent: 0,
+        received: 0,
+      };
+    }
+
+    // Alokasi deterministik: IP pertama yang bebas mulai dari pool.startIp
+    const occupied = new Set<string>();
+    for (const dev of this.devices.values()) {
+      for (const p of dev.ports) if (p.ipAddress) occupied.add(p.ipAddress);
+    }
+    let offeredIp: string | null = null;
+    const base = ipToNumber(chosen.pool.startIp);
+    for (let i = 0; i < chosen.pool.maxClients; i++) {
+      const candidate = numberToIp(base + i);
+      if (!occupied.has(candidate)) {
+        offeredIp = candidate;
+        break;
+      }
+    }
+    if (!offeredIp) {
+      this.record(ctx, 'ERROR', `DHCP: Pool ${chosen.router.label} (${chosen.iface.id}) penuh.`);
+      return {
+        success: false,
+        rttMs: 0,
+        ttl: 0,
+        logs: [],
+        outputLines: ['DHCP: pool server penuh.'],
+        sent: 0,
+        received: 0,
+      };
+    }
+
+    const backwardPath = this.reversePath(chosen.path);
+    const recordDhcpHops = (
+      hops: L2Hop[],
+      messageType: DhcpPacket['messageType'],
+      label: string,
+      kind: EventKind
+    ) => {
+      for (const hop of hops) {
+        const dhcp: DhcpPacket = {
+          messageType,
+          clientId: port.macAddress,
+          yiaddr: messageType === 1 ? undefined : offeredIp!,
+          serverId: messageType === 1 ? undefined : chosen!.iface.ipAddress,
+        };
+        this.recordHop(
+          ctx,
+          hop,
+          kind,
+          `DHCP ${label}: ${client.label} <-> ${chosen!.router.label} (offer ${offeredIp})`,
+          this.buildFramePdu(hop, 'ARP_REQ', {
+            arp: {
+              opcode: 1,
+              senderIp: port.ipAddress ?? '0.0.0.0',
+              senderMac: port.macAddress,
+              targetIp: '255.255.255.255',
+            },
+            dhcp,
+            note: 'UDP 68 → 67 (broadcast)',
+          })
+        );
+      }
+    };
+
+    // DORA
+    this.record(
+      ctx,
+      'DHCP',
+      `${chosen.router.label}: DHCP Offer ${offeredIp}/${chosen.pool.mask} (server ${chosen.iface.ipAddress})`
+    );
+    recordDhcpHops(chosen.path, 1, 'Discover', 'DHCP_DISCOVER');
+    recordDhcpHops(backwardPath, 2, 'Offer', 'DHCP_OFFER');
+    recordDhcpHops(chosen.path, 3, 'Request', 'DHCP_REQUEST');
+    const ackEvents = backwardPath.map((hop) =>
+      this.recordHop(
+        ctx,
+        hop,
+        'DHCP_ACK',
+        `DHCP Ack: ${offeredIp} dikirim ke ${client.label}`,
+        this.buildFramePdu(hop, 'ARP_REQ', {
+          arp: {
+            opcode: 2,
+            senderIp: chosen!.iface.ipAddress!,
+            senderMac: chosen!.iface.macAddress,
+            targetIp: offeredIp!,
+          },
+          dhcp: {
+            messageType: 5,
+            clientId: port.macAddress,
+            yiaddr: offeredIp!,
+            serverId: chosen!.iface.ipAddress,
+          },
+          note: 'UDP 67 → 68',
+        })
+      )
+    );
+
+    // Terapkan lease di engine & jadwalkan efek untuk UI
+    port.ipAddress = offeredIp;
+    port.subnetMask = chosen.pool.mask;
+    client.defaultGateway = chosen.iface.ipAddress;
+    const lastAck = ackEvents.at(-1);
+    if (lastAck) {
+      lastAck.effects = [
+        ...(lastAck.effects ?? []),
+        {
+          type: 'DHCP_LEASE',
+          nodeId: client.id,
+          portId: port.id,
+          ipAddress: offeredIp,
+          subnetMask: chosen.pool.mask,
+          gateway: chosen.iface.ipAddress!,
+        },
+      ];
+    }
+
+    this.record(
+      ctx,
+      'SUCCESS',
+      `DHCP: ${client.label} memperoleh ${offeredIp}/${chosen.pool.mask} (gateway ${chosen.iface.ipAddress}).`
+    );
+
+    return {
+      success: true,
+      rttMs: 0,
+      ttl: 0,
+      logs: [],
+      outputLines: [
+        `DHCP: ${offeredIp}/${chosen.pool.mask} diperoleh dari ${chosen.router.label} (gateway ${chosen.iface.ipAddress})`,
+      ],
+      sent: 1,
+      received: 1,
+    };
   }
 
   // ------------------------------------------------------------------

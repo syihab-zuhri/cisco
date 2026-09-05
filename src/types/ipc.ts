@@ -44,7 +44,25 @@ export type UIWorkerMessage =
     }
   | {
       type: 'SIM_STEP_NEXT';
+    }
+  | {
+      type: 'START_DHCP';
+      payload: {
+        requestId: string;
+        nodeId: string;
+        portId: string;
+      };
     };
+
+export interface DhcpResultPayload {
+  requestId: string;
+  nodeId: string;
+  portId: string;
+  success: boolean;
+  assignedIp?: string;
+  logs: string[];
+  outputLines: string[];
+}
 
 export interface PingResultPayload {
   requestId: string;
@@ -100,4 +118,8 @@ export type WorkerUIMessage =
         requestId: string;
         event: SimEvent;
       };
+    }
+  | {
+      type: 'DHCP_RESULT';
+      payload: DhcpResultPayload;
     };

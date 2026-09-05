@@ -600,13 +600,40 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         nodes: state.nodes.map((node) => {
           const nodeEffects = effects.filter((e) => e.nodeId === node.id);
           if (nodeEffects.length === 0) return node;
+          let ports = node.data.ports;
           let arpTable = node.data.arpTable;
           let macTable = node.data.macTable;
           for (const eff of nodeEffects) {
             if (eff.type === 'CAM_LEARN') {
               macTable = { ...(macTable ?? {}), [eff.mac]: eff.portId };
-            } else {
+            } else if (eff.type === 'ARP_LEARN') {
               arpTable = { ...(arpTable ?? {}), [eff.ip]: eff.mac };
+            } else if (eff.type === 'DHCP_LEASE') {
+              ports = node.data.ports.map((p) =>
+                p.id === eff.portId
+                  ? { ...p, ipAddress: eff.ipAddress, subnetMask: eff.subnetMask }
+                  : p
+              );
+              return {
+                ...node,
+                data: { ...node.data, ports, defaultGateway: eff.gateway },
+              };
+            } else if (eff.type === 'NAT_TRANSLATE') {
+              return {
+                ...node,
+                data: {
+                  ...node.data,
+                  natTable: [
+                    ...(node.data.natTable ?? []).slice(-49),
+                    {
+                      insideIp: eff.insideIp,
+                      globalIp: eff.globalIp,
+                      icmpId: eff.icmpId,
+                      echoSeq: eff.echoSeq,
+                    },
+                  ],
+                },
+              };
             }
           }
           return { ...node, data: { ...node.data, arpTable, macTable } };

@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import type { Node } from '@xyflow/react';
-import { X, Save, ShieldCheck, Trash2, Plus, Wifi, Route } from 'lucide-react';
+import { X, Save, ShieldCheck, Trash2, Plus, Wifi, Route, Globe, Server } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { isValidIp, isValidSubnetMask } from '../../utils/ipUtils';
 import { type DeviceData } from '../../types/network';
+import { requestDhcp } from '../../hooks/useSimulationEngine';
 
 export function DeviceConfigModal() {
   const activeConfigModalNodeId = useAppStore((s) => s.activeConfigModalNodeId);
@@ -47,6 +48,22 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
   const [label, setLabel] = useState<string>(device.label);
   const [errorMsg, setErrorMsg] = useState<string>('');
 
+  // DHCP klien & pool/NAT router
+  const [dhcpClient, setDhcpClient] = useState<boolean>(
+    selectedPort?.dhcpEnabled ?? false
+  );
+  const routerPool = device.dhcpPools?.[selectedPortId];
+  const [poolEnabled, setPoolEnabled] = useState<boolean>(routerPool?.enabled ?? false);
+  const [poolNetwork, setPoolNetwork] = useState<string>(routerPool?.network ?? '');
+  const [poolMask, setPoolMask] = useState<string>(routerPool?.mask ?? '255.255.255.0');
+  const [poolStartIp, setPoolStartIp] = useState<string>(routerPool?.startIp ?? '');
+  const [poolMaxClients, setPoolMaxClients] = useState<number>(
+    routerPool?.maxClients ?? 50
+  );
+  const [natEnabled, setNatEnabled] = useState<boolean>(
+    selectedPort?.natEnabled ?? false
+  );
+
   // Editor static route (router)
   const [routeNetwork, setRouteNetwork] = useState<string>('');
   const [routeMask, setRouteMask] = useState<string>('255.255.255.0');
@@ -58,6 +75,14 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
     setIpAddress(p?.ipAddress || '');
     setSubnetMask(p?.subnetMask || '255.255.255.0');
     setSsid(p?.ssid || '');
+    setDhcpClient(p?.dhcpEnabled ?? false);
+    setNatEnabled(p?.natEnabled ?? false);
+    const pool = device.dhcpPools?.[portId];
+    setPoolEnabled(pool?.enabled ?? false);
+    setPoolNetwork(pool?.network ?? '');
+    setPoolMask(pool?.mask ?? '255.255.255.0');
+    setPoolStartIp(pool?.startIp ?? '');
+    setPoolMaxClients(pool?.maxClients ?? 50);
     setErrorMsg('');
   };
 
@@ -86,7 +111,7 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
     setErrorMsg('');
 
     // Validasi jika IP diisi (hanya port ethernet yang ber-IP)
-    if (!isWirelessPort && ipAddress.trim()) {
+    if (!isWirelessPort && ipAddress.trim() && !dhcpClient) {
       if (!isValidIp(ipAddress)) {
         setErrorMsg('Format IPv4 tidak valid! Contoh: 192.168.1.10');
         return;
@@ -100,6 +125,13 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
     if (defaultGateway.trim() && !isValidIp(defaultGateway)) {
       setErrorMsg('Format Default Gateway tidak valid!');
       return;
+    }
+
+    if (poolEnabled) {
+      if (!isValidIp(poolNetwork) || !isValidSubnetMask(poolMask) || !isValidIp(poolStartIp)) {
+        setErrorMsg('Pool DHCP: network/mask/start IP tidak valid!');
+        return;
+      }
     }
 
     // Simpan label & gateway
@@ -121,11 +153,44 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
         } else {
           syncWirelessAssociation(device.id, selectedPort.id);
         }
-      } else {
+      } else if (device.type === 'router') {
+        // Router: NAT per port + pool DHCP per interface
+        updatePortConfig(device.id, selectedPort.id, { natEnabled });
+        const pools = { ...(device.dhcpPools ?? {}) };
+        pools[selectedPort.id] = {
+          enabled: poolEnabled,
+          network: poolNetwork.trim(),
+          mask: poolMask.trim(),
+          startIp: poolStartIp.trim(),
+          maxClients: Math.max(1, poolMaxClients),
+        };
+        updateDeviceConfig(device.id, { dhcpPools: pools });
         updatePortConfig(device.id, selectedPort.id, {
           ipAddress: ipAddress.trim() || undefined,
           subnetMask: subnetMask.trim() || undefined,
         });
+        addSimulationLog(
+          'INFO',
+          `${label}: ${selectedPort.id} — NAT ${natEnabled ? 'AKTIF' : 'nonaktif'}, DHCP server ${poolEnabled ? 'AKTIF' : 'nonaktif'}.`
+        );
+      } else {
+        updatePortConfig(device.id, selectedPort.id, {
+          dhcpEnabled: dhcpClient,
+          ipAddress: dhcpClient ? undefined : ipAddress.trim() || undefined,
+          subnetMask: dhcpClient ? undefined : subnetMask.trim() || undefined,
+        });
+        if (dhcpClient) {
+          addSimulationLog('INFO', `Meminta IP via DHCP pada ${selectedPort.name}...`);
+          void requestDhcp(device.id, selectedPort.id).catch((err: unknown) => {
+            const message = err instanceof Error ? err.message : String(err);
+            addSimulationLog(
+              'ERROR',
+              message === 'SIM_BUSY'
+                ? 'Simulasi lain sedang berjalan — ulangi permintaan DHCP.'
+                : `DHCP gagal: ${message}`
+            );
+          });
+        }
       }
     }
 
@@ -240,27 +305,107 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
                 device.type !== 'hub' &&
                 device.type !== 'cloud' && (
                   <>
-                    <div className="pt-2 border-t border-gray-800">
-                      <label className="block text-xs text-gray-300 mb-1">IPv4 Address</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. 192.168.1.10"
-                        value={ipAddress}
-                        onChange={(e) => setIpAddress(e.target.value)}
-                        className="w-full rounded bg-[#1F2937] px-3 py-1.5 font-mono text-xs text-gray-100 border border-gray-700 focus:outline-none focus:border-blue-500"
-                      />
-                    </div>
+                    {/* DHCP klien: PC/Laptop/Server */}
+                    {['pc', 'laptop', 'server'].includes(device.type) && (
+                      <label className="flex items-center gap-2 pt-2 border-t border-gray-800 text-xs text-gray-300 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={dhcpClient}
+                          onChange={(e) => setDhcpClient(e.target.checked)}
+                          className="accent-blue-500"
+                        />
+                        <Server className="h-3.5 w-3.5 text-blue-400" />
+                        Obtain IP via DHCP (otomatis dari router)
+                      </label>
+                    )}
 
-                    <div>
-                      <label className="block text-xs text-gray-300 mb-1">Subnet Mask</label>
-                      <input
-                        type="text"
-                        placeholder="255.255.255.0"
-                        value={subnetMask}
-                        onChange={(e) => setSubnetMask(e.target.value)}
-                        className="w-full rounded bg-[#1F2937] px-3 py-1.5 font-mono text-xs text-gray-100 border border-gray-700 focus:outline-none focus:border-blue-500"
-                      />
-                    </div>
+                    {!dhcpClient && (
+                      <>
+                        <div className="pt-2 border-t border-gray-800">
+                          <label className="block text-xs text-gray-300 mb-1">IPv4 Address</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. 192.168.1.10"
+                            value={ipAddress}
+                            onChange={(e) => setIpAddress(e.target.value)}
+                            className="w-full rounded bg-[#1F2937] px-3 py-1.5 font-mono text-xs text-gray-100 border border-gray-700 focus:outline-none focus:border-blue-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs text-gray-300 mb-1">Subnet Mask</label>
+                          <input
+                            type="text"
+                            placeholder="255.255.255.0"
+                            value={subnetMask}
+                            onChange={(e) => setSubnetMask(e.target.value)}
+                            className="w-full rounded bg-[#1F2937] px-3 py-1.5 font-mono text-xs text-gray-100 border border-gray-700 focus:outline-none focus:border-blue-500"
+                          />
+                        </div>
+                      </>
+                    )}
+
+                    {/* Router: NAT + DHCP pool per interface */}
+                    {device.type === 'router' && (
+                      <div className="rounded bg-black/30 border border-gray-800 p-2.5 space-y-2">
+                        <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={natEnabled}
+                            onChange={(e) => setNatEnabled(e.target.checked)}
+                            className="accent-sky-500"
+                          />
+                          <Globe className="h-3.5 w-3.5 text-sky-400" />
+                          NAT/PAT keluar pada interface ini (WAN)
+                        </label>
+
+                        <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={poolEnabled}
+                            onChange={(e) => setPoolEnabled(e.target.checked)}
+                            className="accent-emerald-500"
+                          />
+                          <Server className="h-3.5 w-3.5 text-emerald-400" />
+                          DHCP Server pada interface ini
+                        </label>
+
+                        {poolEnabled && (
+                          <div className="grid grid-cols-2 gap-1.5">
+                            <input
+                              type="text"
+                              placeholder="Network (192.168.1.0)"
+                              value={poolNetwork}
+                              onChange={(e) => setPoolNetwork(e.target.value)}
+                              className="rounded bg-[#1F2937] px-2 py-1 font-mono text-[10px] text-gray-100 border border-gray-700 focus:outline-none focus:border-blue-500"
+                            />
+                            <input
+                              type="text"
+                              placeholder="Mask (255.255.255.0)"
+                              value={poolMask}
+                              onChange={(e) => setPoolMask(e.target.value)}
+                              className="rounded bg-[#1F2937] px-2 py-1 font-mono text-[10px] text-gray-100 border border-gray-700 focus:outline-none focus:border-blue-500"
+                            />
+                            <input
+                              type="text"
+                              placeholder="Start IP (192.168.1.100)"
+                              value={poolStartIp}
+                              onChange={(e) => setPoolStartIp(e.target.value)}
+                              className="rounded bg-[#1F2937] px-2 py-1 font-mono text-[10px] text-gray-100 border border-gray-700 focus:outline-none focus:border-blue-500"
+                            />
+                            <input
+                              type="number"
+                              min={1}
+                              max={254}
+                              placeholder="Max clients"
+                              value={poolMaxClients}
+                              onChange={(e) => setPoolMaxClients(Number(e.target.value))}
+                              className="rounded bg-[#1F2937] px-2 py-1 font-mono text-[10px] text-gray-100 border border-gray-700 focus:outline-none focus:border-blue-500"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </>
                 )
               )}

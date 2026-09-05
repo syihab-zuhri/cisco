@@ -1,5 +1,11 @@
 import { HeadlessSimulationEngine } from './simulationEngine';
-import { type PingResultPayload, type UIWorkerMessage, type WorkerUIMessage } from '../types/ipc';
+import {
+  type DhcpResultPayload,
+  type PingResultPayload,
+  type UIWorkerMessage,
+  type WorkerUIMessage,
+} from '../types/ipc';
+import { type SimEvent } from '../types/protocol';
 
 // Engine di dalam web worker memberi delay per hop agar visualisasi animasi
 // paket terlihat meluncur. Delay dinormalisasi oleh simulation speed (0.5x/1x/2x).
@@ -90,50 +96,7 @@ self.onmessage = async (e: MessageEvent<UIWorkerMessage>) => {
       const { requestId, sourceNodeId, targetIp, echoCount, outputStyle } = msg.payload;
       try {
         const plan = engine.planPing(sourceNodeId, targetIp, { echoCount, outputStyle });
-
-        // Rencana penuh dikirim lebih dulu (timeline menampilkan event mendatang)
-        self.postMessage({
-          type: 'SIM_PLAN',
-          payload: { requestId, events: plan.events },
-        } as WorkerUIMessage);
-
-        // Playback: satu event per langkah, dengan pause gate + step gate
-        for (const event of plan.events) {
-          await pauseGate();
-          if (stepMode) {
-            await stepGate();
-          } else {
-            await new Promise((resolve) =>
-              setTimeout(resolve, event.kind === 'LOG' ? LOG_PACE_MS : hopDelayMs)
-            );
-          }
-
-          self.postMessage({
-            type: 'EVENT_PLAYED',
-            payload: { requestId, event },
-          } as WorkerUIMessage);
-
-          if (event.kind === 'LOG') {
-            self.postMessage({
-              type: 'LOG',
-              payload: { type: event.level, message: event.message },
-            } as WorkerUIMessage);
-          } else if (event.hop) {
-            self.postMessage({
-              type: 'PACKET_HOP',
-              payload: {
-                packetId: `pkt-${event.seq}`,
-                sourceNodeId: event.hop.sourceNodeId,
-                targetNodeId: event.hop.targetNodeId,
-                sourcePortId: event.hop.sourcePortId,
-                targetPortId: event.hop.targetPortId,
-                type: event.kind,
-                currentProtocol: event.kind.startsWith('ARP') ? 'ARP' : 'ICMP',
-                summary: event.message,
-              },
-            } as WorkerUIMessage);
-          }
-        }
+        await playPlan(requestId, plan.events);
 
         const result: PingResultPayload = {
           requestId,
@@ -165,23 +128,113 @@ self.onmessage = async (e: MessageEvent<UIWorkerMessage>) => {
         } as WorkerUIMessage);
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
+        postError(requestId, message);
+      }
+      break;
+    }
+
+    case 'START_DHCP': {
+      const { requestId, nodeId, portId } = msg.payload;
+      try {
+        const plan = engine.planDhcp(nodeId, portId);
+        await playPlan(requestId, plan.events);
+
+        const assignedIp = plan.summary.success ? plan.summary.outputLines[0] : undefined;
+        const payload: DhcpResultPayload = {
+          requestId,
+          nodeId,
+          portId,
+          success: plan.summary.success,
+          assignedIp,
+          logs: plan.events.filter((ev) => ev.kind === 'LOG').map((ev) => `[${ev.level}] ${ev.message}`),
+          outputLines: plan.summary.outputLines,
+        };
+        self.postMessage({ type: 'DHCP_RESULT', payload } as WorkerUIMessage);
         self.postMessage({
           type: 'LOG',
-          payload: { type: 'ERROR', message: `Simulasi error: ${message}` },
+          payload: {
+            type: plan.summary.success ? 'SUCCESS' : 'ERROR',
+            message: plan.summary.success
+              ? `DHCP selesai: ${plan.summary.outputLines[0]}`
+              : `DHCP gagal: ${plan.summary.outputLines[0]}`,
+          },
         } as WorkerUIMessage);
-        const payload: PingResultPayload = {
-          requestId,
-          sourceNodeId,
-          targetIp,
-          success: false,
-          rttMs: 0,
-          ttl: 0,
-          logs: [`Simulasi error: ${message}`],
-          outputLines: [`Simulasi error: ${message}`],
-        };
-        self.postMessage({ type: 'PING_RESULT', payload } as WorkerUIMessage);
+        self.postMessage({
+          type: 'SIMULATION_STATE_SYNC',
+          payload: { devices: engine.getDevices() },
+        } as WorkerUIMessage);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        postError(requestId, message);
       }
       break;
     }
   }
 };
+
+/** Memutar aliran event dengan pacing/pause/step, lalu meneruskannya ke UI. */
+async function playPlan(requestId: string, events: SimEvent[]): Promise<void> {
+  self.postMessage({
+    type: 'SIM_PLAN',
+    payload: { requestId, events },
+  } as WorkerUIMessage);
+
+  for (const event of events) {
+    await pauseGate();
+    if (stepMode) {
+      await stepGate();
+    } else {
+      await new Promise((resolve) =>
+        setTimeout(resolve, event.kind === 'LOG' ? LOG_PACE_MS : hopDelayMs)
+      );
+    }
+
+    self.postMessage({
+      type: 'EVENT_PLAYED',
+      payload: { requestId, event },
+    } as WorkerUIMessage);
+
+    if (event.kind === 'LOG') {
+      self.postMessage({
+        type: 'LOG',
+        payload: { type: event.level, message: event.message },
+      } as WorkerUIMessage);
+    } else if (event.hop) {
+      self.postMessage({
+        type: 'PACKET_HOP',
+        payload: {
+          packetId: `pkt-${event.seq}`,
+          sourceNodeId: event.hop.sourceNodeId,
+          targetNodeId: event.hop.targetNodeId,
+          sourcePortId: event.hop.sourcePortId,
+          targetPortId: event.hop.targetPortId,
+          type: event.kind,
+          currentProtocol: event.kind.startsWith('ARP')
+            ? 'ARP'
+            : event.kind.startsWith('DHCP')
+            ? 'DHCP'
+            : 'ICMP',
+          summary: event.message,
+        },
+      } as WorkerUIMessage);
+    }
+  }
+}
+
+function postError(requestId: string, message: string): void {
+  self.postMessage({
+    type: 'LOG',
+    payload: { type: 'ERROR', message: `Simulasi error: ${message}` },
+  } as WorkerUIMessage);
+  const pingPayload: PingResultPayload = {
+    requestId,
+    sourceNodeId: '',
+    targetIp: '',
+    success: false,
+    rttMs: 0,
+    ttl: 0,
+    logs: [`Simulasi error: ${message}`],
+    outputLines: [`Simulasi error: ${message}`],
+  };
+  self.postMessage({ type: 'PING_RESULT', payload: pingPayload } as WorkerUIMessage);
+}

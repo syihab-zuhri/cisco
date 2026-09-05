@@ -313,7 +313,7 @@ export function EventLogPanel() {
               Pilih perangkat di kanvas untuk melihat tabel CAM, ARP, dan Routing secara real-time.
             </div>
           ) : (
-            <div className="grid grid-cols-3 gap-2.5">
+            <div className="grid grid-cols-2 gap-2.5">
               {/* CAM Table */}
               <div className="rounded border border-gray-800 bg-black/40 p-2">
                 <div className="text-[10px] font-bold uppercase text-emerald-400 mb-1">
@@ -363,6 +363,23 @@ export function EventLogPanel() {
                   (selectedDevice.routes ?? []).map((r, idx) => (
                     <div key={idx} className="text-gray-300 truncate">
                       {r.network}/{r.subnetMask} → <span className="text-amber-300">{r.nextHop}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* NAT Translations */}
+              <div className="rounded border border-gray-800 bg-black/40 p-2">
+                <div className="text-[10px] font-bold uppercase text-sky-400 mb-1">
+                  NAT Table — {selectedDevice.label}
+                </div>
+                {(selectedDevice.natTable ?? []).length === 0 ? (
+                  <div className="text-gray-600 italic">(kosong)</div>
+                ) : (
+                  (selectedDevice.natTable ?? []).map((t, idx) => (
+                    <div key={idx} className="text-gray-300 truncate">
+                      {t.insideIp} → <span className="text-sky-300">{t.globalIp}</span>
+                      <span className="text-gray-600"> (id {t.icmpId}#{t.echoSeq})</span>
                     </div>
                   ))
                 )}
