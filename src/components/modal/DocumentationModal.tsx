@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   BookOpen,
   X,
@@ -7,6 +7,23 @@ import {
   Play,
   Cpu,
   Download,
+  Wifi,
+  Cloud,
+  Search,
+  Route,
+  Server,
+  Network,
+  Monitor,
+  Cable,
+  Laptop,
+  Router,
+  ChevronDown,
+  Sparkles,
+  GraduationCap,
+  ScanLine,
+  Globe,
+  ShieldCheck,
+  Zap,
 } from 'lucide-react';
 import { useModalA11y } from '../../hooks/useModalA11y';
 
@@ -15,27 +32,282 @@ interface DocsModalProps {
   onClose: () => void;
 }
 
+type SectionId =
+  | 'home'
+  | 'devices'
+  | 'protocols'
+  | 'simmode'
+  | 'cli'
+  | 'build'
+  | 'architecture';
+
+const NAV_GROUPS: Array<{ group: string; items: Array<{ id: SectionId; label: string; icon: React.ReactNode }> }> = [
+  {
+    group: 'Mulai',
+    items: [
+      { id: 'home', label: 'Beranda', icon: <Sparkles className="h-4 w-4 text-blue-400" /> },
+      { id: 'devices', label: 'Perangkat & Kanvas', icon: <Layers className="h-4 w-4 text-sky-400" /> },
+    ],
+  },
+  {
+    group: 'Simulasi',
+    items: [
+      { id: 'protocols', label: 'Mesin Protokol (RFC)', icon: <Play className="h-4 w-4 text-cyan-400" /> },
+      { id: 'simmode', label: 'Simulation Mode & PDU', icon: <ScanLine className="h-4 w-4 text-violet-400" /> },
+      { id: 'cli', label: 'Terminal Cisco IOS', icon: <Terminal className="h-4 w-4 text-green-400" /> },
+    ],
+  },
+  {
+    group: 'Lanjutan',
+    items: [
+      { id: 'build', label: 'Build & Porting', icon: <Download className="h-4 w-4 text-emerald-400" /> },
+      { id: 'architecture', label: 'Arsitektur & Keamanan', icon: <Cpu className="h-4 w-4 text-purple-400" /> },
+    ],
+  },
+];
+
+const SEARCH_INDEX: Array<{ section: SectionId; label: string; keywords: string; accordion?: string }> = [
+  { section: 'home', label: 'Beranda — mulai 3 langkah', keywords: 'beranda quick start cepat mulai ping template' },
+  { section: 'devices', label: 'PC / Laptop / Server', keywords: 'end device host klien' },
+  { section: 'devices', label: 'Switch / Hub / Access Point', keywords: 'l2 cam repeater wifi ssid' },
+  { section: 'devices', label: 'Router & Cloud Internet', keywords: 'router l3 gateway cloud 8.8.8.8 wan' },
+  { section: 'devices', label: 'Aturan kabel & asosiasi WiFi', keywords: 'port singularity kabel 1-to-1 radio nirkabel ssid vlan' },
+  { section: 'protocols', label: 'ARP (RFC 826)', keywords: 'arp broadcast mac cache rfc 826', accordion: 'arp' },
+  { section: 'protocols', label: 'CAM Table Switch', keywords: 'cam mac learning switch', accordion: 'cam' },
+  { section: 'protocols', label: 'Subnetting bitwise (RFC 791)', keywords: 'subnet mask bitwise gateway rfc 791', accordion: 'subnet' },
+  { section: 'protocols', label: 'Routing antar subnet & TTL', keywords: 'routing router ttl longest prefix static', accordion: 'routing' },
+  { section: 'protocols', label: 'Cloud Internet tersimulasi', keywords: 'cloud internet 8.8.8.8 publik offline', accordion: 'cloud' },
+  { section: 'protocols', label: 'Nirkabel / WiFi (SSID)', keywords: 'wifi wireless ap ssid asosiasi', accordion: 'wifi' },
+  { section: 'protocols', label: 'DHCP (DORA)', keywords: 'dhcp dora discover offer request ack pool', accordion: 'dhcp' },
+  { section: 'protocols', label: 'NAT/PAT', keywords: 'nat pat translate wan translasi', accordion: 'nat' },
+  { section: 'protocols', label: 'VLAN 802.1Q & RIPv2', keywords: 'vlan trunk router on a stick rip konvergensi', accordion: 'vlan-rip' },
+  { section: 'simmode', label: 'Step Mode & Timeline', keywords: 'step mode timeline event simulasi jeda' },
+  { section: 'simmode', label: 'PDU Inspector', keywords: 'pdu inspector header l2 l3 l4 ethernet ipv4' },
+  { section: 'simmode', label: 'Table Viewer (CAM/ARP/Routing/NAT)', keywords: 'tabel viewer cam arp routing nat' },
+  { section: 'cli', label: '10 perintah P0 + alias', keywords: 'cli perintah ios enable configure ping show' },
+  { section: 'build', label: 'Menjalankan lokal', keywords: 'dev lokal npm install' },
+  { section: 'build', label: 'Web statis / Vercel / Pages', keywords: 'web statis vercel netlify pages' },
+  { section: 'build', label: 'Desktop Windows (.exe Tauri)', keywords: 'tauri desktop exe installer windows' },
+  { section: 'build', label: 'Android (Capacitor)', keywords: 'android capacitor apk mobile' },
+  { section: 'architecture', label: 'Invariants INV-001..008', keywords: 'inv invariants keamanan offline clean room' },
+  { section: 'architecture', label: 'Quality gates (test & CI)', keywords: 'test coverage ci github actions kualitas' },
+];
+
+const PROTOCOL_ITEMS: Array<{ id: string; title: string; tag: string; body: React.ReactNode }> = [
+  {
+    id: 'arp',
+    title: '1. Resolusi ARP',
+    tag: 'RFC 826',
+    body: (
+      <>
+        Sebelum ICMP dikirim, host memeriksa ARP Cache-nya. Jika <b>MISS</b>, ia memancarkan frame broadcast <b>ARP Request</b> (MAC tujuan <code>FF:FF:FF:FF:FF:FF</code>) yang merambat sepanjang jalur Layer-2. Hanya pemilik IP yang membalas <b>ARP Reply unicast</b>, lalu kedua sisi menyimpan pasangan IP-MAC. Ping berikutnya <b>warm cache</b> — tanpa ARP lagi, persis Packet Tracer.
+      </>
+    ),
+  },
+  {
+    id: 'cam',
+    title: '2. CAM Table Switch & AP',
+    tag: 'L2 Learning',
+    body: (
+      <>
+        Switch dan Access Point membaca frame ARP yang melintas dan mencatat pasangan <code>Source MAC → port ingress</code>. Hub adalah pengecualian: ia repeater murni dan <b>tidak pernah belajar</b>. Isi tabel bisa dilihat lewat <code>show mac-address-table</code> atau tab <b>Tabel</b> di panel bawah.
+      </>
+    ),
+  },
+  {
+    id: 'subnet',
+    title: '3. Subnetting Bitwise',
+    tag: 'RFC 791',
+    body: (
+      <>
+        Host memutuskan lokal vs luar subnet dengan operasi:
+        <code className="block my-2 bg-black/50 p-2 rounded text-amber-300 font-mono text-center">
+          (IP_Dest &amp; Mask) === (IP_Src &amp; Mask)
+        </code>
+        Jika <b>false</b>, paket wajib diarahkan ke Default Gateway — tanpa gateway, ping gagal dengan pesan eksplisit.
+      </>
+    ),
+  },
+  {
+    id: 'routing',
+    title: '4. Routing Antar Subnet & TTL',
+    tag: 'Longest Prefix',
+    body: (
+      <>
+        Router memilih interface tujuan dengan <b>longest-prefix match</b> atas jaringan connected + static route (termasuk default route <code>0.0.0.0/0</code>), lalu benar-benar meneruskan paket ke host tujuan. <b>TTL berkurang 1 di setiap router</b> (mulai 128) — reply yang tiba menunjukkan <code>128 − jumlah router</code>. Tanpa rute → <i>No route</i>; TTL habis → <i>Time Exceeded</i>; loop antar router terdeteksi otomatis.
+      </>
+    ),
+  },
+  {
+    id: 'cloud',
+    title: '5. Cloud Internet Tersimulasi',
+    tag: 'INV-008 · Offline',
+    body: (
+      <>
+        Perangkat <b>Cloud</b> mewakili dunia luar tanpa satu pun request jaringan nyata. Ia "memiliki" IP publik <code>8.8.8.8</code> dan <code>1.1.1.1</code> — ping ke IP publik dijawab deterministik (TTL = 128 − router − 1 hop WAN). IP publik lain ditolak dengan pesan jelas.
+      </>
+    ),
+  },
+  {
+    id: 'wifi',
+    title: '6. Nirkabel (Asosiasi SSID)',
+    tag: '802.11-style',
+    body: (
+      <>
+        PC & Laptop punya adapter <code>wla0</code>; Access Point mem-broadcast SSID lewat <code>radio0</code> dan menjembatani WiFi ↔ kabel sebagai bridge L2. Asosiasi terbentuk otomatis saat SSID klien <b>sama persis</b> dengan AP (atau drag dari port WiFi ke radio). Satu radio melayani banyak klien; tiap klien hanya satu AP.
+      </>
+    ),
+  },
+  {
+    id: 'dhcp',
+    title: '7. DHCP',
+    tag: 'DORA · UDP 67/68',
+    body: (
+      <>
+        Router sebagai DHCP server (pool per interface di form konfigurasi). Klien dengan opsi <b>"Obtain IP via DHCP"</b> menjalani <b>Discover → Offer → Request → Ack</b> beranimasi; alokasi deterministik melewati IP terpakai. Lease mengisi IP, mask, dan gateway otomatis — lihat paketnya di PDU Inspector (segmen DHCP).
+      </>
+    ),
+  },
+  {
+    id: 'nat',
+    title: '8. NAT/PAT',
+    tag: 'WAN → Cloud',
+    body: (
+      <>
+        Aktifkan NAT pada interface WAN router. Ping menuju IP publik akan <b>me-rewrite src IP ke IP WAN</b> (terlihat di PDU Inspector), mencatat <b>tabel translasi</b>, dan membaliknya kembali di jalur balik. Tabel NAT tampil di tab <b>Tabel</b> saat router dipilih.
+      </>
+    ),
+  },
+  {
+    id: 'vlan-rip',
+    title: '9. VLAN 802.1Q & RIPv2',
+    tag: 'Enterprise',
+    body: (
+      <>
+        <b>VLAN</b>: port switch <code>access</code> hanya bicara dengan port se-VLAN; port <code>trunk</code> membawa semua VLAN. Inter-VLAN lewat <b>router-on-a-stick</b> (sub-interface per VLAN di port trunk router) — frame ter-tag terlihat di PDU. <b>RIPv2</b>: aktifkan di ≥ 2 router lalu tekan "Jalankan Konvergensi RIP" — rute dipelajari deterministik (metric = hop) dengan animasi update di timeline.
+      </>
+    ),
+  },
+];
+
+const DEVICE_ROWS: Array<{ icon: React.ReactNode; name: string; ports: string; role: string }> = [
+  { icon: <Monitor className="h-3.5 w-3.5 text-sky-400" />, name: 'PC', ports: '1 FE + WiFi', role: 'End device — sumber/tujuan ping' },
+  { icon: <Laptop className="h-3.5 w-3.5 text-cyan-400" />, name: 'Laptop', ports: '1 FE + WiFi', role: 'End device — bisa pindah ke WiFi' },
+  { icon: <Server className="h-3.5 w-3.5 text-violet-400" />, name: 'Server', ports: '1 FE', role: 'End device kabel (file/web server)' },
+  { icon: <Network className="h-3.5 w-3.5 text-emerald-400" />, name: 'Switch L2', ports: '8 FE', role: 'CAM learning, VLAN access/trunk' },
+  { icon: <Cable className="h-3.5 w-3.5 text-orange-400" />, name: 'Hub', ports: '8 FE', role: 'Repeater murni — tanpa CAM' },
+  { icon: <Wifi className="h-3.5 w-3.5 text-fuchsia-400" />, name: 'Access Point', ports: 'Radio + 1 FE', role: 'Bridge WiFi ↔ kabel (SSID)' },
+  { icon: <Router className="h-3.5 w-3.5 text-amber-400" />, name: 'Router L3', ports: '3 FE', role: 'Routing, DHCP server, NAT, sub-interface' },
+  { icon: <Cloud className="h-3.5 w-3.5 text-sky-300" />, name: 'Cloud Internet', ports: '2 WAN', role: 'IP publik 8.8.8.8 / 1.1.1.1 tersimulasi' },
+];
+
+const CLI_ROWS: Array<{ mode: string; modeColor: string; cmd: string; desc: string }> = [
+  { mode: 'User (>)', modeColor: 'text-sky-400', cmd: 'enable', desc: 'Masuk privileged EXEC' },
+  { mode: 'Privileged (#)', modeColor: 'text-amber-400', cmd: 'configure terminal (conf t)', desc: 'Global configuration mode' },
+  { mode: 'Privileged (#)', modeColor: 'text-amber-400', cmd: 'ping <ip>', desc: 'ICMP 5 echo via engine penuh — output gaya Cisco (!!!!!)' },
+  { mode: 'Privileged (#)', modeColor: 'text-amber-400', cmd: 'show ip interface brief (sh ip int br)', desc: 'Status ringkas semua interface' },
+  { mode: 'Privileged (#)', modeColor: 'text-amber-400', cmd: 'show ip route', desc: 'Tabel routing (C connected, S static, R rip)' },
+  { mode: 'Privileged (#)', modeColor: 'text-amber-400', cmd: 'show mac-address-table · show arp', desc: 'Ekstensi: CAM table & cache ARP' },
+  { mode: 'Config (config)#', modeColor: 'text-purple-400', cmd: 'hostname <nama>', desc: 'Ubah hostname (tersinkron ke GUI)' },
+  { mode: 'Config (config)#', modeColor: 'text-purple-400', cmd: 'interface <id> (int)', desc: 'Masuk konfigurasi port, contoh: int fa0/0' },
+  { mode: 'Config-if', modeColor: 'text-emerald-400', cmd: 'ip address <ip> <mask>', desc: 'IPv4 + mask (divalidasi ala IOS)' },
+  { mode: 'Config-if', modeColor: 'text-emerald-400', cmd: 'no shutdown (no shut) · shutdown', desc: 'Naikkan / turunkan interface' },
+  { mode: 'Semua mode', modeColor: 'text-gray-400', cmd: 'exit / end', desc: 'Navigasi antar mode (end → langsung #)' },
+];
+
+const TEMPLATE_NAMES = [
+  'Peer-to-Peer', 'Single LAN Star', 'Dual LAN Routed', 'Dual Router WAN', 'Hierarchical Campus',
+  'Redundant Mesh', 'Kantor Server+Laptop', 'Lab Hub', 'Hotspot Rumah+Internet', 'Kantor Nirkabel',
+  'Kantor 2 VLAN', 'Dual Router RIP',
+];
+
+function CodeBlock({ children, color = 'text-blue-300' }: { children: string; color?: string }) {
+  return (
+    <pre className={`rounded-lg bg-black/60 p-3 text-xs font-mono ${color} border border-gray-800 overflow-x-auto leading-relaxed`}>
+      {children}
+    </pre>
+  );
+}
+
+function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+  return <div className={`rounded-xl border border-gray-800 bg-[#1E293B]/70 p-4 ${className}`}>{children}</div>;
+}
+
+function SectionTitle({ icon, title, subtitle }: { icon: React.ReactNode; title: string; subtitle: string }) {
+  return (
+    <div className="mb-4">
+      <h3 className="text-lg font-bold text-white flex items-center gap-2">{icon}{title}</h3>
+      <p className="text-xs text-gray-400 mt-1">{subtitle}</p>
+    </div>
+  );
+}
+
+function Accordion({
+  items,
+  openId,
+  onToggle,
+}: {
+  items: Array<{ id: string; title: string; tag: string; body: React.ReactNode }>;
+  openId: string | null;
+  onToggle: (id: string) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      {items.map((item) => {
+        const open = openId === item.id;
+        return (
+          <div
+            key={item.id}
+            className={`rounded-lg border bg-[#1E293B] transition-colors ${open ? 'border-blue-600/60' : 'border-gray-800'}`}
+          >
+            <button onClick={() => onToggle(item.id)} className="w-full flex items-center justify-between gap-2 p-3.5 text-left">
+              <span className="text-xs font-bold text-gray-100">{item.title}</span>
+              <span className="flex items-center gap-2 shrink-0">
+                <span className="rounded bg-gray-800 px-1.5 py-0.5 text-[9px] font-mono text-gray-400 border border-gray-700">
+                  {item.tag}
+                </span>
+                <ChevronDown className={`h-3.5 w-3.5 text-gray-500 transition-transform ${open ? 'rotate-180' : ''}`} />
+              </span>
+            </button>
+            {open && <div className="px-3.5 pb-3.5 text-xs text-gray-300 leading-relaxed">{item.body}</div>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
-  const [activeSection, setActiveSection] = useState<
-    'features' | 'porting' | 'simulation' | 'cli' | 'architecture'
-  >('features');
   const dialogRef = useModalA11y({ onClose, enabled: isOpen });
+  const [activeSection, setActiveSection] = useState<SectionId>('home');
+  const [query, setQuery] = useState<string>('');
+  const [openProto, setOpenProto] = useState<string | null>('arp');
+
+  const results = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return null;
+    return SEARCH_INDEX.filter(
+      (entry) => entry.label.toLowerCase().includes(q) || entry.keywords.toLowerCase().includes(q)
+    );
+  }, [query]);
+
+  const goTo = (section: SectionId, accordion?: string) => {
+    setActiveSection(section);
+    if (section === 'protocols' && accordion) setOpenProto(accordion);
+    setQuery('');
+  };
 
   if (!isOpen) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs select-none"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs select-none" onClick={onClose}>
       <div
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
-        aria-labelledby="docs-modal-title"
+        aria-label="Pusat Bantuan OpenPacket"
         className="flex h-[88vh] w-[92vw] max-w-5xl flex-col rounded-2xl border border-gray-700 bg-[#0F172A] shadow-2xl overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex h-14 items-center justify-between border-b border-gray-800 bg-[#1E293B] px-6">
@@ -44,499 +316,414 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
               <BookOpen className="h-5 w-5 text-blue-400" />
             </div>
             <div>
-              <h2 id="docs-modal-title" className="text-base font-bold text-white tracking-wide">
-                Dokumentasi Resmi & Panduan OpenPacket
-              </h2>
-              <p className="text-xs text-gray-400">
-                Spesifikasi fitur, panduan build multi-platform (Web/Desktop/Mobile), dan Cisco IOS syntax
-              </p>
+              <h2 className="text-base font-bold text-white tracking-wide">Pusat Bantuan OpenPacket</h2>
+              <p className="text-xs text-gray-400">Referensi fitur, protokol, dan panduan build — v1.3.0</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-              <span className="rounded bg-blue-950/60 px-2 py-0.5 text-[11px] text-blue-300 border border-blue-800/50 font-mono">
-                Dokumentasi v1.3.0
-              </span>
-            <button
-              onClick={onClose}
-              aria-label="Tutup dokumentasi"
-              className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-800 hover:text-white transition-colors"
-            >
-              <X className="h-5 w-5" />
-            </button>
-          </div>
+          <button
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-800 hover:text-white transition-colors"
+          >
+            <X className="h-5 w-5" />
+          </button>
         </div>
 
-        {/* Modal Layout */}
         <div className="flex flex-1 overflow-hidden">
-          {/* Sidebar Nav */}
-          <nav className="flex w-60 flex-col border-r border-gray-800 bg-[#0B132B] p-3 gap-1">
-            <button
-              onClick={() => setActiveSection('features')}
-              className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium text-left transition-all ${
-                activeSection === 'features'
-                  ? 'bg-blue-600 text-white font-bold shadow-md'
-                  : 'text-gray-400 hover:bg-gray-800/60 hover:text-gray-200'
-              }`}
-            >
-              <Layers className="h-4 w-4" />
-              <span>Kemampuan Sistem</span>
-            </button>
+          {/* Sidebar */}
+          <nav className="flex w-64 shrink-0 flex-col border-r border-gray-800 bg-[#0B132B]">
+            <div className="p-3">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-gray-500" />
+                <input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Cari topik…"
+                  className="w-full rounded-lg bg-black/40 border border-gray-800 pl-8 pr-2 py-1.5 text-xs text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-600"
+                />
+              </div>
+            </div>
 
-            <button
-              onClick={() => setActiveSection('porting')}
-              className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium text-left transition-all ${
-                activeSection === 'porting'
-                  ? 'bg-blue-600 text-white font-bold shadow-md'
-                  : 'text-gray-400 hover:bg-gray-800/60 hover:text-gray-200'
-              }`}
-            >
-              <Download className="h-4 w-4 text-emerald-400" />
-              <span>Panduan Build & Porting</span>
-            </button>
+            {results ? (
+              <div className="flex-1 overflow-y-auto px-3 pb-3 space-y-1">
+                <div className="text-[10px] font-bold uppercase text-gray-500 px-1 mb-1">{results.length} hasil</div>
+                {results.length === 0 && (
+                  <div className="text-xs text-gray-600 italic px-1">Tidak ada topik cocok.</div>
+                )}
+                {results.map((entry, i) => (
+                  <button
+                    key={i}
+                    onClick={() => goTo(entry.section, entry.accordion)}
+                    className="w-full text-left rounded-lg px-3 py-2 text-xs text-gray-300 hover:bg-gray-800/60 hover:text-white"
+                  >
+                    {entry.label}
+                    <span className="block text-[10px] text-gray-600">
+                      {NAV_GROUPS.flatMap((g) => g.items).find((it) => it.id === entry.section)?.label}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="flex-1 overflow-y-auto px-3 pb-3">
+                {NAV_GROUPS.map((group) => (
+                  <div key={group.group} className="mb-3">
+                    <div className="text-[10px] font-bold uppercase tracking-widest text-gray-600 px-2 mb-1">
+                      {group.group}
+                    </div>
+                    <div className="space-y-0.5">
+                      {group.items.map((item) => (
+                        <button
+                          key={item.id}
+                          onClick={() => setActiveSection(item.id)}
+                          className={`w-full flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium text-left transition-all ${
+                            activeSection === item.id
+                              ? 'bg-blue-600 text-white font-bold shadow-md'
+                              : 'text-gray-400 hover:bg-gray-800/60 hover:text-gray-200'
+                          }`}
+                        >
+                          {item.icon}
+                          <span>{item.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
 
-            <button
-              onClick={() => setActiveSection('simulation')}
-              className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium text-left transition-all ${
-                activeSection === 'simulation'
-                  ? 'bg-blue-600 text-white font-bold shadow-md'
-                  : 'text-gray-400 hover:bg-gray-800/60 hover:text-gray-200'
-              }`}
-            >
-              <Play className="h-4 w-4 text-cyan-400" />
-              <span>Simulasi Protokol (RFC)</span>
-            </button>
-
-            <button
-              onClick={() => setActiveSection('cli')}
-              className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium text-left transition-all ${
-                activeSection === 'cli'
-                  ? 'bg-blue-600 text-white font-bold shadow-md'
-                  : 'text-gray-400 hover:bg-gray-800/60 hover:text-gray-200'
-              }`}
-            >
-              <Terminal className="h-4 w-4 text-green-400" />
-              <span>Cisco IOS CLI Emulator</span>
-            </button>
-
-            <button
-              onClick={() => setActiveSection('architecture')}
-              className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium text-left transition-all ${
-                activeSection === 'architecture'
-                  ? 'bg-blue-600 text-white font-bold shadow-md'
-                  : 'text-gray-400 hover:bg-gray-800/60 hover:text-gray-200'
-              }`}
-            >
-              <Cpu className="h-4 w-4 text-purple-400" />
-              <span>Arsitektur & Zero-Secret</span>
-            </button>
+            <div className="border-t border-gray-800 p-3">
+              <div className="rounded-lg bg-blue-950/40 border border-blue-900/60 p-2.5">
+                <div className="text-[10px] font-bold text-blue-300 mb-0.5">Butuh tantangan?</div>
+                <div className="text-[10px] text-gray-400 leading-relaxed">
+                  Coba <b>Mode Lab</b> di toolbar — misi berpandu dengan verifikasi otomatis.
+                </div>
+              </div>
+            </div>
           </nav>
 
-          {/* Content Area */}
-          <div className="flex-1 overflow-y-auto p-6 text-gray-200 space-y-6">
-            {/* 1. FEATURES */}
-            {activeSection === 'features' && (
-              <div className="space-y-4">
-                <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  <Layers className="h-5 w-5 text-blue-400" />
-                  Apa Saja yang Bisa Dilakukan oleh Web Ini?
-                </h3>
-                <p className="text-xs text-gray-300 leading-relaxed">
-                  OpenPacket adalah simulator jaringan komputer interaktif client-side yang dirancang sebagai alternatif ringan untuk media belajar praktikum jaringan komputer dan penelitian skripsi tanpa perlu menginstal aplikasi berat seperti Cisco Packet Tracer. Dokumentasi ini mencerminkan kondisi implementasi versi <b>1.3.0</b>.
-                </p>
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto p-6 text-gray-200">
+            {/* ============ BERANDA ============ */}
+            {activeSection === 'home' && (
+              <div className="space-y-5">
+                <SectionTitle
+                  icon={<Sparkles className="h-5 w-5 text-blue-400" />}
+                  title="Mulai di Sini"
+                  subtitle="Tiga langkah dari kanvas kosong menjadi jaringan yang berfungsi."
+                />
+                <div className="grid grid-cols-3 gap-3">
+                  {[
+                    { n: '1', title: 'Bangun topologi', body: 'Klik perangkat di palet, atau buka tab Template dan terapkan topologi siap pakai (12 katalog).' },
+                    { n: '2', title: 'Konfigurasi', body: 'Klik perangkat → ikon gear untuk form GUI, atau ikon terminal untuk CLI Cisco IOS. Keduanya tersinkron dua arah.' },
+                    { n: '3', title: 'Simulasikan', body: 'Kirim ping dari Toolbar, amati animasi paket, telusuri event di timeline, bongkar headernya di PDU Inspector.' },
+                  ].map((s) => (
+                    <Card key={s.n}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-[11px] font-bold text-white">{s.n}</span>
+                        <span className="text-xs font-bold text-gray-100">{s.title}</span>
+                      </div>
+                      <p className="text-xs text-gray-400 leading-relaxed">{s.body}</p>
+                    </Card>
+                  ))}
+                </div>
 
-                <div className="grid grid-cols-2 gap-3.5 pt-2">
-                  <div className="rounded-xl border border-gray-800 bg-[#1E293B]/70 p-4">
-                    <h4 className="text-xs font-bold text-sky-400 uppercase tracking-wider mb-2">
-                      1. Manipulasi Topologi Interaktif
-                    </h4>
-                    <ul className="text-xs text-gray-300 space-y-1.5 list-disc list-inside">
-                      <li>Drag-and-drop 8 jenis perangkat: PC, Laptop, Server, Switch L2, Hub, <b>Access Point</b>, Router L3, dan <b>Cloud Internet</b>.</li>
-                      <li>Pengkabelan fisik dengan aturan <b>Port Singularity</b> + <b>asosiasi WiFi via SSID</b> (satu radio AP melayani banyak klien).</li>
-                      <li>Garis kabel & asosiasi nirkabel (garis putus-putus ungu ber-SSID) dengan label port interaktif.</li>
-                      <li>12 katalog template siap pakai: P2P, LAN, routing, nirkabel+internet, VLAN, dan RIP.</li>
-                    </ul>
+                <div>
+                  <div className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-2">
+                    Yang bisa kamu lakukan
                   </div>
-
-                  <div className="rounded-xl border border-gray-800 bg-[#1E293B]/70 p-4">
-                    <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-2">
-                      2. Simulasi Protokol Jaringan Riil
-                    </h4>
-                    <ul className="text-xs text-gray-300 space-y-1.5 list-disc list-inside">
-                      <li><b>RFC 826 ARP:</b> Broadcast request resolusi MAC; hanya pemilik IP yang membalas unicast reply; cache IP-MAC tersimpan dua arah.</li>
-                      <li><b>RFC 791 IPv4 Routing:</b> Ping lintas subnet benar-benar diteruskan router ke subnet tujuan (longest-prefix match atas interface connected + static route).</li>
-                      <li><b>RFC 792 ICMP Ping:</b> TTL berkurang 1 per router yang dilalui; paket di-drop dengan alasan eksplisit (No route, Time Exceeded, ARP timeout).</li>
-                      <li><b>Switch MAC Learning:</b> CAM Table mencatat MAC sumber ke port ingress secara dinamis.</li>
-                    </ul>
-                  </div>
-
-                  <div className="rounded-xl border border-gray-800 bg-[#1E293B]/70 p-4">
-                    <h4 className="text-xs font-bold text-amber-400 uppercase tracking-wider mb-2">
-                      3. Konfigurasi Perangkat Dual-Mode
-                    </h4>
-                    <ul className="text-xs text-gray-300 space-y-1.5 list-disc list-inside">
-                      <li><b>GUI Mode:</b> Formulir visual untuk mengubah IP, Subnet Mask, Gateway, dan status antarmuka — dengan validasi format IPv4/subnet.</li>
-                      <li><b>Cisco CLI Mode:</b> Terminal konsol virtual mirip Cisco IOS dengan prompt bertingkat (<code>&gt;</code>, <code>#</code>, <code>(config)#</code>, <code>(config-if)#</code>) dan validasi IP ala IOS (<code>% Invalid IP address</code>).</li>
-                      <li><b>Sinkronisasi Dua Arah:</b> Perubahan pada CLI otomatis langsung mengubah state GUI secara real-time, dan sebaliknya.</li>
-                    </ul>
-                  </div>
-
-                  <div className="rounded-xl border border-gray-800 bg-[#1E293B]/70 p-4">
-                    <h4 className="text-xs font-bold text-purple-400 uppercase tracking-wider mb-2">
-                      4. Ekspor / Impor JSON & Pemeriksa Event
-                    </h4>
-                    <ul className="text-xs text-gray-300 space-y-1.5 list-disc list-inside">
-                      <li>Simpan seluruh desain topologi ke file lokal berekstensi <code>.json</code>.</li>
-                      <li>Muat kembali topologi kapan saja untuk melanjutkan praktikum (penamaan perangkat baru otomatis tidak duplikat).</li>
-                      <li>Panel inspeksi log event real-time yang membedakan paket INFO, ARP, ICMP, ERROR, dan SUCCESS.</li>
-                    </ul>
-                  </div>
-
-                  <div className="rounded-xl border border-gray-800 bg-[#1E293B]/70 p-4">
-                    <h4 className="text-xs font-bold text-cyan-400 uppercase tracking-wider mb-2">
-                      5. Kontrol Simulasi & Animasi Paket
-                    </h4>
-                    <ul className="text-xs text-gray-300 space-y-1.5 list-disc list-inside">
-                      <li><b>Kecepatan 0.5x / 1x / 2x</b> mengubah durasi animasi per hop paket di kabel.</li>
-                      <li><b>Pause / Resume</b> saat simulasi berjalan — engine berhenti di antara hop, bukan membatalkan ping.</li>
-                      <li>Animasi amplop PDU meluncur sepanjang kabel: <b>hijau = ARP</b>, <b>biru = ICMP</b>, dengan arah maju/mundur yang benar.</li>
-                    </ul>
-                  </div>
-
-                  <div className="rounded-xl border border-gray-800 bg-[#1E293B]/70 p-4">
-                    <h4 className="text-xs font-bold text-rose-400 uppercase tracking-wider mb-2">
-                      6. Kualitas yang Terukur (Quality Gates)
-                    </h4>
-                    <ul className="text-xs text-gray-300 space-y-1.5 list-disc list-inside">
-                      <li><b>70 unit test</b> Vitest — coverage engine <b>&gt; 94% lines</b> (target skripsi &gt; 90%).</li>
-                      <li><b>6 skenario E2E</b> Playwright: tambah perangkat, ping antar-PC, konfigurasi GUI, CLI, hotspot WiFi via cloud, dan Lab 1 — tanpa console error.</li>
-                      <li><b>CI GitHub Actions</b> menjalankan type-check, coverage, build web, E2E, dan build installer Tauri di setiap push.</li>
-                    </ul>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { icon: <Layers className="h-3.5 w-3.5" />, text: '8 jenis perangkat + 12 template topologi' },
+                      { icon: <Zap className="h-3.5 w-3.5" />, text: 'ARP/ICMP deterministik + warm cache' },
+                      { icon: <Cloud className="h-3.5 w-3.5" />, text: 'Cloud Internet: ping 8.8.8.8 (100% offline)' },
+                      { icon: <Server className="h-3.5 w-3.5" />, text: 'DHCP otomatis (DORA) oleh router' },
+                      { icon: <Globe className="h-3.5 w-3.5" />, text: 'NAT/PAT dengan tabel translasi' },
+                      { icon: <Route className="h-3.5 w-3.5" />, text: 'VLAN 802.1Q + inter-VLAN + RIPv2' },
+                      { icon: <Wifi className="h-3.5 w-3.5" />, text: 'Nirkabel via SSID (AP + adapter WiFi)' },
+                      { icon: <ScanLine className="h-3.5 w-3.5" />, text: 'Step Mode, timeline & PDU Inspector' },
+                    ].map((f, i) => (
+                      <div key={i} className="flex items-center gap-2 rounded-lg border border-gray-800 bg-black/30 px-3 py-2 text-xs text-gray-300">
+                        <span className="text-blue-400">{f.icon}</span>
+                        {f.text}
+                      </div>
+                    ))}
                   </div>
                 </div>
+
+                <Card className="border-amber-800/50 bg-amber-950/20">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <GraduationCap className="h-4 w-4 text-amber-400" />
+                    <span className="text-xs font-bold text-amber-200">Cara tercepat belajar: Mode Lab</span>
+                  </div>
+                  <p className="text-xs text-gray-400 leading-relaxed">
+                    Klik tombol <b>Lab</b> di toolbar — misi berpandu dengan topologi terkunci,
+                    petunjuk bertahap, dan verifikasi otomatis. Tiga lab tersedia: perbaiki gateway,
+                    nyalakan internet dengan NAT, dan hubungkan dua VLAN.
+                  </p>
+                </Card>
               </div>
             )}
 
-            {/* 2. PORTING & DEPLOYMENT */}
-            {activeSection === 'porting' && (
+            {/* ============ PERANGKAT & KANVAS ============ */}
+            {activeSection === 'devices' && (
               <div className="space-y-4">
-                <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  <Download className="h-5 w-5 text-emerald-400" />
-                  Panduan Build & Distribusi Aplikasi
-                </h3>
-                <p className="text-xs text-gray-300 leading-relaxed">
-                  OpenPacket dirancang dengan arsitektur <b>Monorepo Portabel</b>. Anda dapat menjalankan dan mem-porting aplikasi ini ke berbagai target runtime berikut:
-                </p>
-
-                {/* Target 0: Local Dev */}
-                <div className="rounded-xl border border-gray-800 bg-[#1E293B]/80 p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className="text-xs font-bold text-blue-300 uppercase tracking-wide">
-                      Target 0: Menjalankan Lokal (Development & Testing)
-                    </h4>
-                    <span className="rounded bg-blue-950/70 px-2 py-0.5 text-[11px] text-blue-400 border border-blue-800">
-                      Node.js 20/22 LTS
-                    </span>
-                  </div>
-                  <p className="text-xs text-gray-300 mb-3">
-                    Prasyarat hanya Node.js dan npm — tidak ada dependensi native untuk mode web:
-                  </p>
-                  <pre className="rounded-lg bg-black/60 p-3 text-xs font-mono text-blue-300 border border-gray-800 overflow-x-auto">
-{`git clone https://github.com/syihab-zuhri/cisco.git
-cd cisco
-npm install
-npm run dev            # buka http://localhost:5173
-
-# Verifikasi kualitas (opsional):
-npm run type-check     # tsc strict, harus 0 error
-npm test               # unit test (70 test)
-npm run test:coverage  # unit test + coverage engine
-npm run e2e            # E2E Playwright (butuh Microsoft Edge/chromium)`}
-                  </pre>
-                </div>
-
-                {/* Target 1: Static Web */}
-                <div className="rounded-xl border border-gray-800 bg-[#1E293B]/80 p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className="text-xs font-bold text-emerald-300 uppercase tracking-wide">
-                      Target 1: Web Statis (GitHub Pages, Cloudflare Pages, Vercel)
-                    </h4>
-                    <span className="rounded bg-emerald-950/70 px-2 py-0.5 text-[11px] text-emerald-400 border border-emerald-800">
-                      Zero Cost / Serverless
-                    </span>
-                  </div>
-                  <p className="text-xs text-gray-300 mb-3">
-                    Karena OpenPacket murni beroperasi di client-side (Web Worker), seluruh aplikasi dapat di-bundle menjadi file HTML/JS/CSS murni (~139 KB gzip) tanpa perlu server backend Node.js atau database.
-                  </p>
-                  <pre className="rounded-lg bg-black/60 p-3 text-xs font-mono text-emerald-400 border border-gray-800 overflow-x-auto">
-{`# 1. Kompilasi bundle produksi web statis
-npm run build
-
-# 2. Output tersedia di direktori: ./dist
-# Folder ./dist dapat langsung diunggah ke Vercel, Netlify, atau Cloudflare Pages.`}
-                  </pre>
-                </div>
-
-                {/* Target 2: Windows Native Desktop (.exe via Tauri) */}
-                <div className="rounded-xl border border-gray-800 bg-[#1E293B]/80 p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className="text-xs font-bold text-sky-300 uppercase tracking-wide">
-                      Target 2: Desktop Executable Windows (.exe mandiri via Tauri v2)
-                    </h4>
-                    <span className="rounded bg-sky-950/70 px-2 py-0.5 text-[11px] text-sky-400 border border-sky-800">
-                      Ukuran Sangat Ringan (~15 MB)
-                    </span>
-                  </div>
-                  <p className="text-xs text-gray-300 mb-3">
-                    Dibandingkan Electron yang berukuran &gt;150 MB, Tauri v2 menggunakan native webview Windows (WebView2) yang menghasilkan installer sangat kecil dan konsumsi RAM sangat hemat (~30 MB). Ikon aplikasi untuk semua platform sudah tersedia di <code>src-tauri/icons/</code>, dan CI GitHub Actions (job <code>desktop</code>) membangun installer ini otomatis di setiap push.
-                  </p>
-                  <pre className="rounded-lg bg-black/60 p-3 text-xs font-mono text-sky-400 border border-gray-800 overflow-x-auto">
-{`# Prasyarat di Windows: Rust toolchain (rustup) & C++ Build Tools
-# 1. Jalankan development mode jendela desktop
-npm run tauri dev
-
-# 2. Build installer mandiri (.exe)
-npm run tauri build
-
-# Hasil installer tersimpan di:
-# ./src-tauri/target/release/bundle/nsis/OpenPacket_1.3.0_x64-setup.exe`}
-                  </pre>
-                </div>
-
-                {/* Target 3: Android APK (Capacitor Porting) */}
-                <div className="rounded-xl border border-gray-800 bg-[#1E293B]/80 p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className="text-xs font-bold text-amber-300 uppercase tracking-wide">
-                      Target 3: Porting ke Mobile Android APK (via Capacitor)
-                    </h4>
-                    <span className="rounded bg-amber-950/70 px-2 py-0.5 text-[11px] text-amber-400 border border-amber-800">
-                      Opsional Tablet / Mobile
-                    </span>
-                  </div>
-                  <p className="text-xs text-gray-300 mb-3">
-                    Aplikasi ini dapat dibungkus langsung ke Android WebView untuk pembelajaran di tablet menggunakan Capacitor:
-                  </p>
-                  <pre className="rounded-lg bg-black/60 p-3 text-xs font-mono text-amber-400 border border-gray-800 overflow-x-auto">
-{`npm install @capacitor/core @capacitor/cli @capacitor/android
-npx cap init OpenPacket com.openpacket.app --web-dir dist
-npm run build
-npx cap add android
-npx cap open android`}
-                  </pre>
-                </div>
-              </div>
-            )}
-
-            {/* 3. SIMULATION RFC */}
-            {activeSection === 'simulation' && (
-              <div className="space-y-4">
-                <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  <Play className="h-5 w-5 text-cyan-400" />
-                  Logika Simulasi Protokol & Validitas Ilmiah (Skripsi)
-                </h3>
-                <p className="text-xs text-gray-300 leading-relaxed">
-                  OpenPacket mengimplementasikan aturan standar IEEE & RFC murni tanpa manipulasi output fiktif, menjadikannya valid untuk instrumen penelitian komparasi dengan Cisco Packet Tracer. Seluruh urutan paket di bawah ini juga dikunci oleh <b>unit test paritas otomatis</b>.
-                </p>
-
-                <div className="space-y-3 text-xs text-gray-300">
-                  <div className="rounded-lg bg-[#1E293B] p-3.5 border border-gray-800">
-                    <h4 className="font-bold text-cyan-300 mb-1">1. Alur Resolusi ARP (RFC 826)</h4>
-                    <p className="leading-relaxed text-gray-300">
-                      Sebelum frame ICMP dikirimkan, host memeriksa ARP Cache miliknya. Jika kosong (cache MISS), host memancarkan frame broadcast <b>ARP Request</b> yang merambat sepanjang jalur Layer-2 melewati switch-switch. Hanya perangkat pemilik IP tujuan yang membalas dengan <b>ARP Reply unicast</b>. Setelah kedua belah pihak menyimpan pasangan IP-MAC, transmisi ping dilanjutkan. Pada ping berikutnya (warm cache) tidak ada paket ARP lagi — persis perilaku Packet Tracer.
-                    </p>
-                  </div>
-
-                  <div className="rounded-lg bg-[#1E293B] p-3.5 border border-gray-800">
-                    <h4 className="font-bold text-emerald-300 mb-1">2. Pemelajaran Alamat Switch (CAM Table)</h4>
-                    <p className="leading-relaxed text-gray-300">
-                      Switch Layer 2 membaca frame ARP yang melintas dan mencatat pasangan <code>Source MAC - port ingress</code> ke CAM Table. Tabel ini dapat diperiksa kapan saja via perintah <code>show mac-address-table</code> dan tersinkron balik ke state aplikasi setiap simulasi selesai.
-                    </p>
-                  </div>
-
-                  <div className="rounded-lg bg-[#1E293B] p-3.5 border border-gray-800">
-                    <h4 className="font-bold text-amber-300 mb-1">3. Bitwise Subnet Masking (RFC 791)</h4>
-                    <p className="leading-relaxed text-gray-300">
-                      Host memeriksa apakah IP tujuan berada di subnet yang sama menggunakan operasi logika:
-                      <code className="block my-2 bg-black/50 p-2 rounded text-amber-300 font-mono text-center">
-                        (IP_Dest &amp; Mask_Source) === (IP_Source &amp; Mask_Source)
-                      </code>
-                      Jika hasilnya <b>false</b>, host mewajibkan alamat Default Gateway yang valid pada interface-nya agar paket dapat diteruskan ke router — tanpa gateway, ping gagal dengan pesan eksplisit.
-                    </p>
-                  </div>
-
-                  <div className="rounded-lg bg-[#1E293B] p-3.5 border border-gray-800">
-                    <h4 className="font-bold text-sky-300 mb-1">4. Routing Lintas Subnet via Router (RFC 791/792)</h4>
-                    <p className="leading-relaxed text-gray-300">
-                      Paket untuk subnet lain dikirim ke gateway, lalu router <b>benar-benar meneruskannya</b>: router mencari interface tujuan dengan <b>longest-prefix match</b> atas jaringan connected dan static route, melakukan ARP untuk hop berikutnya, dan mengirim ulang paket hingga sampai ke host tujuan. <b>TTL berkurang 1</b> di setiap router (mulai 128); reply yang tiba di host sumber menunjukkan TTL = 128 − jumlah router yang dilalui. Router dapat men-drop paket dengan alasan jelas: <i>No route</i> (tidak ada rute), <i>Time Exceeded</i> (TTL habis), dan <i>routing loop</i> terdeteksi.
-                    </p>
-                  </div>
-
-                  <div className="rounded-lg bg-[#1E293B] p-3.5 border border-gray-800">
-                    <h4 className="font-bold text-rose-300 mb-1">5. Determinisme & Paritas Packet Tracer</h4>
-                    <p className="leading-relaxed text-gray-300">
-                      Urutan paket selalu deterministik: <b>ARP Request → ARP Reply → ICMP Echo Request → ICMP Echo Reply</b>. Echo pertama dianimasikan penuh hop-per-hop; echo berikutnya memakai cache (cepat, tanpa animasi). Format output mengikuti Packet Tracer: dari PC/Toolbar memakai gaya Windows (<code>Reply from x.x.x.x: bytes=32 time&lt;1ms TTL=128</code>, 4 echo), dari terminal IOS memakai gaya Cisco (<code>!!!!! Success rate is 100 percent (5/5)</code>).
-                    </p>
-                  </div>
-
-                  <div className="rounded-lg bg-[#1E293B] p-3.5 border border-gray-800">
-                    <h4 className="font-bold text-fuchsia-300 mb-1">6. Jaringan Nirkabel (Asosiasi SSID)</h4>
-                    <p className="leading-relaxed text-gray-300">
-                      PC & Laptop memiliki adapter wireless (<code>wla0</code>). Access Point mem-broadcast SSID lewat port <code>radio0</code> dan menjembatani lalu lintas nirkabel ↔ kabel seperti bridge L2 (dengan CAM learning). Asosiasi terbentuk otomatis saat SSID klien <b>sama persis</b> dengan SSID AP — cukup isi SSID di form konfigurasi dan simpan, atau tarik dari port WiFi ke radio AP. Satu radio AP melayani banyak klien (1-ke-N); setiap klien hanya boleh terasosiasi ke satu AP.
-                    </p>
-                  </div>
-
-                  <div className="rounded-lg bg-[#1E293B] p-3.5 border border-gray-800">
-                    <h4 className="font-bold text-sky-300 mb-1">7. Internet Cloud Tersimulasi (INV-008)</h4>
-                    <p className="leading-relaxed text-gray-300">
-                      Perangkat <b>Cloud Internet</b> mewakili dunia luar secara 100% offline — tidak ada request jaringan sungguhan. Cloud " memiliki" IP publik <code>8.8.8.8</code> dan <code>1.1.1.1</code>: arahkan router ke cloud dengan <b>default route</b> <code>0.0.0.0/0</code> (bisa ditambahkan lewat form konfigurasi router, bagian Static Route), lalu ping ke IP publik tersebut akan dijawab dengan TTL & RTT deterministik (TTL = 128 − jumlah router − 1 hop WAN). Tanpa default route, ping publik gagal "No route" — persis perilaku router nyata.
-                    </p>
-                  </div>
-
-                  <div className="rounded-lg bg-[#1E293B] p-3.5 border border-gray-800">
-                    <h4 className="font-bold text-blue-300 mb-1">8. Simulation Mode, PDU Inspector & Table Viewer</h4>
-                    <p className="leading-relaxed text-gray-300">
-                      Seluruh aliran simulasi direncanakan lebih dulu sebagai <b>daftar event deterministik</b> (maks 500, sim clock per hop) lalu diputar: tombol <b>Step</b> memutar satu event per klik, tab <b>Simulasi</b> menampilkan timeline (event mendatang redup), dan <b>PDU Inspector</b> membongkar header berlapis <b>L2 Ethernet → L3 IPv4 → L4 ARP/ICMP/DHCP</b> per hop — MAC frame ditulis ulang di setiap hop, IP/TTL end-to-end. Tab <b>Tabel</b> menampilkan CAM/ARP/Routing/NAT perangkat terpilih secara live.
-                    </p>
-                  </div>
-
-                  <div className="rounded-lg bg-[#1E293B] p-3.5 border border-gray-800">
-                    <h4 className="font-bold text-amber-300 mb-1">9. DHCP, NAT/PAT, VLAN & RIPv2</h4>
-                    <p className="leading-relaxed text-gray-300">
-                      <b>DHCP</b>: router sebagai server (pool per interface); klien dengan opsi "Obtain IP via DHCP" menjalani Discover → Offer → Request → Ack beranimasi sampai IP/gateway terisi. <b>NAT/PAT</b>: aktifkan pada interface WAN router — src IP di-rewrite ke IP WAN saat menuju cloud, tabel translasi tercatat, dan dibalik kembali di jalur balik. <b>VLAN 802.1Q</b>: port switch access/trunk memisahkan broadcast domain; inter-VLAN lewat <b>router-on-a-stick</b> (sub-interface per VLAN). <b>RIPv2</b>: aktifkan di ≥2 router lalu "Jalankan Konvergensi RIP" — rute dipelajari secara deterministik dengan animasi update di timeline.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* 4. CISCO CLI */}
-            {activeSection === 'cli' && (
-              <div className="space-y-4">
-                <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  <Terminal className="h-5 w-5 text-green-400" />
-                  Daftar Perintah Cisco IOS Terminal Virtual
-                </h3>
-                <p className="text-xs text-gray-300 leading-relaxed">
-                  Terminal konsol bawaan OpenPacket mensimulasikan sintaks perintah Cisco IOS asli dengan mode bertingkat. Buka terminal dengan mengklik ikon terminal pada hover perangkat di kanvas. Sepuluh perintah di bawah ini adalah perintah P0 kanonik:
-                </p>
+                <SectionTitle
+                  icon={<Layers className="h-5 w-5 text-sky-400" />}
+                  title="Perangkat & Kanvas"
+                  subtitle="Referensi 8 jenis perangkat dan aturan penyambungannya."
+                />
 
                 <div className="overflow-hidden rounded-xl border border-gray-800">
                   <table className="w-full text-left text-xs">
                     <thead className="bg-[#1E293B] text-gray-300 border-b border-gray-800">
                       <tr>
-                        <th className="p-2.5 font-bold">Mode Cisco</th>
+                        <th className="p-2.5 font-bold">Perangkat</th>
+                        <th className="p-2.5 font-bold">Port</th>
+                        <th className="p-2.5 font-bold">Peran</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-800 bg-black/40">
+                      {DEVICE_ROWS.map((d) => (
+                        <tr key={d.name} className="hover:bg-gray-900/40">
+                          <td className="p-2.5">
+                            <span className="flex items-center gap-2 font-semibold text-gray-100">
+                              {d.icon}
+                              {d.name}
+                            </span>
+                          </td>
+                          <td className="p-2.5 font-mono text-gray-400">{d.ports}</td>
+                          <td className="p-2.5 text-gray-300">{d.role}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <Card>
+                  <div className="text-xs font-bold text-gray-100 mb-2">Aturan penyambungan</div>
+                  <ul className="text-xs text-gray-400 space-y-1.5 list-disc list-inside leading-relaxed">
+                    <li><b>Port Singularity</b>: satu port ethernet hanya satu kabel; melepas kabel menurunkan kedua port ke DOWN.</li>
+                    <li><b>Radio WiFi 1-ke-N</b>: satu radio AP melayani banyak klien; tiap klien hanya satu AP (SSID harus sama persis).</li>
+                    <li><b>Drag-to-connect</b>: tarik dari titik port ke port tujuan — kabel ethernet atau asosiasi WiFi terdeteksi otomatis.</li>
+                    <li><b>VLAN</b>: port switch access hanya bicara dengan port se-VLAN; trunk membawa semuanya.</li>
+                  </ul>
+                </Card>
+
+                <Card>
+                  <div className="text-xs font-bold text-gray-100 mb-2">12 Template siap pakai</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {TEMPLATE_NAMES.map((t) => (
+                      <span key={t} className="rounded bg-gray-800 border border-gray-700 px-2 py-0.5 text-[10px] text-gray-300">
+                        {t}
+                      </span>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-[11px] text-gray-500">
+                    Buka tab <b>Template</b> di palet kiri → tekan <b>Terapkan</b>. Beberapa template
+                    sudah terkonfigurasi penuh (IP, route, SSID) dan bisa langsung di-ping.
+                  </p>
+                </Card>
+              </div>
+            )}
+
+            {/* ============ MESIN PROTOKOL ============ */}
+            {activeSection === 'protocols' && (
+              <div className="space-y-4">
+                <SectionTitle
+                  icon={<Play className="h-5 w-5 text-cyan-400" />}
+                  title="Mesin Protokol (RFC)"
+                  subtitle="Klik topik untuk membuka penjelasan — semua alur dikunci unit test deterministik."
+                />
+                <Accordion
+                  items={PROTOCOL_ITEMS}
+                  openId={openProto}
+                  onToggle={(id) => setOpenProto(openProto === id ? null : id)}
+                />
+              </div>
+            )}
+
+            {/* ============ SIMULATION MODE & PDU ============ */}
+            {activeSection === 'simmode' && (
+              <div className="space-y-4">
+                <SectionTitle
+                  icon={<ScanLine className="h-5 w-5 text-violet-400" />}
+                  title="Simulation Mode & PDU Inspector"
+                  subtitle="Alat inspeksi ala Packet Tracer — aliran simulasi direncanakan sebagai event deterministik."
+                />
+                <div className="space-y-3">
+                  <Card>
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <Play className="h-4 w-4 text-violet-400" />
+                      <span className="text-xs font-bold text-gray-100">Step Mode & Timeline</span>
+                    </div>
+                    <p className="text-xs text-gray-400 leading-relaxed">
+                      Tekan <b>Step</b> di toolbar lalu kirim ping: seluruh aliran direncanakan lebih
+                      dulu dan tampil di tab <b>Simulasi</b> (panel bawah) — event mendatang tampil
+                      redup. Tombol <b>Next</b> memutar tepat satu event per klik; kecepatan 0.5x–2x
+                      mengatur animasi saat tidak stepping.
+                    </p>
+                  </Card>
+                  <Card>
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <ScanLine className="h-4 w-4 text-cyan-400" />
+                      <span className="text-xs font-bold text-gray-100">PDU Inspector (drawer kanan)</span>
+                    </div>
+                    <p className="text-xs text-gray-400 leading-relaxed">
+                      Klik event mana pun di timeline untuk membongkar header berlapisnya:
+                      <span className="block mt-2 space-y-1">
+                        <span className="flex items-center gap-2 text-emerald-300"><b className="w-8">L2</b> Ethernet Frame — src/dst MAC (ditulis ulang per hop!), ethertype</span>
+                        <span className="flex items-center gap-2 text-violet-300"><b className="w-8">L3</b> IPv4 Packet — src/dst IP end-to-end, TTL menurun di router</span>
+                        <span className="flex items-center gap-2 text-cyan-300"><b className="w-8">L4</b> ARP / ICMP / DHCP — opcode, type, sequence, yiaddr</span>
+                      </span>
+                      Mode <b>auto-follow</b> (ikon pin) mengikuti paket yang sedang berjalan.
+                    </p>
+                  </Card>
+                  <Card>
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <Layers className="h-4 w-4 text-sky-400" />
+                      <span className="text-xs font-bold text-gray-100">Table Viewer (tab Tabel)</span>
+                    </div>
+                    <p className="text-xs text-gray-400 leading-relaxed">
+                      Pilih perangkat di kanvas, buka tab <b>Tabel</b>: CAM Table (switch/AP),
+                      ARP Cache (host), Routing (router, lengkap metric/sumber RIP), dan NAT
+                      Translations — semuanya update live mengikuti playback simulasi.
+                    </p>
+                  </Card>
+                </div>
+              </div>
+            )}
+
+            {/* ============ TERMINAL IOS ============ */}
+            {activeSection === 'cli' && (
+              <div className="space-y-4">
+                <SectionTitle
+                  icon={<Terminal className="h-5 w-5 text-green-400" />}
+                  title="Terminal Cisco IOS"
+                  subtitle="Klik ikon terminal pada hover perangkat. Sepuluh perintah P0 kanonik + alias."
+                />
+                <div className="overflow-hidden rounded-xl border border-gray-800">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-[#1E293B] text-gray-300 border-b border-gray-800">
+                      <tr>
+                        <th className="p-2.5 font-bold w-36">Mode</th>
                         <th className="p-2.5 font-bold">Perintah (alias)</th>
                         <th className="p-2.5 font-bold">Fungsi</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-800 bg-black/40 font-mono">
-                      <tr>
-                        <td className="p-2.5 text-sky-400">User Mode (&gt;)</td>
-                        <td className="p-2.5 text-green-400">enable</td>
-                        <td className="p-2.5 text-gray-300 font-sans">Masuk ke Privileged EXEC mode</td>
-                      </tr>
-                      <tr>
-                        <td className="p-2.5 text-amber-400">Privileged (#)</td>
-                        <td className="p-2.5 text-green-400">configure terminal (conf t)</td>
-                        <td className="p-2.5 text-gray-300 font-sans">Masuk ke mode konfigurasi global</td>
-                      </tr>
-                      <tr>
-                        <td className="p-2.5 text-amber-400">Privileged (#)</td>
-                        <td className="p-2.5 text-green-400">ping &lt;ip&gt;</td>
-                        <td className="p-2.5 text-gray-300 font-sans">ICMP echo 5 paket via engine penuh, output gaya Cisco (!!!!!)</td>
-                      </tr>
-                      <tr>
-                        <td className="p-2.5 text-amber-400">Privileged (#)</td>
-                        <td className="p-2.5 text-green-400">show ip interface brief (sh ip int br)</td>
-                        <td className="p-2.5 text-gray-300 font-sans">Melihat daftar status IP dan interface</td>
-                      </tr>
-                      <tr>
-                        <td className="p-2.5 text-amber-400">Privileged (#)</td>
-                        <td className="p-2.5 text-green-400">show ip route</td>
-                        <td className="p-2.5 text-gray-300 font-sans">Melihat tabel routing (connected C + static S) pada router</td>
-                      </tr>
-                      <tr>
-                        <td className="p-2.5 text-amber-400">Privileged (#)</td>
-                        <td className="p-2.5 text-green-400">show mac-address-table / show arp</td>
-                        <td className="p-2.5 text-gray-300 font-sans">Ekstensi: melihat CAM table switch dan cache ARP</td>
-                      </tr>
-                      <tr>
-                        <td className="p-2.5 text-purple-400">Config ((config)#)</td>
-                        <td className="p-2.5 text-green-400">hostname &lt;nama&gt;</td>
-                        <td className="p-2.5 text-gray-300 font-sans">Mengubah nama host perangkat secara live</td>
-                      </tr>
-                      <tr>
-                        <td className="p-2.5 text-purple-400">Config ((config)#)</td>
-                        <td className="p-2.5 text-green-400">interface &lt;id&gt; (int)</td>
-                        <td className="p-2.5 text-gray-300 font-sans">Masuk ke konfigurasi port (contoh: int fa0/0)</td>
-                      </tr>
-                      <tr>
-                        <td className="p-2.5 text-emerald-400">Config-if</td>
-                        <td className="p-2.5 text-green-400">ip address &lt;IP&gt; &lt;SUBNET&gt;</td>
-                        <td className="p-2.5 text-gray-300 font-sans">Konfigurasi IPv4 &amp; subnet mask (divalidasi formatnya)</td>
-                      </tr>
-                      <tr>
-                        <td className="p-2.5 text-emerald-400">Config-if</td>
-                        <td className="p-2.5 text-green-400">no shutdown (no shut)</td>
-                        <td className="p-2.5 text-gray-300 font-sans">Mengaktifkan port antarmuka (Link UP)</td>
-                      </tr>
-                      <tr>
-                        <td className="p-2.5 text-emerald-400">Config-if</td>
-                        <td className="p-2.5 text-green-400">shutdown (shut)</td>
-                        <td className="p-2.5 text-gray-300 font-sans">Menonaktifkan port antarmuka (administratively down)</td>
-                      </tr>
-                      <tr>
-                        <td className="p-2.5 text-gray-400">Semua Mode</td>
-                        <td className="p-2.5 text-green-400">exit / end</td>
-                        <td className="p-2.5 text-gray-300 font-sans">Navigasi antar tingkatan prompt (end langsung ke #)</td>
-                      </tr>
+                      {CLI_ROWS.map((row) => (
+                        <tr key={row.cmd} className="hover:bg-gray-900/40">
+                          <td className={`p-2.5 ${row.modeColor}`}>{row.mode}</td>
+                          <td className="p-2.5 text-green-400">{row.cmd}</td>
+                          <td className="p-2.5 text-gray-300 font-sans">{row.desc}</td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
-
-                <div className="rounded-lg bg-[#1E293B] p-3.5 border border-gray-800 text-xs text-gray-300">
-                  <span className="font-bold text-green-400 block mb-1">Catatan ping & sinkronisasi:</span>
-                  <code>ping</code> dari terminal dijalankan oleh simulation engine penuh (bukan output fiktif) — memancarkan ARP bila cache kosong, melewati router lintas subnet, dan menghasilkan statistik ala IOS: <code>Success rate is X percent (n/5), round-trip min/avg/max</code>. Sementara tombol <b>Send Ping</b> di Toolbar memakai format Windows 4 echo (<code>Reply from ... TTL=128</code>). Semua perubahan konfigurasi via CLI langsung tersinkron dengan form GUI dan sebaliknya.
-                </div>
+                <Card className="border-green-800/50 bg-green-950/20">
+                  <span className="font-bold text-green-300 text-xs block mb-1">Format output ping</span>
+                  <p className="text-xs text-gray-300 leading-relaxed">
+                    Dari terminal IOS: gaya Cisco — <code>!!!!! Success rate is 100 percent (5/5)</code>.
+                    Dari Toolbar (PC): gaya Windows — <code>Reply from x.x.x.x: bytes=32 time&lt;1ms TTL=128</code>.
+                    Keduanya dijalankan engine penuh, bukan teks fiktif.
+                  </p>
+                </Card>
               </div>
             )}
 
-            {/* 5. ARCHITECTURE */}
+            {/* ============ BUILD & PORTING ============ */}
+            {activeSection === 'build' && (
+              <div className="space-y-4">
+                <SectionTitle
+                  icon={<Download className="h-5 w-5 text-emerald-400" />}
+                  title="Build & Porting"
+                  subtitle="Dari mode development sampai installer Windows — semuanya client-side."
+                />
+                <Card>
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-xs font-bold text-blue-300 uppercase tracking-wide">Menjalankan Lokal</h4>
+                    <span className="rounded bg-blue-950/70 px-2 py-0.5 text-[10px] text-blue-400 border border-blue-800">Node 20/22</span>
+                  </div>
+                  <CodeBlock>{`git clone https://github.com/syihab-zuhri/cisco.git
+cd cisco && npm install
+npm run dev          # http://localhost:5173
+
+npm run type-check   # tsc strict, 0 error
+npm test             # unit test (70)
+npm run e2e          # E2E Playwright (Edge/Chromium)`}</CodeBlock>
+                </Card>
+                <Card>
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-xs font-bold text-emerald-300 uppercase tracking-wide">Web Statis (Vercel / Pages)</h4>
+                    <span className="rounded bg-emerald-950/70 px-2 py-0.5 text-[10px] text-emerald-400 border border-emerald-800">~139 KB gzip</span>
+                  </div>
+                  <CodeBlock color="text-emerald-400">{`npm run build   # output: ./dist — unggah ke hosting statis apa pun`}</CodeBlock>
+                </Card>
+                <Card>
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-xs font-bold text-sky-300 uppercase tracking-wide">Desktop Windows (.exe via Tauri v2)</h4>
+                    <span className="rounded bg-sky-950/70 px-2 py-0.5 text-[10px] text-sky-400 border border-sky-800">CI membangun otomatis</span>
+                  </div>
+                  <CodeBlock color="text-sky-400">{`npm run tauri build
+# installer: src-tauri/target/release/bundle/nsis/*.exe
+# GitHub Actions job "desktop" membangun ini di setiap push`}</CodeBlock>
+                </Card>
+                <Card>
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-xs font-bold text-amber-300 uppercase tracking-wide">Android (Capacitor)</h4>
+                    <span className="rounded bg-amber-950/70 px-2 py-0.5 text-[10px] text-amber-400 border border-amber-800">Opsional</span>
+                  </div>
+                  <CodeBlock color="text-amber-400">{`npm install @capacitor/core @capacitor/cli @capacitor/android
+npx cap init OpenPacket com.openpacket.app --web-dir dist
+npm run build && npx cap add android`}</CodeBlock>
+                </Card>
+              </div>
+            )}
+
+            {/* ============ ARSITEKTUR ============ */}
             {activeSection === 'architecture' && (
               <div className="space-y-4">
-                <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  <Cpu className="h-5 w-5 text-purple-400" />
-                  Arsitektur Sistem & Kebijakan Zero-Secret
-                </h3>
-                <p className="text-xs text-gray-300 leading-relaxed">
-                  OpenPacket dibangun mengutamakan keamanan dan portabilitas penuh dengan 8 aturan teknis invariabel (<code>INV-001</code> s.d. <code>INV-008</code>):
-                </p>
-
+                <SectionTitle
+                  icon={<Cpu className="h-5 w-5 text-purple-400" />}
+                  title="Arsitektur & Keamanan"
+                  subtitle="Delapan invariants non-negotiable dan kualitas yang terukur."
+                />
                 <div className="grid grid-cols-2 gap-3 text-xs">
-                  <div className="rounded-lg bg-[#1E293B] p-3 border border-gray-800">
-                    <span className="font-bold text-blue-400 block mb-1">Zero-Secret Policy:</span>
-                    Aplikasi 100% tidak membutuhkan API key, database rahasia, atau kredensial. Seluruh source code aman di-push secara publik di GitHub.
-                  </div>
-                  <div className="rounded-lg bg-[#1E293B] p-3 border border-gray-800">
-                    <span className="font-bold text-emerald-400 block mb-1">Zero DOM in Simulation (INV-001):</span>
-                    Komputasi simulasi terisolasi di dalam Web Worker murni TypeScript tanpa menyentuh DOM, menjaga animasi canvas tetap fluid 60 FPS.
-                  </div>
-                  <div className="rounded-lg bg-[#1E293B] p-3 border border-gray-800">
-                    <span className="font-bold text-amber-400 block mb-1">Clean-Room Implementation (INV-005):</span>
-                    Tidak ada kode proprietary Cisco yang disalin. Logika murni ditulis dari standar publik IETF RFC.
-                  </div>
-                  <div className="rounded-lg bg-[#1E293B] p-3 border border-gray-800">
-                    <span className="font-bold text-purple-400 block mb-1">100% Offline Capable (INV-008):</span>
-                    Aplikasi dapat berjalan mandiri di ruang laboratorium tanpa memerlukan koneksi internet aktif.
-                  </div>
-                  <div className="rounded-lg bg-[#1E293B] p-3 border border-gray-800">
-                    <span className="font-bold text-cyan-400 block mb-1">Typed IPC Contract (INV-002):</span>
-                    Seluruh pesan UI ↔ Worker adalah tagged union bertipe ketat di <code>src/types/ipc.ts</code> — tidak ada objek ad-hoc antar thread.
-                  </div>
-                  <div className="rounded-lg bg-[#1E293B] p-3 border border-gray-800">
-                    <span className="font-bold text-rose-400 block mb-1">Single State of Truth (INV-006):</span>
-                    Satu store Zustand dipakai GUI, CLI, dan engine: konfigurasi via form maupun terminal selalu terbaca dua arah secara real-time.
-                  </div>
+                  {[
+                    { t: 'Zero DOM in Engine', c: 'text-emerald-400', b: 'Engine murni TypeScript di Web Worker — tanpa React/DOM (INV-001).' },
+                    { t: 'Typed IPC (INV-002)', c: 'text-cyan-400', b: 'Semua pesan UI ↔ Worker adalah tagged union di src/types/ipc.ts.' },
+                    { t: 'Port Cardinality (INV-003)', c: 'text-amber-400', b: 'Ethernet 1-kabel-1-port; radio WiFi 1-ke-N (amandemen v1.1.0).' },
+                    { t: 'Deterministik (INV-004)', c: 'text-sky-400', b: 'Urutan paket selalu sama — dikunci test paritas otomatis.' },
+                    { t: 'Clean-Room (INV-005)', c: 'text-purple-400', b: 'Tanpa kode proprietary Cisco — murni dari RFC publik IETF.' },
+                    { t: 'Single State (INV-006)', c: 'text-blue-400', b: 'Satu store Zustand untuk GUI, CLI, dan engine — sinkron dua arah.' },
+                    { t: 'No Secrets (INV-007)', c: 'text-rose-400', b: 'Tanpa API key/credential — aman di-push publik.' },
+                    { t: '100% Offline (INV-008)', c: 'text-orange-400', b: 'Nol request jaringan eksternal — internet disimulasikan oleh Cloud.' },
+                  ].map((inv) => (
+                    <div key={inv.t} className="rounded-lg bg-[#1E293B] p-3 border border-gray-800">
+                      <span className={`font-bold block mb-1 ${inv.c}`}>{inv.t}</span>
+                      <span className="text-gray-400 leading-relaxed">{inv.b}</span>
+                    </div>
+                  ))}
                 </div>
+                <Card className="border-emerald-800/50">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <ShieldCheck className="h-4 w-4 text-emerald-400" />
+                    <span className="text-xs font-bold text-gray-100">Quality Gates (terverifikasi CI)</span>
+                  </div>
+                  <div className="grid grid-cols-4 gap-2 text-center text-xs">
+                    {[
+                      { v: '70', l: 'unit test' },
+                      { v: '94%+', l: 'coverage engine' },
+                      { v: '6', l: 'E2E scenarios' },
+                      { v: '2', l: 'CI jobs hijau' },
+                    ].map((s) => (
+                      <div key={s.l} className="rounded bg-black/40 border border-gray-800 py-2">
+                        <div className="text-lg font-bold text-white font-mono">{s.v}</div>
+                        <div className="text-[10px] text-gray-500">{s.l}</div>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
               </div>
             )}
           </div>
