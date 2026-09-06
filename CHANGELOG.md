@@ -11,6 +11,22 @@
 
 ---
 
+## [2026-09-06] — Version 1.4.1 (Katalog Template Tergrup + Topologi Klasik)
+
+### Added
+- **16 template dalam 5 grup berurutan** (kecil → enterprise) di tab Template: 1·Dasar (Klasik), 2·LAN & Kantor, 3·Nirkabel & Internet, 4·Routing & WAN, 5·Enterprise/Perusahaan — masing-masing dengan jumlah & keterangan.
+- **4 template topologi klasik baru**: **Topologi Bus** (backbone bersama dimodelkan Hub, 4 PC), **Topologi Ring (Cincin)** (4 switch melingkar + 4 PC), **Topologi Daisy Chain** (3 switch seri tanpa loop + 3 PC), dan **Topologi Hybrid (Campuran)** (LAN Star + segmen Bus disatukan router — ping lintas subnet membuktikannya).
+- Template lama disesuaikan namanya agar sesuai nomenklatur klasik: Peer-to-Peer → **Topologi Peer-to-Peer (Point-to-Point)**, Single LAN Star → **Topologi Star (Bintang)**, Hierarchical Campus → **Topologi Tree (Pohon / Hierarkis)**, Redundant Mesh → **Topologi Mesh (Jala)**.
+- Template klasik dipisah ke modul `topologyTemplatesClassic.ts` agar berkas utama tetap ringan.
+
+### Changed
+- Palet tab Template kini merender **tergrup per kategori** dengan header + jumlah; kategori lanjutan (VLAN, RIP, WAN, nirkabel, internet) menjadi varian "sampai advanced" dari daftar topologi klasik.
+
+### Status Gate
+- `Gate C` — 75 unit test + 8 E2E hijau; uji integritas template dinaikkan ke ≥ 16.
+
+---
+
 ---
 
 ## [2026-09-06] — Version 1.4.0 (Anotasi Kanvas: Square & Teks Custom)

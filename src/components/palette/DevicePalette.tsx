@@ -22,6 +22,15 @@ import { useAppStore } from '../../store/useAppStore';
 import { type DeviceType } from '../../types/network';
 import { TOPOLOGY_TEMPLATES, type TopologyTemplate } from '../../data/topologyTemplates';
 
+/** Urutan grup template: dari topologi kecil (klasik) sampai enterprise. */
+const TEMPLATE_GROUPS: Array<{ category: TopologyTemplate['category']; title: string; blurb: string }> = [
+  { category: 'Dasar', title: '1 · Topologi Dasar (Klasik)', blurb: 'Batu bata jaringan: P2P, star, bus, ring, daisy chain, hub.' },
+  { category: 'LAN', title: '2 · LAN & Kantor', blurb: 'Jaringan lokal siap kerja dengan server.' },
+  { category: 'Nirkabel', title: '3 · Nirkabel & Internet', blurb: 'Access Point, SSID, dan cloud internet.' },
+  { category: 'Routing L3', title: '4 · Routing & WAN', blurb: 'Lintas subnet, WAN point-to-point, dynamic routing.' },
+  { category: 'Enterprise', title: '5 · Enterprise / Perusahaan', blurb: 'Hierarkis, mesh, hybrid, dan segmentasi VLAN.' },
+];
+
 interface DevicePaletteProps {
   isOpen: boolean;
   onToggle: () => void;
@@ -344,43 +353,60 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
               Template Topologi
             </h2>
             <p className="text-[11px] text-gray-500">
-              Pilih arsitektur jaringan siap pakai untuk langsung dipelajari
+              Dikelompokkan dari topologi kecil sampai enterprise
             </p>
           </div>
 
-          <div className="flex flex-col gap-2.5">
-            {TOPOLOGY_TEMPLATES.map((tpl) => (
-              <div
-                key={tpl.id}
-                className="group relative flex flex-col rounded-lg border border-[#374151] bg-[#1F2937] p-3 transition-all hover:border-blue-500 hover:bg-[#253244]"
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-semibold text-gray-100">
-                    {tpl.name}
+          {TEMPLATE_GROUPS.map((group) => {
+            const items = TOPOLOGY_TEMPLATES.filter((t) => t.category === group.category);
+            if (items.length === 0) return null;
+            return (
+              <div key={group.category} className="mb-4">
+                <div className="flex items-center justify-between mb-0.5">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-gray-200">
+                    {group.title}
                   </span>
-                  <span className="rounded bg-gray-800 px-1.5 py-0.5 text-[11px] font-mono text-gray-400 border border-gray-700">
-                    {tpl.category}
+                  <span className="rounded bg-gray-800 px-1.5 py-0.5 text-[10px] text-gray-400 border border-gray-700">
+                    {items.length}
                   </span>
                 </div>
+                <p className="text-[10px] text-gray-500 mb-2">{group.blurb}</p>
+                <div className="flex flex-col gap-2.5">
+                  {items.map((tpl) => (
+                    <div
+                      key={tpl.id}
+                      className="group relative flex flex-col rounded-lg border border-[#374151] bg-[#1F2937] p-3 transition-all hover:border-blue-500 hover:bg-[#253244]"
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-semibold text-gray-100">
+                          {tpl.name}
+                        </span>
+                        <span className="rounded bg-gray-800 px-1.5 py-0.5 text-[11px] font-mono text-gray-400 border border-gray-700">
+                          {tpl.category}
+                        </span>
+                      </div>
 
-                <p className="text-[11px] text-gray-400 leading-snug line-clamp-3 mb-2.5">
-                  {tpl.description}
-                </p>
+                      <p className="text-[11px] text-gray-400 leading-snug line-clamp-3 mb-2.5">
+                        {tpl.description}
+                      </p>
 
-                <div className="flex items-center justify-between border-t border-gray-700/60 pt-2 text-[11px] text-gray-400">
-                  <span>
-                    {tpl.nodes.length} Nodes • {tpl.edges.length} Links
-                  </span>
-                  <button
-                    onClick={() => handleApplyTemplate(tpl)}
-                    className="rounded bg-blue-600 px-2.5 py-1 font-medium text-white shadow-sm hover:bg-blue-500"
-                  >
-                    Terapkan
-                  </button>
+                      <div className="flex items-center justify-between border-t border-gray-700/60 pt-2 text-[11px] text-gray-400">
+                        <span>
+                          {tpl.nodes.length} Nodes • {tpl.edges.length} Links
+                        </span>
+                        <button
+                          onClick={() => handleApplyTemplate(tpl)}
+                          className="rounded bg-blue-600 px-2.5 py-1 font-medium text-white shadow-sm hover:bg-blue-500"
+                        >
+                          Terapkan
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
-            ))}
-          </div>
+            );
+          })}
         </div>
       )}
     </aside>

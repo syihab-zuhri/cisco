@@ -1,5 +1,6 @@
 import { type Node, type Edge } from '@xyflow/react';
 import { type DeviceData } from '../types/network';
+import { CLASSIC_TEMPLATES } from './topologyTemplatesClassic';
 
 export interface TopologyTemplate {
   id: string;
@@ -14,7 +15,7 @@ export const TOPOLOGY_TEMPLATES: TopologyTemplate[] = [
   // 1. Peer-to-Peer
   {
     id: 'peer-to-peer',
-    name: 'Peer-to-Peer (P2P)',
+    name: 'Topologi Peer-to-Peer (Point-to-Point)',
     category: 'Dasar',
     description: '2 PC terhubung langsung dengan kabel crossover/auto-MDIX (Subnet 192.168.1.0/24).',
     nodes: [
@@ -84,8 +85,8 @@ export const TOPOLOGY_TEMPLATES: TopologyTemplate[] = [
   // 2. Single LAN Star
   {
     id: 'single-lan-star',
-    name: 'Single LAN Star (Switch)',
-    category: 'LAN',
+    name: 'Topologi Star (Bintang)',
+    category: 'Dasar',
     description: '3 PC host terhubung ke 1 Switch L2. Cocok untuk uji coba ARP broadcast flooding dan CAM table.',
     nodes: [
       {
@@ -407,7 +408,7 @@ export const TOPOLOGY_TEMPLATES: TopologyTemplate[] = [
   // 5. Hierarchical Tree Topology (Core - Distribution - Access)
   {
     id: 'hierarchical-tree',
-    name: 'Hierarchical Campus Network (Tree)',
+    name: 'Topologi Tree (Pohon / Hierarkis)',
     category: 'Enterprise',
     description: 'Arsitektur bertingkat standar Cisco (Core Switch ➔ 2 Distribution/Access Switch ➔ 4 Host PC).',
     nodes: [
@@ -528,7 +529,7 @@ export const TOPOLOGY_TEMPLATES: TopologyTemplate[] = [
   // 6. Redundant Ring Mesh
   {
     id: 'mesh-redundant-switch',
-    name: 'Redundant Ring/Mesh Switch',
+    name: 'Topologi Mesh (Jala)',
     category: 'LAN',
     description: 'Topologi cincin 3 Switch L2. Engine memilih jalur terpendek (BFS) tanpa STP — cocok untuk mengamati redundansi jalur.',
     nodes: [
@@ -1113,4 +1114,6 @@ export const TOPOLOGY_TEMPLATES: TopologyTemplate[] = [
       { id: 'edge-rip-pcb', source: 'pc-ripb', target: 'r-rip2', sourceHandle: 'fa0', targetHandle: 'fa0/2', type: 'networkCable', data: { sourcePortName: 'fa0', targetPortName: 'fa0/2 (LAN B)' } },
     ],
   },
+
+  ...CLASSIC_TEMPLATES,
 ];

@@ -217,9 +217,10 @@ const CLI_ROWS: Array<{ mode: string; modeColor: string; cmd: string; desc: stri
 ];
 
 const TEMPLATE_NAMES = [
-  'Peer-to-Peer', 'Single LAN Star', 'Dual LAN Routed', 'Dual Router WAN', 'Hierarchical Campus',
-  'Redundant Mesh', 'Kantor Server+Laptop', 'Lab Hub', 'Hotspot Rumah+Internet', 'Kantor Nirkabel',
-  'Kantor 2 VLAN', 'Dual Router RIP',
+  'P2P', 'Star', 'Bus', 'Ring', 'Daisy Chain', 'Lab Hub',
+  'Kantor Server+Laptop', 'Hotspot Rumah+Internet', 'Kantor Nirkabel',
+  'Dual LAN Routed', 'Dual Router WAN', 'Dual Router RIP',
+  'Tree Hierarkis', 'Mesh Jala', 'Kantor 2 VLAN', 'Hybrid Campuran',
 ];
 
 function CodeBlock({ children, color = 'text-blue-300' }: { children: string; color?: string }) {
@@ -318,7 +319,7 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
             </div>
             <div>
               <h2 className="text-base font-bold text-white tracking-wide">Pusat Bantuan OpenPacket</h2>
-              <p className="text-xs text-gray-400">Referensi fitur, protokol, dan panduan build — v1.3.0</p>
+              <p className="text-xs text-gray-400">Referensi fitur, protokol, dan panduan build — v1.4.0</p>
             </div>
           </div>
           <button
@@ -413,7 +414,7 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
                 />
                 <div className="grid grid-cols-3 gap-3">
                   {[
-                    { n: '1', title: 'Bangun topologi', body: 'Klik perangkat di palet, atau buka tab Template dan terapkan topologi siap pakai (12 katalog).' },
+                    { n: '1', title: 'Bangun topologi', body: 'Klik perangkat di palet, atau buka tab Template dan terapkan topologi siap pakai (16 katalog, 5 grup).' },
                     { n: '2', title: 'Konfigurasi', body: 'Klik perangkat → ikon gear untuk form GUI, atau ikon terminal untuk CLI Cisco IOS. Keduanya tersinkron dua arah.' },
                     { n: '3', title: 'Simulasikan', body: 'Kirim ping dari Toolbar, amati animasi paket, telusuri event di timeline, bongkar headernya di PDU Inspector.' },
                   ].map((s) => (
@@ -433,7 +434,7 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     {[
-                      { icon: <Layers className="h-3.5 w-3.5" />, text: '8 jenis perangkat + 12 template topologi' },
+                      { icon: <Layers className="h-3.5 w-3.5" />, text: '8 jenis perangkat + 16 template topologi' },
                       { icon: <Zap className="h-3.5 w-3.5" />, text: 'ARP/ICMP deterministik + warm cache' },
                       { icon: <Cloud className="h-3.5 w-3.5" />, text: 'Cloud Internet: ping 8.8.8.8 (100% offline)' },
                       { icon: <Server className="h-3.5 w-3.5" />, text: 'DHCP otomatis (DORA) oleh router' },
@@ -521,7 +522,7 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
                 </Card>
 
                 <Card>
-                  <div className="text-xs font-bold text-gray-100 mb-2">12 Template siap pakai</div>
+                  <div className="text-xs font-bold text-gray-100 mb-2">16 Template siap pakai (5 grup)</div>
                   <div className="flex flex-wrap gap-1.5">
                     {TEMPLATE_NAMES.map((t) => (
                       <span key={t} className="rounded bg-gray-800 border border-gray-700 px-2 py-0.5 text-[10px] text-gray-300">
