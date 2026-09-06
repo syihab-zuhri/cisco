@@ -30,8 +30,23 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
   const [activeTab, setActiveTab] = useState<'devices' | 'templates'>('devices');
 
   const handleAdd = (type: DeviceType) => {
-    const x = 200 + Math.random() * 150;
-    const y = 150 + Math.random() * 150;
+    // Cari posisi yang tidak menumpuk perangkat lain: geser kandidat sampai
+    // cukup jauh (node ±150px) dari semua node yang sudah ada di kanvas.
+    const existing = useAppStore.getState().nodes;
+    const collides = (x: number, y: number) =>
+      existing.some(
+        (n) => Math.abs(n.position.x - x) < 210 && Math.abs(n.position.y - y) < 210
+      );
+    let x = 180 + Math.random() * 160;
+    let y = 140 + Math.random() * 160;
+    for (let tries = 0; collides(x, y) && tries < 50; tries += 1) {
+      x += 90;
+      if (x > 1000) {
+        x = 180 + Math.random() * 100;
+        y += 170;
+        if (y > 800) y = 140 + Math.random() * 100;
+      }
+    }
     addDevice(type, { x, y });
   };
 

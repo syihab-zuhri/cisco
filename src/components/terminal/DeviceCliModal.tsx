@@ -3,6 +3,7 @@ import { Terminal as TermIcon, X } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { CliSession } from '../../engine/cli/cliEngine';
 import { requestPing } from '../../hooks/useSimulationEngine';
+import { useModalA11y } from '../../hooks/useModalA11y';
 
 export function DeviceCliModal() {
   const activeCliModalNodeId = useAppStore((s) => s.activeCliModalNodeId);
@@ -21,6 +22,10 @@ export function DeviceCliModal() {
   const [session, setSession] = useState<CliSession | null>(null);
   const [inputVal, setInputVal] = useState<string>('');
   const [isBusy, setIsBusy] = useState<boolean>(false);
+  const dialogRef = useModalA11y({
+    onClose: () => setActiveCliModalNodeId(null),
+    enabled: Boolean(activeCliModalNodeId),
+  });
 
   // Sesi CLI baru setiap kali modal dibuka untuk perangkat tertentu
   useEffect(() => {
@@ -93,19 +98,31 @@ export function DeviceCliModal() {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs">
-      <div className="flex h-[520px] w-[640px] flex-col rounded-xl border border-gray-700 bg-[#050505] shadow-2xl overflow-hidden font-mono">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) setActiveCliModalNodeId(null);
+      }}
+    >
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="cli-terminal-title"
+        className="flex h-[520px] w-[640px] flex-col rounded-xl border border-gray-700 bg-[#050505] shadow-2xl overflow-hidden font-mono"
+      >
         {/* Terminal Header */}
         <div className="flex h-10 items-center justify-between border-b border-gray-800 bg-[#111827] px-4">
           <div className="flex items-center gap-2">
             <TermIcon className="h-4 w-4 text-emerald-400" />
-            <span className="text-xs font-semibold text-gray-200">
+            <span id="cli-terminal-title" className="text-xs font-semibold text-gray-200">
               Cisco IOS Terminal — {device.label}
             </span>
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setActiveCliModalNodeId(null)}
+              aria-label="Tutup terminal"
               className="rounded p-1 text-gray-400 hover:bg-gray-800 hover:text-white"
             >
               <X className="h-4 w-4" />

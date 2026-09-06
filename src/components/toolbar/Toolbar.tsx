@@ -33,6 +33,8 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs }: ToolbarProps)
     setStepMode,
     activeLabId,
     addSimulationLog,
+    pushToast,
+    requestConfirm,
   } = useAppStore();
 
   const [pingSource, setPingSource] = useState<string>('');
@@ -65,10 +67,13 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs }: ToolbarProps)
         if (json.nodes && json.edges) {
           loadTopology(json);
         } else {
-          alert('Format file JSON tidak valid!');
+          pushToast(
+            'error',
+            'Format file JSON tidak valid! Pastikan file berisi objek "nodes" dan "edges".'
+          );
         }
       } catch (err) {
-        alert('Gagal membaca file JSON!');
+        pushToast('error', 'Gagal membaca file JSON! File tidak dapat di-parse.');
       }
     };
     reader.readAsText(file);
@@ -76,7 +81,10 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs }: ToolbarProps)
 
   const handleExecutePing = () => {
     if (!pingSource || !pingTargetIp.trim()) {
-      alert('Pilih source PC dan ketikkan IP tujuan!');
+      pushToast(
+        'warning',
+        'Pilih host sumber pada dropdown dan ketikkan IP tujuan terlebih dahulu!'
+      );
       return;
     }
     onTriggerPing(pingSource, pingTargetIp.trim());
@@ -243,7 +251,15 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs }: ToolbarProps)
         </button>
 
         <button
-          onClick={resetTopology}
+          onClick={() =>
+            requestConfirm({
+              title: 'Reset Topologi',
+              message:
+                'Seluruh perangkat, kabel, tabel, dan log simulasi akan dihapus dari kanvas. Tindakan ini tidak bisa dibatalkan.',
+              confirmLabel: 'Reset',
+              onConfirm: resetTopology,
+            })
+          }
           className="flex items-center gap-1.5 rounded bg-[#1F2937] px-2.5 py-1.5 text-xs text-red-400 border border-[#374151] hover:bg-red-950/40"
           title="Reset Topologi"
         >

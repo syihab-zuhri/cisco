@@ -16,6 +16,7 @@ import { useAppStore } from '../../store/useAppStore';
 import { isValidIp, isValidSubnetMask } from '../../utils/ipUtils';
 import { type DeviceData } from '../../types/network';
 import { requestDhcp, requestRip } from '../../hooks/useSimulationEngine';
+import { useModalA11y } from '../../hooks/useModalA11y';
 
 export function DeviceConfigModal() {
   const activeConfigModalNodeId = useAppStore((s) => s.activeConfigModalNodeId);
@@ -38,6 +39,10 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
     addStaticRoute,
     removeStaticRoute,
   } = useAppStore();
+
+  const dialogRef = useModalA11y({
+    onClose: () => setActiveConfigModalNodeId(null),
+  });
 
   const device = node.data;
   const [selectedPortId, setSelectedPortId] = useState<string>(
@@ -244,18 +249,33 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs">
-      <div className="flex max-h-[90vh] w-[520px] flex-col rounded-xl border border-[#374151] bg-[#1F2937] shadow-2xl">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) setActiveConfigModalNodeId(null);
+      }}
+    >
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="device-config-title"
+        className="flex max-h-[90vh] w-[520px] flex-col rounded-xl border border-[#374151] bg-[#1F2937] shadow-2xl"
+      >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[#374151] px-5 py-3">
           <div className="flex items-center gap-2">
             <ShieldCheck className="h-5 w-5 text-blue-400" />
-            <span className="font-semibold text-gray-100">
+            <span
+              id="device-config-title"
+              className="font-semibold text-gray-100"
+            >
               Konfigurasi Perangkat ({device.type.toUpperCase()})
             </span>
           </div>
           <button
             onClick={() => setActiveConfigModalNodeId(null)}
+            aria-label="Tutup konfigurasi"
             className="rounded p-1 text-gray-400 hover:bg-gray-700 hover:text-white"
           >
             <X className="h-5 w-5" />

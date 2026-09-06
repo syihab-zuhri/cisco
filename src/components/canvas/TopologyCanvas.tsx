@@ -55,6 +55,10 @@ export function TopologyCanvas() {
           'ERROR',
           'Port nirkabel hanya bisa terhubung ke radio Access Point.'
         );
+        state.pushToast(
+          'error',
+          'Port nirkabel hanya bisa terhubung ke radio Access Point.'
+        );
         return;
       }
       const sourceNode = state.nodes.find((n) => n.id === params.source);
@@ -63,6 +67,10 @@ export function TopologyCanvas() {
       const targetIsAp = targetNode?.data.type === 'accessPoint';
       if (sourceIsAp === targetIsAp) {
         state.addSimulationLog('ERROR', 'Asosiasi WiFi butuh satu sisi Access Point.');
+        state.pushToast(
+          'error',
+          'Asosiasi WiFi butuh satu sisi Access Point — sisi lainnya harus PC/Laptop/Server.'
+        );
         return;
       }
       const ap = sourceIsAp
@@ -71,11 +79,33 @@ export function TopologyCanvas() {
       const client = sourceIsAp
         ? { nodeId: params.target, portId: params.targetHandle }
         : { nodeId: params.source, portId: params.sourceHandle };
-      associateWireless(client.nodeId, client.portId, ap.nodeId, ap.portId);
+      const associated = associateWireless(
+        client.nodeId,
+        client.portId,
+        ap.nodeId,
+        ap.portId
+      );
+      if (!associated) {
+        state.pushToast(
+          'error',
+          'Asosiasi WiFi gagal — SSID klien dan radio AP harus cocok. Detail di Log Event.'
+        );
+      }
       return;
     }
 
-    connectPorts(params.source, params.sourceHandle, params.target, params.targetHandle);
+    const connected = connectPorts(
+      params.source,
+      params.sourceHandle,
+      params.target,
+      params.targetHandle
+    );
+    if (!connected) {
+      state.pushToast(
+        'error',
+        'Koneksi kabel gagal — port mungkin sudah terpakai (1 kabel per port). Detail di Log Event.'
+      );
+    }
   };
 
   return (
@@ -107,8 +137,9 @@ export function TopologyCanvas() {
           size={1.5}
           variant={BackgroundVariant.Dots}
         />
-        <Controls className="!border-[#374151] !bg-[#1F2937] !text-gray-200" />
+        <Controls />
         <MiniMap
+          maskColor="rgb(11 15 25 / 0.72)"
           nodeColor={(n) => {
             if (n.data?.type === 'pc') return '#38BDF8';
             if (n.data?.type === 'laptop') return '#22D3EE';

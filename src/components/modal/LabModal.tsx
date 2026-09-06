@@ -3,10 +3,12 @@ import { GraduationCap, X, Play, CheckCircle2, Circle, Lightbulb, LogOut, PartyP
 import confetti from 'canvas-confetti';
 import { useAppStore } from '../../store/useAppStore';
 import { LAB_SCENARIOS, type LabScenario } from '../../data/labs';
+import { useModalA11y } from '../../hooks/useModalA11y';
 
 export function LabModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const { activeLabId, labCompleted, startLab, stopLab } = useAppStore();
   const [selected, setSelected] = useState<LabScenario | null>(null);
+  const dialogRef = useModalA11y({ onClose, enabled: isOpen });
 
   const activeLab = LAB_SCENARIOS.find((l) => l.id === activeLabId) ?? null;
   const allDone =
@@ -21,13 +23,24 @@ export function LabModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs">
-      <div className="flex max-h-[86vh] w-[680px] flex-col rounded-2xl border border-gray-700 bg-[#0F172A] shadow-2xl overflow-hidden">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="lab-modal-title"
+        className="flex max-h-[86vh] w-[680px] flex-col rounded-2xl border border-gray-700 bg-[#0F172A] shadow-2xl overflow-hidden"
+      >
         {/* Header */}
         <div className="flex h-12 items-center justify-between border-b border-gray-800 bg-[#1E293B] px-5">
           <div className="flex items-center gap-2.5">
             <GraduationCap className="h-5 w-5 text-amber-400" />
-            <span className="text-sm font-bold text-white">Mode Lab Praktikum</span>
+            <span id="lab-modal-title" className="text-sm font-bold text-white">Mode Lab Praktikum</span>
             {activeLab && (
               <span className="rounded bg-amber-950/70 px-2 py-0.5 text-[10px] text-amber-300 border border-amber-800/60">
                 berjalan: {activeLab.title}
@@ -36,6 +49,7 @@ export function LabModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
           </div>
           <button
             onClick={onClose}
+            aria-label="Tutup modal lab"
             className="rounded p-1 text-gray-400 hover:bg-gray-800 hover:text-white"
           >
             <X className="h-4.5 w-4.5" />

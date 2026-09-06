@@ -8,6 +8,8 @@ import { DeviceConfigModal } from './components/modal/DeviceConfigModal';
 import { DeviceCliModal } from './components/terminal/DeviceCliModal';
 import { DocumentationModal } from './components/modal/DocumentationModal';
 import { LabModal } from './components/modal/LabModal';
+import { ToastHost } from './components/ui/ToastHost';
+import { ConfirmDialog } from './components/ui/ConfirmDialog';
 import { useSimulationEngine } from './hooks/useSimulationEngine';
 
 export default function App() {
@@ -49,6 +51,8 @@ export default function App() {
         isOpen={isDocsOpen}
         onClose={() => setIsDocsOpen(false)}
       />
+      <ConfirmDialog />
+      <ToastHost />
     </div>
   );
 }

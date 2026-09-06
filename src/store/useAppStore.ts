@@ -21,6 +21,19 @@ import { generateMacAddress } from '../utils/ipUtils';
 import { type SimEvent } from '../types/protocol';
 import { LAB_SCENARIOS, evaluateLab, type LabScenario } from '../data/labs';
 
+export interface ToastItem {
+  id: string;
+  type: 'info' | 'success' | 'error' | 'warning';
+  message: string;
+}
+
+export interface ConfirmRequest {
+  title: string;
+  message: string;
+  confirmLabel: string;
+  onConfirm: () => void;
+}
+
 interface AppStoreState {
   // Canvas State
   nodes: Node<DeviceData>[];
@@ -108,6 +121,14 @@ interface AppStoreState {
   // Import / Export / Reset
   loadTopology: (data: { nodes: Node<DeviceData>[]; edges: Edge[] }) => void;
   resetTopology: () => void;
+
+  // Toast ringan (ganti alert()) & konfirmasi aksi destruktif
+  toasts: ToastItem[];
+  pushToast: (type: ToastItem['type'], message: string, durationMs?: number) => void;
+  dismissToast: (id: string) => void;
+  confirmRequest: ConfirmRequest | null;
+  requestConfirm: (req: ConfirmRequest) => void;
+  cancelConfirm: () => void;
 }
 
 const createDefaultPorts = (type: DeviceType): PhysicalPort[] => {
@@ -800,4 +821,20 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     });
     get().addSimulationLog('INFO', 'Kanvas topologi dibersihkan.');
   },
+
+  toasts: [],
+  pushToast: (type, message, durationMs) => {
+    const ttl = durationMs ?? (type === 'error' ? 6000 : 4000);
+    const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    set((state) => ({ toasts: [...state.toasts.slice(-3), { id, type, message }] }));
+    window.setTimeout(() => {
+      useAppStore.getState().dismissToast(id);
+    }, ttl);
+  },
+  dismissToast: (id) =>
+    set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) })),
+
+  confirmRequest: null,
+  requestConfirm: (req) => set({ confirmRequest: req }),
+  cancelConfirm: () => set({ confirmRequest: null }),
 }));

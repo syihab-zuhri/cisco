@@ -8,6 +8,7 @@ import {
   Cpu,
   Download,
 } from 'lucide-react';
+import { useModalA11y } from '../../hooks/useModalA11y';
 
 interface DocsModalProps {
   isOpen: boolean;
@@ -18,12 +19,24 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
   const [activeSection, setActiveSection] = useState<
     'features' | 'porting' | 'simulation' | 'cli' | 'architecture'
   >('features');
+  const dialogRef = useModalA11y({ onClose, enabled: isOpen });
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs select-none">
-      <div className="flex h-[88vh] w-[92vw] max-w-5xl flex-col rounded-2xl border border-gray-700 bg-[#0F172A] shadow-2xl overflow-hidden">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs select-none"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="docs-modal-title"
+        className="flex h-[88vh] w-[92vw] max-w-5xl flex-col rounded-2xl border border-gray-700 bg-[#0F172A] shadow-2xl overflow-hidden"
+      >
         {/* Header */}
         <div className="flex h-14 items-center justify-between border-b border-gray-800 bg-[#1E293B] px-6">
           <div className="flex items-center gap-3">
@@ -31,7 +44,7 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
               <BookOpen className="h-5 w-5 text-blue-400" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-white tracking-wide">
+              <h2 id="docs-modal-title" className="text-base font-bold text-white tracking-wide">
                 Dokumentasi Resmi & Panduan OpenPacket
               </h2>
               <p className="text-xs text-gray-400">
@@ -45,6 +58,7 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
               </span>
             <button
               onClick={onClose}
+              aria-label="Tutup dokumentasi"
               className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-800 hover:text-white transition-colors"
             >
               <X className="h-5 w-5" />

@@ -21,6 +21,7 @@ export function DeviceNode({ id, data, selected }: NodeProps) {
     deleteNode,
     setActiveConfigModalNodeId,
     setActiveCliModalNodeId,
+    requestConfirm,
   } = useAppStore();
 
   const getDeviceIcon = () => {
@@ -54,14 +55,16 @@ export function DeviceNode({ id, data, selected }: NodeProps) {
           : 'border-[#374151] hover:border-gray-500'
       }`}
     >
-      {/* Action floating buttons on hover / selected */}
-      <div className="nodrag nopan absolute -top-8 right-0 flex items-center gap-1 rounded bg-[#111827] p-1 border border-[#374151] shadow-md z-30 opacity-90 group-hover:opacity-100">
+      {/* Action floating buttons on hover / selected — tetap interaktif agar
+          hover bisa "dijangkau" dari node, reveal hanya via opacity */}
+      <div className="nodrag nopan absolute -top-8 right-0 flex items-center gap-1 rounded bg-[#111827] p-1 border border-[#374151] shadow-md z-30 opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100">
         <button
           onClick={(e) => {
             e.stopPropagation();
             setActiveConfigModalNodeId(id);
           }}
           title="Konfigurasi Perangkat (GUI)"
+          aria-label={`Konfigurasi ${deviceData.label}`}
           className="rounded p-1 text-gray-300 hover:bg-gray-700 hover:text-white"
         >
           <Settings className="h-3.5 w-3.5" />
@@ -72,6 +75,7 @@ export function DeviceNode({ id, data, selected }: NodeProps) {
             setActiveCliModalNodeId(id);
           }}
           title="Terminal CLI Cisco"
+          aria-label={`Buka terminal CLI ${deviceData.label}`}
           className="rounded p-1 text-gray-300 hover:bg-gray-700 hover:text-green-400"
         >
           <Terminal className="h-3.5 w-3.5" />
@@ -79,9 +83,15 @@ export function DeviceNode({ id, data, selected }: NodeProps) {
         <button
           onClick={(e) => {
             e.stopPropagation();
-            deleteNode(id);
+            requestConfirm({
+              title: 'Hapus Perangkat',
+              message: `Hapus ${deviceData.label}? Kabel yang terhubung juga akan dilepas.`,
+              confirmLabel: 'Hapus',
+              onConfirm: () => deleteNode(id),
+            });
           }}
           title="Hapus Perangkat"
+          aria-label={`Hapus ${deviceData.label}`}
           className="rounded p-1 text-gray-300 hover:bg-red-950/60 hover:text-red-400"
         >
           <Trash2 className="h-3.5 w-3.5" />
