@@ -11,6 +11,17 @@
 
 ---
 
+## [2026-09-06] — Version 1.3.0 (Hasil Audit UI/UX: Aksesibilitas & Polish)
+
+### Added
+- **Batch 1 (`8247068`):** hook `useModalA11y` (Escape + focus trap + scrim-click + restore fokus) untuk 4 modal dengan `role="dialog"`/`aria-modal`; `ToastHost` menggantikan `alert()` native dan menampilkan error koneksi kabel/asosiasi WiFi; `ConfirmDialog` untuk Reset Topologi & hapus perangkat; toolbar node hover/focus-only; spawn perangkat anti-tumpuk; tema gelap Controls & MiniMap React Flow; `lang="id"`.
+- **Batch 2 (`06a12e3`):** fitView otomatis via `topologyVersion` setiap loadTopology; tab Tabel difilter per tipe perangkat (CAM=switch, ARP=ber-IP, Routing+NAT=router, hub diberi penjelasan L1); teks 9–10px → 11px; checkbox 16px; `prefers-reduced-motion` (CSS + gate confetti); toolbar responsif (wrap + ikon-only <1024px); favicon branded; CLI riwayat ArrowUp/Down; aria-label seluruh tombol ikon; label form terhubung `htmlFor`/`id` + `role="alert"`.
+
+### Changed
+- **Keputusan versi:** versi aplikasi diseragamkan ke **1.3.0** (package.json, tauri.conf.json, banner CLI, docs). Versi dengan sufiks non-numerik ("1.3.0-alpha") **ditolak bundler MSI Tauri** ("pre-release identifier must be numeric-only"), sehingga sufiks prerelease tidak digunakan pada versi app; label fase tetap terdokumentasi pada judul entri CHANGELOG ini.
+
+---
+
 ## [2026-09-05] — Version 1.0.1 (Perbaikan Inti Engine, CLI & Kontrak Tipe)
 
 ### Fixed

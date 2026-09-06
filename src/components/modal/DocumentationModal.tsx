@@ -54,7 +54,7 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
           </div>
           <div className="flex items-center gap-2">
               <span className="rounded bg-blue-950/60 px-2 py-0.5 text-[11px] text-blue-300 border border-blue-800/50 font-mono">
-                Dokumentasi v1.3.0-alpha
+                Dokumentasi v1.3.0
               </span>
             <button
               onClick={onClose}
@@ -141,7 +141,7 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
                   Apa Saja yang Bisa Dilakukan oleh Web Ini?
                 </h3>
                 <p className="text-xs text-gray-300 leading-relaxed">
-                  OpenPacket adalah simulator jaringan komputer interaktif client-side yang dirancang sebagai alternatif ringan untuk media belajar praktikum jaringan komputer dan penelitian skripsi tanpa perlu menginstal aplikasi berat seperti Cisco Packet Tracer. Dokumentasi ini mencerminkan kondisi implementasi versi <b>1.3.0-alpha</b>.
+                  OpenPacket adalah simulator jaringan komputer interaktif client-side yang dirancang sebagai alternatif ringan untuk media belajar praktikum jaringan komputer dan penelitian skripsi tanpa perlu menginstal aplikasi berat seperti Cisco Packet Tracer. Dokumentasi ini mencerminkan kondisi implementasi versi <b>1.3.0</b>.
                 </p>
 
                 <div className="grid grid-cols-2 gap-3.5 pt-2">
@@ -298,7 +298,7 @@ npm run tauri dev
 npm run tauri build
 
 # Hasil installer tersimpan di:
-# ./src-tauri/target/release/bundle/nsis/OpenPacket_1.3.0-alpha_x64-setup.exe`}
+# ./src-tauri/target/release/bundle/nsis/OpenPacket_1.3.0_x64-setup.exe`}
                   </pre>
                 </div>
 

@@ -15,7 +15,7 @@ export function DeviceCliModal() {
 
   const [history, setHistory] = useState<string[]>([
     'Cisco IOS Software, C2900 Software (C2900-UNIVERSALK9-M), Version 15.1(4)M4',
-    'OpenPacket Simulated IOS Terminal v1.3.0-alpha',
+    'OpenPacket Simulated IOS Terminal v1.3.0',
     'Ketik "help" atau "?" untuk bantuan perintah.',
     '',
   ]);
@@ -59,7 +59,7 @@ export function DeviceCliModal() {
     setSession(cliSession);
     setHistory([
       'Cisco IOS Software, C2900 Software (C2900-UNIVERSALK9-M), Version 15.1(4)M4',
-      'OpenPacket Simulated IOS Terminal v1.3.0-alpha',
+      'OpenPacket Simulated IOS Terminal v1.3.0',
       'Ketik "help" atau "?" untuk bantuan perintah.',
       '',
     ]);
