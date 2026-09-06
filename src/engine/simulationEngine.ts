@@ -937,18 +937,20 @@ export class HeadlessSimulationEngine {
     } | null = null;
     for (const { dev, path } of scope) {
       if (dev.type !== 'router') continue;
-      for (const iface of dev.ports) {
-        const pool = dev.dhcpPools?.[iface.id];
-        if (
-          pool?.enabled &&
-          iface.ipAddress &&
-          isSameSubnet(iface.ipAddress, pool.network, pool.mask)
-        ) {
-          chosen = { router: dev, iface, pool, path };
-          break;
-        }
+      // Pool hanya boleh milik interface tempat DISCOVER tiba — server tidak
+      // melintasi interface lain untuk melayani segmen klien.
+      const arrivalPortId = path.at(-1)?.toPortId;
+      const iface = dev.ports.find((p) => p.id === arrivalPortId);
+      const pool = iface ? dev.dhcpPools?.[iface.id] : undefined;
+      if (
+        iface &&
+        pool?.enabled &&
+        iface.ipAddress &&
+        isSameSubnet(iface.ipAddress, pool.network, pool.mask)
+      ) {
+        chosen = { router: dev, iface, pool, path };
+        break;
       }
-      if (chosen) break;
     }
 
     if (!chosen) {

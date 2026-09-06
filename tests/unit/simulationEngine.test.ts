@@ -779,6 +779,66 @@ describe('planDhcp & NAT/PAT (v1.2.0 fase 2)', () => {
     expect(plan.events.some((e) => e.level === 'ERROR' && e.message.includes('Tidak ada server DHCP'))).toBe(true);
   });
 
+  it('regresi: pool dipilih dari interface tempat DISCOVER tiba, bukan pool pertama router', async () => {
+    // Router dua LAN ber-pool; klien berada di segmen fa0/1 (LAN kedua).
+    // Perilaku lama: klien dilayani pool fa0/0 dan menerima IP subnet yang salah.
+    const pcB = makePc('pc-b', '172.16.1.10', '00:50:79:AA:BB:0B');
+    const swB = makeSwitch('sw-b', '00:50:79:SB:01');
+    const router: DeviceData = {
+      id: 'r-1', label: 'R1', type: 'router',
+      ports: [
+        { id: 'fa0/0', name: 'FastEthernet 0/0', status: 'up', ipAddress: '10.0.0.1', subnetMask: '255.255.255.0', macAddress: '00:50:79:R1:01' },
+        { id: 'fa0/1', name: 'FastEthernet 0/1', status: 'up', ipAddress: '172.16.1.1', subnetMask: '255.255.255.0', macAddress: '00:50:79:R1:02' },
+      ],
+      dhcpPools: {
+        'fa0/0': { enabled: true, network: '10.0.0.0', mask: '255.255.255.0', startIp: '10.0.0.100', maxClients: 50 },
+        'fa0/1': { enabled: true, network: '172.16.1.0', mask: '255.255.255.0', startIp: '172.16.1.100', maxClients: 50 },
+      },
+      routes: [],
+      arpTable: {},
+    };
+    const links = [
+      { sourceNodeId: 'pc-b', sourcePortId: 'fa0', targetNodeId: 'sw-b', targetPortId: 'fa0/1' },
+      { sourceNodeId: 'sw-b', sourcePortId: 'fa0/2', targetNodeId: 'r-1', targetPortId: 'fa0/1' },
+    ];
+    const engine = new HeadlessSimulationEngine();
+    engine.setTopology([pcB, swB, router], links);
+
+    const plan = engine.planDhcp('pc-b', 'fa0');
+    const lease = plan.events.flatMap((e) => e.effects ?? []).find((e) => e.type === 'DHCP_LEASE');
+    expect(plan.summary.success).toBe(true);
+    expect(lease?.ipAddress).toBe('172.16.1.100');
+    expect(lease?.gateway).toBe('172.16.1.1');
+  });
+
+  it('regresi: klien di segmen tanpa pool tidak dilayani pool interface lain router yang sama', async () => {
+    // fa0/0 ber-pool, fa0/1 tidak; klien di segmen fa0/1 harus gagal DHCP.
+    const pcB = makePc('pc-b', '172.16.1.10', '00:50:79:AA:BB:0B');
+    const swB = makeSwitch('sw-b', '00:50:79:SB:01');
+    const router: DeviceData = {
+      id: 'r-1', label: 'R1', type: 'router',
+      ports: [
+        { id: 'fa0/0', name: 'FastEthernet 0/0', status: 'up', ipAddress: '10.0.0.1', subnetMask: '255.255.255.0', macAddress: '00:50:79:R1:01' },
+        { id: 'fa0/1', name: 'FastEthernet 0/1', status: 'up', ipAddress: '172.16.1.1', subnetMask: '255.255.255.0', macAddress: '00:50:79:R1:02' },
+      ],
+      dhcpPools: {
+        'fa0/0': { enabled: true, network: '10.0.0.0', mask: '255.255.255.0', startIp: '10.0.0.100', maxClients: 50 },
+      },
+      routes: [],
+      arpTable: {},
+    };
+    const links = [
+      { sourceNodeId: 'pc-b', sourcePortId: 'fa0', targetNodeId: 'sw-b', targetPortId: 'fa0/1' },
+      { sourceNodeId: 'sw-b', sourcePortId: 'fa0/2', targetNodeId: 'r-1', targetPortId: 'fa0/1' },
+    ];
+    const engine = new HeadlessSimulationEngine();
+    engine.setTopology([pcB, swB, router], links);
+
+    const plan = engine.planDhcp('pc-b', 'fa0');
+    expect(plan.summary.success).toBe(false);
+    expect(plan.events.some((e) => e.level === 'ERROR' && e.message.includes('Tidak ada server DHCP'))).toBe(true);
+  });
+
   it('NAT: ping publik via router NAT → src di-rewrite, translasi tercatat, dst dikembalikan di jalur balik', async () => {
     const pc = makePc('pc-1', '192.168.10.20', '00:50:79:AA:BB:01', '192.168.10.1');
     const router: DeviceData = {
