@@ -91,9 +91,6 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs }: ToolbarProps)
           <span className="text-lg font-bold tracking-wider text-white">
             OpenPacket
           </span>
-          <span className="rounded bg-blue-950/60 px-2 py-0.5 text-xs text-blue-400 border border-blue-800/50">
-            v1.0.0
-          </span>
         </div>
 
         <div className="h-4 w-px bg-gray-700 mx-1" />
