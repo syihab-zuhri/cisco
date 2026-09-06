@@ -8,6 +8,7 @@ Simulator jaringan komputer edukatif yang ringan, 100% offline, dan gratis — a
 - **Simulasi protokol deterministik**: RFC 826 (ARP), RFC 791 (IPv4 subnetting & routing), RFC 792 (ICMP Echo) di Web Worker — termasuk **ping ke IP publik (8.8.8.8) lewat Cloud Internet tersimulasi** dan **jaringan nirkabel** (AP menjembatani WiFi ↔ kabel)
 - **Layanan & fitur enterprise**: DHCP (DORA beranimasi, router sebagai server), NAT/PAT dengan tabel translasi, VLAN 802.1Q + trunking + inter-VLAN routing (router-on-a-stick), dan RIPv2 dengan animasi konvergensi
 - **Simulation Mode ala Packet Tracer**: timeline event deterministik, Step Mode (1 event per klik), PDU Inspector header L2/L3/L4 per hop, dan Table Viewer CAM/ARP/Routing/NAT real-time
+- **Mode Lab Praktikum**: 3 skenario misi berpandu (perbaiki gateway, NAT internet, hubungkan VLAN) dengan topologi terkunci dan verifikasi objektif otomatis
 - **Animasi paket** (amplop PDU meluncur di kabel, ARP vs ICMP berbeda warna) dengan kontrol kecepatan 0.5x/1x/2x + Pause/Resume
 - **Konfigurasi dual-mode**: form GUI dan terminal Cisco IOS mini (10 perintah P0: `enable`, `configure terminal`, `hostname`, `interface`, `ip address`, `no shutdown`, `shutdown`, `show ip interface brief`, `show ip route`, `ping`) — tersinkronisasi dua arah
 - **Template topologi siap pakai** (P2P, LAN switch, dual-LAN via router, dll.)

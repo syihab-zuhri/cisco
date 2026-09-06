@@ -9,6 +9,7 @@ import {
   Send,
   StepForward,
   ChevronLast,
+  GraduationCap,
 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { pauseSimulation, resumeSimulation, simStepNext } from '../../hooks/useSimulationEngine';
@@ -16,9 +17,10 @@ import { pauseSimulation, resumeSimulation, simStepNext } from '../../hooks/useS
 interface ToolbarProps {
   onTriggerPing: (sourceNodeId: string, targetIp: string) => void;
   onOpenDocs: () => void;
+  onOpenLabs: () => void;
 }
 
-export function Toolbar({ onTriggerPing, onOpenDocs }: ToolbarProps) {
+export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs }: ToolbarProps) {
   const {
     nodes,
     edges,
@@ -29,6 +31,7 @@ export function Toolbar({ onTriggerPing, onOpenDocs }: ToolbarProps) {
     simulationStatus,
     stepMode,
     setStepMode,
+    activeLabId,
     addSimulationLog,
   } = useAppStore();
 
@@ -201,6 +204,19 @@ export function Toolbar({ onTriggerPing, onOpenDocs }: ToolbarProps) {
 
       {/* Persistence & Tools */}
       <div className="flex items-center gap-2">
+        <button
+          onClick={onOpenLabs}
+          title="Mode Lab Praktikum"
+          className={`flex items-center gap-1.5 rounded px-2.5 py-1.5 text-xs border transition-colors ${
+            activeLabId
+              ? 'bg-amber-600 text-white border-amber-500 font-bold'
+              : 'bg-amber-600/25 text-amber-300 border-amber-500/50 hover:bg-amber-600 hover:text-white'
+          }`}
+        >
+          <GraduationCap className="h-3.5 w-3.5" />
+          <span className="font-semibold">{activeLabId ? 'Lab Aktif' : 'Lab'}</span>
+        </button>
+
         <button
           onClick={onOpenDocs}
           className="flex items-center gap-1.5 rounded bg-blue-600/30 px-2.5 py-1.5 text-xs text-blue-300 border border-blue-500/50 hover:bg-blue-600 hover:text-white transition-colors"

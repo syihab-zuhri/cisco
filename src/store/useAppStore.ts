@@ -19,6 +19,7 @@ import {
 } from '../types/network';
 import { generateMacAddress } from '../utils/ipUtils';
 import { type SimEvent } from '../types/protocol';
+import { LAB_SCENARIOS, evaluateLab, type LabScenario } from '../data/labs';
 
 interface AppStoreState {
   // Canvas State
@@ -94,6 +95,15 @@ interface AppStoreState {
   setInspectorEvent: (event: SimEvent | null) => void;
   setInspectorOpen: (open: boolean) => void;
   setInspectorAutoFollow: (value: boolean) => void;
+
+  // Mode Lab Praktikum (P1): topologi terkunci + verifikasi otomatis
+  activeLabId: string | null;
+  labCompleted: Record<string, boolean>;
+  lastPingResult: { sourceNodeId: string; targetIp: string; success: boolean } | null;
+  startLab: (lab: LabScenario) => void;
+  stopLab: () => void;
+  setLastPingResult: (result: { sourceNodeId: string; targetIp: string; success: boolean }) => void;
+  checkLabObjectives: () => void;
 
   // Import / Export / Reset
   loadTopology: (data: { nodes: Node<DeviceData>[]; edges: Edge[] }) => void;
@@ -244,6 +254,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   addDevice: (type, position) => {
+    if (get().activeLabId) {
+      get().addSimulationLog('ERROR', 'Topologi lab terkunci — tidak bisa menambah perangkat.');
+      return;
+    }
     deviceCounters[type] += 1;
     const label = `${DEVICE_LABEL_PREFIX[type]}-${deviceCounters[type]}`;
     const id = `${type}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
@@ -271,6 +285,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   deleteNode: (nodeId) => {
+    if (get().activeLabId) {
+      get().addSimulationLog('ERROR', 'Topologi lab terkunci — tidak bisa menghapus perangkat.');
+      return;
+    }
     const node = get().nodes.find((n) => n.id === nodeId);
     const connectedEdges = get().edges.filter(
       (e) => e.source === nodeId || e.target === nodeId
@@ -325,6 +343,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   connectPorts: (sourceNodeId, sourcePortId, targetNodeId, targetPortId) => {
+    if (get().activeLabId) {
+      get().addSimulationLog('ERROR', 'Topologi lab terkunci — kabel tidak bisa diubah.');
+      return false;
+    }
     const { nodes, edges } = get();
     if (sourceNodeId === targetNodeId) return false;
 
@@ -489,6 +511,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   disconnectEdge: (edgeId) => {
+    if (get().activeLabId) {
+      get().addSimulationLog('ERROR', 'Topologi lab terkunci — kabel tidak bisa dilepas.');
+      return;
+    }
     const { edges } = get();
     const edge = edges.find((e) => e.id === edgeId);
     if (!edge) return;
@@ -668,7 +694,49 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   setInspectorOpen: (open) => set({ inspectorOpen: open }),
   setInspectorAutoFollow: (value) => set({ inspectorAutoFollow: value }),
 
+  activeLabId: null,
+  labCompleted: {},
+  lastPingResult: null,
+  startLab: (lab) => {
+    const nodes = JSON.parse(JSON.stringify(lab.nodes));
+    const edges = JSON.parse(JSON.stringify(lab.edges));
+    get().loadTopology({ nodes, edges });
+    set({ activeLabId: lab.id, labCompleted: {}, lastPingResult: null });
+    get().addSimulationLog('INFO', `Lab dimulai: ${lab.title} — topologi terkunci.`);
+  },
+  stopLab: () => {
+    set({ activeLabId: null, labCompleted: {} });
+    get().addSimulationLog('INFO', 'Lab dihentikan. Kanvas terbuka kembali.');
+  },
+  setLastPingResult: (result) => {
+    set({ lastPingResult: result });
+    get().checkLabObjectives();
+  },
+  checkLabObjectives: () => {
+    const { activeLabId, nodes, lastPingResult, labCompleted } = get();
+    if (!activeLabId) return;
+    const lab = LAB_SCENARIOS.find((l) => l.id === activeLabId);
+    if (!lab) return;
+    const result = evaluateLab(lab, { nodes, lastPing: lastPingResult });
+    // Monoton: objektif yang pernah terverifikasi tetap tercentang
+    const merged = { ...labCompleted };
+    let changed = false;
+    for (const [key, value] of Object.entries(result)) {
+      if (value && !merged[key]) {
+        merged[key] = true;
+        changed = true;
+        const objective = lab.objectives.find((o) => o.id === key);
+        get().addSimulationLog('SUCCESS', `Lab: objektif tercapai — ${objective?.description ?? key}`);
+      }
+    }
+    if (changed) set({ labCompleted: merged });
+  },
+
   loadTopology: (data) => {
+    if (get().activeLabId) {
+      get().addSimulationLog('ERROR', 'Topologi lab terkunci — tidak bisa memuat topologi/template lain.');
+      return;
+    }
     // Sinkronkan counter penamaan dengan label yang dimuat agar tidak ada nama duplikat.
     const counters: Record<DeviceType, number> = { ...EMPTY_DEVICE_COUNTERS };
     for (const n of data.nodes) {

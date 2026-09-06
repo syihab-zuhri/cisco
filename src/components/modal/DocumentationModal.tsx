@@ -41,7 +41,7 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
           </div>
           <div className="flex items-center gap-2">
               <span className="rounded bg-blue-950/60 px-2 py-0.5 text-[10px] text-blue-300 border border-blue-800/50 font-mono">
-                Dokumentasi v1.2.0
+                Dokumentasi v1.3.0
               </span>
             <button
               onClick={onClose}
@@ -139,7 +139,7 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
                       <li>Drag-and-drop 8 jenis perangkat: PC, Laptop, Server, Switch L2, Hub, <b>Access Point</b>, Router L3, dan <b>Cloud Internet</b>.</li>
                       <li>Pengkabelan fisik dengan aturan <b>Port Singularity</b> + <b>asosiasi WiFi via SSID</b> (satu radio AP melayani banyak klien).</li>
                       <li>Garis kabel & asosiasi nirkabel (garis putus-putus ungu ber-SSID) dengan label port interaktif.</li>
-                      <li>10 katalog template siap pakai: P2P, LAN, routing, nirkabel+internet, VLAN, dan RIP.</li>
+                      <li>12 katalog template siap pakai: P2P, LAN, routing, nirkabel+internet, VLAN, dan RIP.</li>
                     </ul>
                   </div>
 

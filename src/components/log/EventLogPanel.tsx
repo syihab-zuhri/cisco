@@ -94,6 +94,14 @@ export function EventLogPanel() {
 
   const dragStartYRef = useRef<number>(0);
   const dragStartHeightRef = useRef<number>(0);
+  const simListRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll timeline mengikuti event yang sedang diputar
+  useEffect(() => {
+    if (activeTab === 'sim' && simListRef.current) {
+      simListRef.current.scrollTop = simListRef.current.scrollHeight;
+    }
+  }, [simPlayedUpTo, activeTab]);
 
   const selectedDevice = nodes.find((n) => n.id === selectedNodeId)?.data;
 
@@ -286,7 +294,10 @@ export function EventLogPanel() {
       )}
 
       {!isCollapsed && activeTab === 'sim' && (
-        <div className="flex-1 overflow-y-auto p-2.5 font-mono text-[11px] space-y-0.5 bg-[#090D16]">
+        <div
+          ref={simListRef}
+          className="flex-1 overflow-y-auto p-2.5 font-mono text-[11px] space-y-0.5 bg-[#090D16]"
+        >
           {simPlan.length === 0 ? (
             <div className="text-gray-500 italic py-2 text-center">
               Belum ada rencana simulasi. Kirim ping — seluruh aliran event akan direncanakan di sini

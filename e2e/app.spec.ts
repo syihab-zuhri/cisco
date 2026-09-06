@@ -121,4 +121,28 @@ test.describe('OpenPacket happy path', () => {
       timeout: 60_000,
     });
   });
+
+  test('lab 1: perbaiki gateway lalu ping lintas subnet terverifikasi otomatis', async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.goto('/');
+
+    await page.getByRole('button', { name: /^Lab$/ }).click();
+    await page.getByText('Lab 1 · Perbaiki Gateway yang Salah').click();
+    await page.getByRole('button', { name: /Mulai Lab/ }).click();
+    await expect(page.getByText('PC-Staff', { exact: true })).toBeVisible();
+
+    // Perbaiki gateway PC-Staff lewat form konfigurasi
+    const pcNode = page.locator('.react-flow__node', { hasText: 'PC-Staff' });
+    await pcNode.locator('button[title="Konfigurasi Perangkat (GUI)"]').click();
+    await page.getByPlaceholder('e.g. 192.168.1.1', { exact: true }).fill('192.168.1.1');
+    await page.getByRole('button', { name: 'Simpan Konfigurasi' }).click();
+
+    // Ping lintas subnet — kedua objektif lab harus tercentang otomatis
+    await page.locator('select').selectOption('pc-1');
+    await page.getByPlaceholder(/Target IP/).fill('192.168.2.20');
+    await page.getByRole('button', { name: 'Send Ping' }).click();
+
+    await page.getByRole('button', { name: /Lab Aktif/ }).click();
+    await expect(page.getByText(/Semua objektif tercapai/)).toBeVisible({ timeout: 30_000 });
+  });
 });

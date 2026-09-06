@@ -37,6 +37,27 @@
 
 ---
 
+## [2026-09-06] — Version 1.3.0-alpha (Mode Lab Praktikum + Perbaikan CI Desktop)
+
+Pilar D (P1 blueprint) yang ditunda dari v1.2.0, kini terealisasi.
+
+### Added
+- **Mode Lab Praktikum** (`src/data/labs.ts` + `LabModal`): 3 skenario berpandu dengan **topologi terkunci** (tambah/hapus perangkat & kabel diblok, template ditolak) dan **verifikasi objektif otomatis** — checklist tercentang sendiri (monoton) dari evaluator murni `evaluateLab` saat ping/konfigurasi terdeteksi; konfetti saat semua objektif tercapai; petunjuk berjenjang per lab:
+  1. *Perbaiki Gateway yang Salah* (contoh langsung blueprint PLANNING §5.2),
+  2. *Nyalakan Internet dengan NAT* (aktifkan NAT → ping 8.8.8.8 → tabel translasi),
+  3. *Hubungkan Dua VLAN* (lengkapi sub-interface router-on-a-stick).
+- Tombol **Lab** di Toolbar (badge "Lab Aktif" saat berjalan); palet perangkat dinonaktifkan visual saat topologi terkunci.
+- Pesan log per objektif tercapai; kanvas bebas kembali setelah keluar lab.
+
+### Fixed
+- **CI job Desktop (Tauri build) gagal di semua push sebelumnya**: `[lib] openpacket_lib` di `Cargo.toml` tanpa `src/lib.rs` membuat `cargo metadata` error ("can't find library") — bagian `[lib]` dihapus (aplikasi desktop-only, target binary tunggal).
+- PDU Inspector kini menampilkan segmen **DHCP** (message type, yiaddr, server ID); hitungan template di dokumentasi dikoreksi (12); timeline auto-scroll mengikuti event yang diputar.
+
+### Status Gate
+- `Gate C` — 70 unit test + 6 E2E hijau. Tersisa manual: benchmark paritas Packet Tracer v8.2 (Sprint 7) & UAT SUS.
+
+---
+
 ## [2026-09-06] — Version 1.2.0 (Fase 3: VLAN 802.1Q, Router-on-a-Stick, RIPv2)
 
 Pilar C dari rencana v1.2.0 — rilis final.

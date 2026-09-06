@@ -43,6 +43,11 @@ function ensureWorker(): Worker {
         const resolver = pendingPings.get(msg.payload.requestId);
         pendingPings.delete(msg.payload.requestId);
         resolver?.(msg.payload);
+        store.setLastPingResult({
+          sourceNodeId: msg.payload.sourceNodeId,
+          targetIp: msg.payload.targetIp,
+          success: msg.payload.success,
+        });
         store.setSimulationStatus('idle');
         setTimeout(() => useAppStore.getState().setActivePackets([]), 600);
         break;
@@ -53,6 +58,7 @@ function ensureWorker(): Worker {
         pendingDhcp.delete(msg.payload.requestId);
         resolver?.(msg.payload);
         store.setSimulationStatus('idle');
+        store.checkLabObjectives();
         setTimeout(() => useAppStore.getState().setActivePackets([]), 600);
         break;
       }
@@ -62,6 +68,7 @@ function ensureWorker(): Worker {
         pendingRip.delete(msg.payload.requestId);
         resolver?.(msg.payload);
         store.setSimulationStatus('idle');
+        store.checkLabObjectives();
         setTimeout(() => useAppStore.getState().setActivePackets([]), 600);
         break;
       }

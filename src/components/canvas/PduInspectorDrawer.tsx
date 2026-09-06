@@ -144,6 +144,26 @@ export function PduInspectorDrawer() {
                 <HeaderRow label="Payload" value={`${(pdu.segment as IcmpPacket).payloadBytes} bytes`} />
               </div>
             ) : null}
+
+            {/* DHCP (UDP 67/68) */}
+            {pdu.dhcp && (
+              <div className="rounded border border-amber-800/60 bg-black/40 p-2.5">
+                <div className="text-[10px] font-bold uppercase text-amber-400 mb-1.5">
+                  L4 payload · DHCP (UDP 67/68)
+                </div>
+                <HeaderRow
+                  label="Message"
+                  value={
+                    { 1: '1 (Discover)', 2: '2 (Offer)', 3: '3 (Request)', 5: '5 (Ack)' }[
+                      pdu.dhcp.messageType
+                    ] ?? String(pdu.dhcp.messageType)
+                  }
+                />
+                <HeaderRow label="Client MAC" value={pdu.dhcp.clientId} />
+                {pdu.dhcp.yiaddr && <HeaderRow label="yiaddr (IP)" value={pdu.dhcp.yiaddr} />}
+                {pdu.dhcp.serverId && <HeaderRow label="Server ID" value={pdu.dhcp.serverId} />}
+              </div>
+            )}
           </>
         )}
       </div>

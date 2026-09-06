@@ -26,6 +26,7 @@ interface DevicePaletteProps {
 
 export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
   const { addDevice, loadTopology, addSimulationLog } = useAppStore();
+  const labLocked = useAppStore((s) => s.activeLabId !== null);
   const [activeTab, setActiveTab] = useState<'devices' | 'templates'>('devices');
 
   const handleAdd = (type: DeviceType) => {
@@ -117,8 +118,9 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
 
           <div className="flex flex-col gap-2">
             <button
+              disabled={labLocked}
               onClick={() => handleAdd('pc')}
-              className="flex items-center justify-between rounded-lg border border-[#374151] bg-[#1F2937] p-2.5 transition-all hover:border-sky-500 hover:bg-[#374151]"
+              className="flex items-center justify-between rounded-lg border disabled:opacity-40 disabled:cursor-not-allowed border-[#374151] bg-[#1F2937] p-2.5 transition-all hover:border-sky-500 hover:bg-[#374151]"
             >
               <div className="flex items-center gap-2.5">
                 <div className="rounded bg-sky-950/60 p-1.5 border border-sky-800/50">
@@ -133,8 +135,9 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
             </button>
 
             <button
+              disabled={labLocked}
               onClick={() => handleAdd('laptop')}
-              className="flex items-center justify-between rounded-lg border border-[#374151] bg-[#1F2937] p-2.5 transition-all hover:border-cyan-500 hover:bg-[#374151]"
+              className="flex items-center justify-between rounded-lg border disabled:opacity-40 disabled:cursor-not-allowed border-[#374151] bg-[#1F2937] p-2.5 transition-all hover:border-cyan-500 hover:bg-[#374151]"
             >
               <div className="flex items-center gap-2.5">
                 <div className="rounded bg-cyan-950/60 p-1.5 border border-cyan-800/50">
@@ -149,8 +152,9 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
             </button>
 
             <button
+              disabled={labLocked}
               onClick={() => handleAdd('server')}
-              className="flex items-center justify-between rounded-lg border border-[#374151] bg-[#1F2937] p-2.5 transition-all hover:border-violet-500 hover:bg-[#374151]"
+              className="flex items-center justify-between rounded-lg border disabled:opacity-40 disabled:cursor-not-allowed border-[#374151] bg-[#1F2937] p-2.5 transition-all hover:border-violet-500 hover:bg-[#374151]"
             >
               <div className="flex items-center gap-2.5">
                 <div className="rounded bg-violet-950/60 p-1.5 border border-violet-800/50">
@@ -165,8 +169,9 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
             </button>
 
             <button
+              disabled={labLocked}
               onClick={() => handleAdd('switch')}
-              className="flex items-center justify-between rounded-lg border border-[#374151] bg-[#1F2937] p-2.5 transition-all hover:border-emerald-500 hover:bg-[#374151]"
+              className="flex items-center justify-between rounded-lg border disabled:opacity-40 disabled:cursor-not-allowed border-[#374151] bg-[#1F2937] p-2.5 transition-all hover:border-emerald-500 hover:bg-[#374151]"
             >
               <div className="flex items-center gap-2.5">
                 <div className="rounded bg-emerald-950/60 p-1.5 border border-emerald-800/50">
@@ -181,8 +186,9 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
             </button>
 
             <button
+              disabled={labLocked}
               onClick={() => handleAdd('hub')}
-              className="flex items-center justify-between rounded-lg border border-[#374151] bg-[#1F2937] p-2.5 transition-all hover:border-orange-500 hover:bg-[#374151]"
+              className="flex items-center justify-between rounded-lg border disabled:opacity-40 disabled:cursor-not-allowed border-[#374151] bg-[#1F2937] p-2.5 transition-all hover:border-orange-500 hover:bg-[#374151]"
             >
               <div className="flex items-center gap-2.5">
                 <div className="rounded bg-orange-950/60 p-1.5 border border-orange-800/50">
@@ -197,8 +203,9 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
             </button>
 
             <button
+              disabled={labLocked}
               onClick={() => handleAdd('accessPoint')}
-              className="flex items-center justify-between rounded-lg border border-[#374151] bg-[#1F2937] p-2.5 transition-all hover:border-fuchsia-500 hover:bg-[#374151]"
+              className="flex items-center justify-between rounded-lg border disabled:opacity-40 disabled:cursor-not-allowed border-[#374151] bg-[#1F2937] p-2.5 transition-all hover:border-fuchsia-500 hover:bg-[#374151]"
             >
               <div className="flex items-center gap-2.5">
                 <div className="rounded bg-fuchsia-950/60 p-1.5 border border-fuchsia-800/50">
@@ -213,8 +220,9 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
             </button>
 
             <button
+              disabled={labLocked}
               onClick={() => handleAdd('router')}
-              className="flex items-center justify-between rounded-lg border border-[#374151] bg-[#1F2937] p-2.5 transition-all hover:border-amber-500 hover:bg-[#374151]"
+              className="flex items-center justify-between rounded-lg border disabled:opacity-40 disabled:cursor-not-allowed border-[#374151] bg-[#1F2937] p-2.5 transition-all hover:border-amber-500 hover:bg-[#374151]"
             >
               <div className="flex items-center gap-2.5">
                 <div className="rounded bg-amber-950/60 p-1.5 border border-amber-800/50">
@@ -229,8 +237,9 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
             </button>
 
             <button
+              disabled={labLocked}
               onClick={() => handleAdd('cloud')}
-              className="flex items-center justify-between rounded-lg border border-[#374151] bg-[#1F2937] p-2.5 transition-all hover:border-sky-400 hover:bg-[#374151]"
+              className="flex items-center justify-between rounded-lg border disabled:opacity-40 disabled:cursor-not-allowed border-[#374151] bg-[#1F2937] p-2.5 transition-all hover:border-sky-400 hover:bg-[#374151]"
             >
               <div className="flex items-center gap-2.5">
                 <div className="rounded bg-sky-950/60 p-1.5 border border-sky-800/50">

@@ -5,9 +5,9 @@ description = "OpenPacket - Lightweight Educational Network Simulator"
 authors = ["OpenPacket Team"]
 edition = "2021"
 
-[lib]
-name = "openpacket_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
+# Aplikasi desktop-only: target binary tunggal (src/main.rs), tanpa lib.
+# Bagian [lib] sengaja dihilangkan — keberadaannya tanpa src/lib.rs
+# membuat `cargo metadata` gagal ("can't find library openpacket_lib").
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
