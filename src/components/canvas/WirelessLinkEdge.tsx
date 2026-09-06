@@ -1,10 +1,10 @@
-import { useState } from 'react';
 import {
   BaseEdge,
   EdgeLabelRenderer,
   getBezierPath,
   type EdgeProps,
 } from '@xyflow/react';
+import { X } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 
 /**
@@ -32,6 +32,7 @@ export function WirelessLinkEdge({
   data,
   source,
   target,
+  selected,
   interactionWidth = 28,
 }: EdgeProps & { interactionWidth?: number }) {
   const [edgePath, labelX, labelY] = getBezierPath({
@@ -43,8 +44,7 @@ export function WirelessLinkEdge({
     targetPosition,
   });
 
-  const { activePackets } = useAppStore();
-  const [isHovered, setIsHovered] = useState<boolean>(false);
+  const { activePackets, disconnectEdge } = useAppStore();
 
   const ssid = (data?.ssid as string | undefined) ?? 'WiFi';
 
@@ -56,7 +56,9 @@ export function WirelessLinkEdge({
   });
 
   const isForwardDirection = activePacket && activePacket.sourceNodeId === source;
-  const shouldShowBadge = Boolean(activePacket || isHovered);
+  // Badge tampil HANYA jika asosiasi diklik (terpilih) atau ada paket aktif — tanpa hover
+  const shouldShowBadge = Boolean(activePacket || selected);
+  const isEmphasized = Boolean(activePacket || selected);
   const color = activePacket ? packetColor(activePacket.currentProtocol) : '#8B5CF6';
 
   return (
@@ -66,8 +68,6 @@ export function WirelessLinkEdge({
         fill="none"
         strokeOpacity={0}
         strokeWidth={interactionWidth}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
         className="react-flow__edge-interaction cursor-pointer"
       />
 
@@ -75,9 +75,9 @@ export function WirelessLinkEdge({
       <path
         d={edgePath}
         fill="none"
-        stroke={activePacket ? color : isHovered ? '#A78BFA' : '#8B5CF6'}
-        strokeWidth={activePacket || isHovered ? 8 : 6}
-        strokeOpacity={activePacket || isHovered ? 0.5 : 0.15}
+        stroke={activePacket ? color : selected ? '#A78BFA' : '#8B5CF6'}
+        strokeWidth={isEmphasized ? 8 : 6}
+        strokeOpacity={isEmphasized ? 0.5 : 0.15}
         strokeDasharray="2 8"
         strokeLinecap="round"
         className="pointer-events-none transition-all duration-200"
@@ -87,8 +87,8 @@ export function WirelessLinkEdge({
         id={`wifi-path-${id}`}
         path={edgePath}
         style={{
-          stroke: activePacket ? color : isHovered ? '#A78BFA' : '#8B5CF6',
-          strokeWidth: activePacket || isHovered ? 3 : 2.5,
+          stroke: activePacket ? color : selected ? '#A78BFA' : '#8B5CF6',
+          strokeWidth: isEmphasized ? 3 : 2.5,
           strokeDasharray: '7 6',
         }}
       />
@@ -131,8 +131,6 @@ export function WirelessLinkEdge({
 
       <EdgeLabelRenderer>
         <div
-          onMouseEnter={() => setIsHovered(true)}
-          onMouseLeave={() => setIsHovered(false)}
           style={{
             position: 'absolute',
             transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
@@ -143,7 +141,7 @@ export function WirelessLinkEdge({
           className={`nodrag nopan flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-mono text-gray-100 border-2 shadow-xl backdrop-blur-md transition-all duration-200 cursor-pointer ${
             activePacket
               ? 'bg-violet-950/95 border-violet-400 scale-110 shadow-violet-500/50'
-              : 'bg-[#111827]/95 border-violet-500/80 hover:scale-105'
+              : 'bg-[#111827]/95 border-violet-500/80'
           }`}
         >
           <span
@@ -154,6 +152,20 @@ export function WirelessLinkEdge({
           <span className="font-bold text-violet-300 font-sans tracking-wide">
             {activePacket ? activePacket.type : `WiFi: ${ssid}`}
           </span>
+          {/* Tombol putus asosiasi — hanya saat dipilih */}
+          {selected && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                disconnectEdge(id);
+              }}
+              title="Putus asosiasi WiFi ini"
+              aria-label="Putus asosiasi WiFi"
+              className="ml-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-950/80 text-red-300 hover:bg-red-600 hover:text-white"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          )}
         </div>
       </EdgeLabelRenderer>
     </>

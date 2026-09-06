@@ -1,11 +1,5 @@
-import { useState } from 'react';
-import {
-  BaseEdge,
-  EdgeLabelRenderer,
-  getBezierPath,
-  type EdgeProps,
-} from '@xyflow/react';
-import { Zap } from 'lucide-react';
+import { BaseEdge, EdgeLabelRenderer, getBezierPath, type EdgeProps } from '@xyflow/react';
+import { X, Zap } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 
 
@@ -31,6 +25,7 @@ export function NetworkCableEdge({
   data,
   source,
   target,
+  selected,
   interactionWidth = 28,
 }: EdgeProps & { interactionWidth?: number }) {
   const [edgePath, labelX, labelY] = getBezierPath({
@@ -42,8 +37,7 @@ export function NetworkCableEdge({
     targetPosition,
   });
 
-  const { activePackets } = useAppStore();
-  const [isHovered, setIsHovered] = useState<boolean>(false);
+  const { activePackets, disconnectEdge } = useAppStore();
 
   const sourcePortName = data?.sourcePortName as string | undefined;
   const targetPortName = data?.targetPortName as string | undefined;
@@ -58,22 +52,21 @@ export function NetworkCableEdge({
 
   const isForwardDirection = activePacket && activePacket.sourceNodeId === source;
 
-  // Badge tampil HANYA jika ada paket aktif atau kursor mouse berada di atas kabel/badge
-  const shouldShowBadge = Boolean(activePacket || isHovered);
+  // Badge tampil HANYA jika kabel diklik (terpilih) atau ada paket aktif — tanpa hover
+  const shouldShowBadge = Boolean(activePacket || selected);
+  const isEmphasized = Boolean(activePacket || selected);
 
   // SVG Unique Path ID untuk <animateMotion> agar aman di semua browser
   const pathId = `cable-path-${id}`;
 
   return (
     <>
-      {/* Invisible wide interaction path with hover listeners */}
+      {/* Invisible wide interaction path (klik untuk memilih kabel) */}
       <path
         d={edgePath}
         fill="none"
         strokeOpacity={0}
         strokeWidth={interactionWidth}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
         className="react-flow__edge-interaction cursor-pointer"
       />
 
@@ -84,12 +77,12 @@ export function NetworkCableEdge({
         stroke={
           activePacket
             ? packetColor(activePacket.currentProtocol)
-            : isHovered
+            : selected
             ? '#34D399'
             : '#059669'
         }
-        strokeWidth={activePacket || isHovered ? 8 : 6}
-        strokeOpacity={activePacket || isHovered ? 0.6 : 0.25}
+        strokeWidth={isEmphasized ? 8 : 6}
+        strokeOpacity={isEmphasized ? 0.6 : 0.25}
         className="pointer-events-none transition-all duration-200"
       />
 
@@ -102,10 +95,10 @@ export function NetworkCableEdge({
           ...style,
           stroke: activePacket
             ? packetColor(activePacket.currentProtocol)
-            : isHovered
+            : selected
             ? '#34D399'
             : '#10B981',
-          strokeWidth: activePacket || isHovered ? 4 : 3,
+          strokeWidth: isEmphasized ? 4 : 3,
           strokeDasharray: activePacket ? '8 4' : '6 3',
         }}
       />
@@ -162,11 +155,9 @@ export function NetworkCableEdge({
         </g>
       )}
 
-      {/* Interactive Label badge on the cable (SHOWS ON HOVER OR IN-FLIGHT) */}
+      {/* Interactive Label badge on the cable (SHOWS ON CLICK/SELECTED OR IN-FLIGHT) */}
       <EdgeLabelRenderer>
         <div
-          onMouseEnter={() => setIsHovered(true)}
-          onMouseLeave={() => setIsHovered(false)}
           style={{
             position: 'absolute',
             transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
@@ -177,16 +168,12 @@ export function NetworkCableEdge({
           className={`nodrag nopan flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-mono text-gray-200 border-2 shadow-xl backdrop-blur-md transition-all duration-200 cursor-pointer ${
             activePacket
               ? 'bg-blue-950/95 border-cyan-400 scale-110 shadow-cyan-500/50'
-              : 'bg-[#111827]/95 border-emerald-500/80 hover:scale-105'
+              : 'bg-[#111827]/95 border-emerald-500/80'
           }`}
         >
           <span
             className={`flex h-2 w-2 rounded-full ${
-              activePacket
-                ? activePacket.currentProtocol === 'ARP'
-                  ? 'bg-emerald-400 animate-ping'
-                  : 'bg-cyan-400 animate-ping'
-                : 'bg-emerald-400 animate-pulse'
+              activePacket ? 'bg-emerald-400 animate-ping' : 'bg-emerald-400 animate-pulse'
             }`}
           />
           {activePacket ? (
@@ -203,6 +190,20 @@ export function NetworkCableEdge({
                 {targetPortName || 'Port'}
               </span>
             </>
+          )}
+          {/* Tombol hapus kabel — hanya saat kabel dipilih */}
+          {selected && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                disconnectEdge(id);
+              }}
+              title="Lepas kabel ini"
+              aria-label="Lepas kabel"
+              className="ml-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-950/80 text-red-300 hover:bg-red-600 hover:text-white"
+            >
+              <X className="h-3 w-3" />
+            </button>
           )}
         </div>
       </EdgeLabelRenderer>

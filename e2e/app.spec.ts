@@ -145,4 +145,23 @@ test.describe('OpenPacket happy path', () => {
     await page.getByRole('button', { name: /Lab Aktif/ }).click();
     await expect(page.getByText(/Semua objektif tercapai/)).toBeVisible({ timeout: 30_000 });
   });
+
+  test('kabel: klik untuk memilih → badge + tombol hapus muncul → kabel terlepas', async ({ page }) => {
+    await page.goto('/');
+
+    await page.getByRole('button', { name: 'Template' }).click();
+    await page.getByRole('button', { name: 'Terapkan' }).first().click();
+    await expect(page.getByText('PC-1', { exact: true })).toBeVisible();
+
+    // Klik kabel → terpilih → badge + tombol ✕ muncul (tanpa hover).
+    // Kabel lurus punya bounding box setinggi 0px — klik via koordinat mouse.
+    const edgeBox = await page.locator('.react-flow__edge-interaction').first().boundingBox();
+    await page.mouse.click(edgeBox!.x + edgeBox!.width / 2, edgeBox!.y);
+    await expect(page.getByLabel('Lepas kabel')).toBeVisible();
+
+    await page.getByLabel('Lepas kabel').click();
+
+    // Kabel lepas: kedua port kembali DOWN + log konfirmasi
+    await expect(page.getByText(/Link DOWN/)).toBeVisible();
+  });
 });
