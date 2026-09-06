@@ -164,4 +164,22 @@ test.describe('OpenPacket happy path', () => {
     // Kabel lepas: kedua port kembali DOWN + log konfirmasi
     await expect(page.getByText(/Link DOWN/)).toBeVisible();
   });
+
+  test('anotasi: square & teks custom bisa ditambah, dipilih, dan diwarnai', async ({ page }) => {
+    await page.goto('/');
+
+    // Square muncul di kanvas → klik untuk memilih → swatch warna muncul
+    await page.getByRole('button', { name: /Square/ }).click();
+    const squareNode = page.locator('.react-flow__node-squareNode');
+    await expect(squareNode).toBeVisible();
+    await squareNode.click();
+    await expect(page.getByTitle('Warna Merah')).toBeVisible();
+    await page.getByTitle('Warna Merah').click();
+
+    // Teks custom: default "Catatan" tampil di kanvas
+    await page.getByRole('button', { name: /^Teks$/ }).click();
+    const textNode = page.locator('.react-flow__node-textNoteNode');
+    await expect(textNode).toBeVisible();
+    await expect(textNode.getByText('Catatan')).toBeVisible();
+  });
 });

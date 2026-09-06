@@ -15,6 +15,8 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Wifi,
+  Square,
+  Type,
 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { type DeviceType } from '../../types/network';
@@ -26,23 +28,20 @@ interface DevicePaletteProps {
 }
 
 export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
-  const { addDevice, loadTopology, addSimulationLog } = useAppStore();
+  const { addDevice, addSquare, addText, loadTopology, addSimulationLog } = useAppStore();
   const labLocked = useAppStore((s) => s.activeLabId !== null);
   const reactFlow = useReactFlow();
   const [activeTab, setActiveTab] = useState<'devices' | 'templates'>('devices');
 
-  const handleAdd = (type: DeviceType) => {
-    // 1) Perangkat baru muncul di TENGAH viewport kanvas yang terlihat,
-    //    bukan posisi acak — mudah langsung ditemukan pengguna.
+  // Titik tengah viewport kanvas + offset kaskade 28px per node yang menumpuk,
+  // sehingga perangkat/anotasi sebelumnya tetap terlihat sebagian.
+  const spawnPosition = (): { x: number; y: number } => {
     const canvasEl = document.querySelector('.react-flow');
     const rect = canvasEl?.getBoundingClientRect();
     const centerX = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
     const centerY = rect ? rect.top + rect.height / 2 : window.innerHeight / 2;
     const center = reactFlow.screenToFlowPosition({ x: centerX, y: centerY });
 
-    // 2) Cascade: jika sudah ada perangkat di sekitar titik tengah, geser
-    //    perangkat baru 28px diagonal per tumpukan sehingga perangkat
-    //    sebelumnya tetap terlihat sebagian (tidak tertutup penuh).
     const existing = useAppStore.getState().nodes;
     const stackedNearCenter = existing.filter(
       (n) =>
@@ -50,8 +49,21 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
         Math.abs(n.position.y - center.y) < 160
     ).length;
     const shift = Math.min(stackedNearCenter, 10) * 28;
+    return { x: center.x + shift, y: center.y + shift };
+  };
 
-    addDevice(type, { x: center.x + shift, y: center.y + shift });
+  const handleAdd = (type: DeviceType) => {
+    addDevice(type, spawnPosition());
+  };
+
+  const handleAddSquare = () => {
+    addSquare(spawnPosition());
+    addSimulationLog('INFO', 'Square anotasi ditambahkan — klik untuk ganti warna & resize.');
+  };
+
+  const handleAddText = () => {
+    addText(spawnPosition());
+    addSimulationLog('INFO', 'Teks anotasi ditambahkan — dobel-klik untuk mengedit isinya.');
   };
 
   const handleApplyTemplate = (template: TopologyTemplate) => {
@@ -273,6 +285,43 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
               </div>
               <Plus className="h-4 w-4 text-gray-400" />
             </button>
+          </div>
+
+          {/* Anotasi kanvas: square & teks custom */}
+          <div className="mt-6 border-t border-[#374151] pt-3">
+            <h3 className="text-[11px] font-semibold uppercase tracking-wider text-violet-400">
+              Anotasi (di belakang perangkat)
+            </h3>
+            <div className="mt-2 flex flex-col gap-2">
+              <button
+                disabled={labLocked}
+                onClick={handleAddSquare}
+                title="Tambah square anotasi"
+                className="flex items-center justify-between rounded-lg border border-[#374151] bg-[#1F2937] p-2.5 transition-all hover:border-violet-500 hover:bg-[#374151] disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className="rounded bg-violet-950/60 p-1.5 border border-violet-800/50">
+                    <Square className="h-4 w-4 text-violet-400" />
+                  </div>
+                  <span className="text-left text-xs font-medium text-gray-100">Square</span>
+                </div>
+                <Plus className="h-4 w-4 text-gray-400" />
+              </button>
+              <button
+                disabled={labLocked}
+                onClick={handleAddText}
+                title="Tambah teks anotasi"
+                className="flex items-center justify-between rounded-lg border border-[#374151] bg-[#1F2937] p-2.5 transition-all hover:border-blue-500 hover:bg-[#374151] disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className="rounded bg-blue-950/60 p-1.5 border border-blue-800/50">
+                    <Type className="h-4 w-4 text-blue-400" />
+                  </div>
+                  <span className="text-left text-xs font-medium text-gray-100">Teks</span>
+                </div>
+                <Plus className="h-4 w-4 text-gray-400" />
+              </button>
+            </div>
           </div>
 
           <div className="mt-6 border-t border-[#374151] pt-3">

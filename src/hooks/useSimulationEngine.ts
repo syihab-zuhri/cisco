@@ -138,7 +138,10 @@ export async function requestRip(): Promise<RipResultPayload> {
   const w = ensureWorker();
   store.setSimulationStatus('running');
 
-  const devices = store.nodes.map((n) => n.data);
+  // Node anotasi (square/teks) bukan perangkat — tidak ikut ke engine.
+  const devices = store.nodes
+    .filter((n) => (n.data.nodeKind ?? 'device') === 'device')
+    .map((n) => n.data);
   const links = store.edges.map((e) => ({
     sourceNodeId: e.source,
     sourcePortId: e.sourceHandle ?? 'fa0',
@@ -167,7 +170,10 @@ export async function requestDhcp(
   const w = ensureWorker();
   store.setSimulationStatus('running');
 
-  const devices = store.nodes.map((n) => n.data);
+  // Node anotasi (square/teks) bukan perangkat — tidak ikut ke engine.
+  const devices = store.nodes
+    .filter((n) => (n.data.nodeKind ?? 'device') === 'device')
+    .map((n) => n.data);
   const links = store.edges.map((e) => ({
     sourceNodeId: e.source,
     sourcePortId: e.sourceHandle ?? 'fa0',
@@ -206,7 +212,10 @@ export async function requestPing(
   store.setSimulationStatus('running');
 
   // Kirim snapshot topologi terbaru setiap ping (single state of truth: store).
-  const devices = store.nodes.map((n) => n.data);
+  // Node anotasi (square/teks) bukan perangkat — tidak ikut ke engine.
+  const devices = store.nodes
+    .filter((n) => (n.data.nodeKind ?? 'device') === 'device')
+    .map((n) => n.data);
   const links = store.edges.map((e) => ({
     sourceNodeId: e.source,
     sourcePortId: e.sourceHandle ?? 'fa0',

@@ -14,9 +14,13 @@ import { useAppStore } from '../../store/useAppStore';
 import { DeviceNode } from './DeviceNode';
 import { NetworkCableEdge } from './NetworkCableEdge';
 import { WirelessLinkEdge } from './WirelessLinkEdge';
+import { SquareNode } from './SquareNode';
+import { TextNoteNode } from './TextNoteNode';
 
 const nodeTypes = {
   deviceNode: DeviceNode,
+  squareNode: SquareNode,
+  textNoteNode: TextNoteNode,
 };
 
 const edgeTypes = {
@@ -161,6 +165,8 @@ export function TopologyCanvas() {
         <MiniMap
           maskColor="rgb(11 15 25 / 0.72)"
           nodeColor={(n) => {
+            if (n.data?.nodeKind === 'square') return '#64748B';
+            if (n.data?.nodeKind === 'text') return '#93C5FD';
             if (n.data?.type === 'pc') return '#38BDF8';
             if (n.data?.type === 'laptop') return '#22D3EE';
             if (n.data?.type === 'server') return '#A78BFA';

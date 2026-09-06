@@ -91,6 +91,19 @@ export type DeviceData = {
   ripEnabled?: boolean; // for Router: ikut serta RIPv2
   macTable?: Record<string, string>; // for Switch: MAC -> portId
   arpTable?: Record<string, string>; // IP -> MAC
+
+  // ---- Anotasi kanvas (v1.4.0): square & teks custom di belakang perangkat ----
+  /** 'device' (default) | 'square' | 'text' — pembeda node anotasi vs perangkat. */
+  nodeKind?: 'device' | 'square' | 'text';
+  /** Square: warna isi (rgba semi-transparan) & border. */
+  fill?: string;
+  stroke?: string;
+  /** Square: ukuran dalam px. */
+  width?: number;
+  height?: number;
+  /** Teks custom: konten & ukuran font. */
+  text?: string;
+  fontSize?: number;
 };
 
 // Kontrak kabel fisik / asosiasi nirkabel yang dikirim ke simulation engine (INV-002).

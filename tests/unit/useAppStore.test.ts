@@ -156,3 +156,49 @@ describe('useAppStore — asosiasi WiFi (INV-003 amandemen: radio 1-ke-N)', () =
     expect(useAppStore.getState().edges).toHaveLength(0);
   });
 });
+
+describe('useAppStore — anotasi kanvas (square & teks, v1.4.0)', () => {
+  beforeEach(() => {
+    useAppStore.getState().resetTopology();
+  });
+
+  it('addSquare membuat node anotasi dengan zIndex -1 (di belakang perangkat)', () => {
+    useAppStore.getState().addSquare({ x: 100, y: 100 });
+    const sq = useAppStore.getState().nodes[0];
+    expect(sq.type).toBe('squareNode');
+    expect(sq.zIndex).toBe(-1);
+    expect(sq.data.nodeKind).toBe('square');
+    expect(sq.data.ports).toHaveLength(0); // bukan perangkat — tanpa port
+    expect(sq.data.width).toBeGreaterThan(0);
+  });
+
+  it('updateAnnotation mengubah warna & ukuran square', () => {
+    useAppStore.getState().addSquare({ x: 0, y: 0 });
+    const id = useAppStore.getState().nodes[0].id;
+    useAppStore.getState().updateAnnotation(id, {
+      fill: 'rgba(239,68,68,0.14)',
+      stroke: '#EF4444',
+      width: 420,
+      height: 300,
+    });
+    const sq = useAppStore.getState().nodes[0].data;
+    expect(sq.fill).toBe('rgba(239,68,68,0.14)');
+    expect(sq.stroke).toBe('#EF4444');
+    expect(sq.width).toBe(420);
+    expect(sq.height).toBe(300);
+  });
+
+  it('addText membuat teks default; updateAnnotation mengubah isi & font', () => {
+    useAppStore.getState().addText({ x: 0, y: 0 });
+    const textNode = useAppStore.getState().nodes[0];
+    expect(textNode.type).toBe('textNoteNode');
+    expect(textNode.data.nodeKind).toBe('text');
+    expect(textNode.data.text).toBe('Catatan');
+    expect(textNode.data.fontSize).toBe(14);
+
+    useAppStore.getState().updateAnnotation(textNode.id, { text: 'LAN A', fontSize: 22 });
+    const updated = useAppStore.getState().nodes[0].data;
+    expect(updated.text).toBe('LAN A');
+    expect(updated.fontSize).toBe(22);
+  });
+});

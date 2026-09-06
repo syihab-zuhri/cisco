@@ -118,6 +118,14 @@ interface AppStoreState {
   setLastPingResult: (result: { sourceNodeId: string; targetIp: string; success: boolean }) => void;
   checkLabObjectives: () => void;
 
+  // Anotasi kanvas (v1.4.0): square & teks custom di belakang perangkat
+  addSquare: (position: { x: number; y: number }) => void;
+  addText: (position: { x: number; y: number }) => void;
+  updateAnnotation: (
+    nodeId: string,
+    updates: Partial<Pick<DeviceData, 'fill' | 'stroke' | 'width' | 'height' | 'text' | 'fontSize'>>
+  ) => void;
+
   // Import / Export / Reset
   /** Naik setiap kali topologi baru dimuat (template/import/lab) — pemicu fitView kanvas. */
   topologyVersion: number;
@@ -753,6 +761,64 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       }
     }
     if (changed) set({ labCompleted: merged });
+  },
+
+  addSquare: (position) => {
+    if (get().activeLabId) {
+      get().addSimulationLog('ERROR', 'Topologi lab terkunci — tidak bisa menambah anotasi.');
+      return;
+    }
+    const id = `square-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const newNode: Node<DeviceData> = {
+      id,
+      type: 'squareNode',
+      position,
+      zIndex: -1, // selalu di belakang perangkat
+      data: {
+        id,
+        label: '',
+        type: 'pc',
+        nodeKind: 'square',
+        ports: [],
+        fill: 'rgba(59,130,246,0.16)',
+        stroke: '#3B82F6',
+        width: 260,
+        height: 160,
+      },
+    };
+    set((state) => ({ nodes: [...state.nodes, newNode] }));
+  },
+
+  addText: (position) => {
+    if (get().activeLabId) {
+      get().addSimulationLog('ERROR', 'Topologi lab terkunci — tidak bisa menambah anotasi.');
+      return;
+    }
+    const id = `text-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const newNode: Node<DeviceData> = {
+      id,
+      type: 'textNoteNode',
+      position,
+      zIndex: 10, // teks di atas perangkat agar selalu terbaca
+      data: {
+        id,
+        label: '',
+        type: 'pc',
+        nodeKind: 'text',
+        ports: [],
+        text: 'Catatan',
+        fontSize: 14,
+      },
+    };
+    set((state) => ({ nodes: [...state.nodes, newNode] }));
+  },
+
+  updateAnnotation: (nodeId, updates) => {
+    set((state) => ({
+      nodes: state.nodes.map((node) =>
+        node.id === nodeId ? { ...node, data: { ...node.data, ...updates } } : node
+      ),
+    }));
   },
 
   loadTopology: (data) => {

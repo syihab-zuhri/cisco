@@ -24,6 +24,7 @@ import {
   Globe,
   ShieldCheck,
   Zap,
+  Square,
 } from 'lucide-react';
 import { useModalA11y } from '../../hooks/useModalA11y';
 
@@ -440,6 +441,7 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
                       { icon: <Route className="h-3.5 w-3.5" />, text: 'VLAN 802.1Q + inter-VLAN + RIPv2' },
                       { icon: <Wifi className="h-3.5 w-3.5" />, text: 'Nirkabel via SSID (AP + adapter WiFi)' },
                       { icon: <ScanLine className="h-3.5 w-3.5" />, text: 'Step Mode, timeline & PDU Inspector' },
+                      { icon: <Square className="h-3.5 w-3.5" />, text: 'Anotasi: square & teks custom di belakang perangkat' },
                     ].map((f, i) => (
                       <div key={i} className="flex items-center gap-2 rounded-lg border border-gray-800 bg-black/30 px-3 py-2 text-xs text-gray-300">
                         <span className="text-blue-400">{f.icon}</span>
@@ -505,6 +507,16 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
                     <li><b>Radio WiFi 1-ke-N</b>: satu radio AP melayani banyak klien; tiap klien hanya satu AP (SSID harus sama persis).</li>
                     <li><b>Drag-to-connect</b>: tarik dari titik port ke port tujuan — kabel ethernet atau asosiasi WiFi terdeteksi otomatis.</li>
                     <li><b>VLAN</b>: port switch access hanya bicara dengan port se-VLAN; trunk membawa semuanya.</li>
+                  </ul>
+                </Card>
+
+                <Card>
+                  <div className="text-xs font-bold text-gray-100 mb-2">Anotasi kanvas (square & teks)</div>
+                  <ul className="text-xs text-gray-400 space-y-1.5 list-disc list-inside leading-relaxed">
+                    <li>Tombol <b>Square</b> &amp; <b>Teks</b> di palet (bagian Anotasi) → muncul di tengah layar, digeser bebas.</li>
+                    <li><b>Square</b> berada di belakang perangkat (untuk menandai area): klik → pilih warna, tarik handle kanan-bawah untuk resize.</li>
+                    <li><b>Teks</b>: dobel-klik untuk mengedit isi; saat dipilih, atur ukuran font lewat tombol −/+.</li>
+                    <li>Keduanya ikut tersimpan &amp; dimuat di file JSON topologi.</li>
                   </ul>
                 </Card>
 

@@ -11,6 +11,22 @@
 
 ---
 
+---
+
+## [2026-09-06] — Version 1.4.0 (Anotasi Kanvas: Square & Teks Custom)
+
+### Added
+- **Square anotasi di belakang perangkat** (`zIndex -1`): tombol baru di palet (bagian Anotasi) → muncul di tengah viewport → digeser bebas, **di-resize lewat handle kanan-bawah**, dan **warna isi/border dipilih dari 6 preset swatch** saat kotak dipilih. Untuk mengelompokkan/menandai area topologi.
+- **Teks custom kanvas**: tombol **Teks** → dobel-klik untuk mengedit isi, kontrol **ukuran font (10-32px)** lewat tombol -/+ saat dipilih; dirender di atas perangkat agar selalu terbaca.
+- **Anotasi ikut tersimpan & dimuat** di file JSON topologi (save/load otomatis karena berupa node React Flow).
+- Perangkat & anotasi terpisah bersih: node anotasi **tidak pernah dikirim ke simulation engine** (filter `nodeKind` di semua jalur ping/DHCP/RIP) dan tidak masuk daftar sumber ping.
+- Interaksi konsisten: anotasi memakai spawn tengah-viewport + kaskade yang sama dengan perangkat; terkunci saat Mode Lab.
+
+### Status Gate
+- `Gate C` — 75 unit test + 7 E2E hijau.
+
+---
+
 ## [2026-09-06] — Version 1.3.0 (Hasil Audit UI/UX: Aksesibilitas & Polish)
 
 ### Added
@@ -19,32 +35,6 @@
 
 ### Changed
 - **Keputusan versi:** versi aplikasi diseragamkan ke **1.3.0** (package.json, tauri.conf.json, banner CLI, docs). Versi dengan sufiks non-numerik ("1.3.0-alpha") **ditolak bundler MSI Tauri** ("pre-release identifier must be numeric-only"), sehingga sufiks prerelease tidak digunakan pada versi app; label fase tetap terdokumentasi pada judul entri CHANGELOG ini.
-
----
-
-## [2026-09-05] — Version 1.0.1 (Perbaikan Inti Engine, CLI & Kontrak Tipe)
-
-### Fixed
-- **Routing L3 engine (`src/engine/simulationEngine.ts`)**: ping lintas subnet kini benar-benar diteruskan router ke subnet tujuan (sebelumnya berhenti di gateway sehingga ping "sukses" keliru). Router melakukan longest-prefix match atas connected network + static route, decrement TTL per router (drop "Time Exceeded" saat TTL habis), dan mendeteksi routing loop.
-- **Kontrak IPC (`INV-002`)**: `SIMULATION_STEP` didaftarkan resmi di `src/types/ipc.ts` sebagai pesan internal engine→worker; pesan mati `STEP_ANIMATION_COMPLETE` dihapus (pacing animasi memakai delay worker, bukan handshake).
-- **Reverse path ARP Reply / ICMP Reply**: arah hop balik kini benar (endpoint ditukar), memperbaiki CAM learning port dan arah animasi paket.
-- **Type-check**: ~40 error TypeScript diselesaikan (constraint `Record<string, unknown>` pada `Node<T>` @xyflow/react v12, unused imports, implicit `any`, `vite-env.d.ts` baru untuk import CSS). `npm run type-check` kini 0 error.
-- **CLI (`src/engine/cli/cliEngine.ts`)**: parser dipindah dari komponen React ke engine murni (INV-001), `ping` dan `show ip route` kini benar-benar berfungsi, dan `ip address` divalidasi (`isValidIp`/`isValidSubnetMask`) sebelum menyimpan.
-- **Sinkronisasi `deviceCounters`** saat load topologi/template — device baru tidak lagi berpotensi bernama duplikat.
-
-### Added
-- **Multi-echo ping**: echo pertama dianimasikan penuh; echo berikutnya deterministik via cache (warm-cache tanpa ARP ulang).
-- **Format output ping ganda**: `windows` (dari PC, 4 echo) dan `ios` (dari terminal, 5 echo) sesuai konteks — resolusi kontradiksi SRS FR-007 vs PRD-002 AC-SIM-001 (lihat Decisions).
-- **Kontrol kecepatan simulasi** kini berfungsi: `SET_SIMULATION_SPEED` mengubah delay per hop worker (800ms ÷ speed).
-- **Unit test**: 18 test (dari 2) mencakup routing L3 via router + TTL, warm cache ARP, no-route, tanpa gateway, subnetting (`ipUtils`), dan state machine CLI.
-
-### Decisions (resolusi kontradiksi blueprint, disetujui pemilik project)
-1. **Format output ping mengikuti perilaku Packet Tracer**: dari PC/Toolbar memakai format Windows (`Reply from ...: bytes=32 time<1ms TTL=128` — memenuhi AC-SIM-001 PRD-002); dari terminal IOS memakai format Cisco (`!!!!! Success rate is 100 percent (5/5)` — memenuhi FR-007 SRS).
-2. **10 perintah CLI P0 kanonik**: `enable`, `configure terminal`, `hostname`, `interface`, `ip address`, `no shutdown`, `shutdown`, `show ip interface brief`, `show ip route`, `ping`; `exit`/`end` sebagai navigasi mode; `show mac-address-table` & `show arp` dipertahankan sebagai ekstensi yang sudah ada.
-3. **Pacing animasi memakai delay worker** (800ms ÷ speed), bukan handshake `STEP_ANIMATION_COMPLETE` — deteksi selesai animasi SVG `animateMotion` deklaratif memerlukan timer yang setara dengan delay itu sendiri. Pesan handshake dihapus dari kontrak IPC.
-
-### Status Gate
-- `Gate C` — implementasi P0 berjalan; type-check & unit test hijau; benchmark paritas Packet Tracer (Sprint 7) belum dieksekusi.
 
 ---
 
@@ -174,6 +164,32 @@ Pilar A dari rencana v1.2.0 (disetujui pemilik project). Fase 2 (DHCP + NAT) dan
 ### Notes
 - Benchmark komparasi manual vs Packet Tracer v8.2 (Sprint 7) tetap penugasan manusia; sisi simulator sudah terkunci oleh test paritas otomatis.
 - E2E butuh Microsoft Edge (standar di Windows 10/11) atau jalankan `npx playwright install chromium` bila jaringan mengizinkan.
+
+### Status Gate
+- `Gate C` — implementasi P0 berjalan; type-check & unit test hijau; benchmark paritas Packet Tracer (Sprint 7) belum dieksekusi.
+
+---
+
+## [2026-09-05] — Version 1.0.1 (Perbaikan Inti Engine, CLI & Kontrak Tipe)
+
+### Fixed
+- **Routing L3 engine (`src/engine/simulationEngine.ts`)**: ping lintas subnet kini benar-benar diteruskan router ke subnet tujuan (sebelumnya berhenti di gateway sehingga ping "sukses" keliru). Router melakukan longest-prefix match atas connected network + static route, decrement TTL per router (drop "Time Exceeded" saat TTL habis), dan mendeteksi routing loop.
+- **Kontrak IPC (`INV-002`)**: `SIMULATION_STEP` didaftarkan resmi di `src/types/ipc.ts` sebagai pesan internal engine→worker; pesan mati `STEP_ANIMATION_COMPLETE` dihapus (pacing animasi memakai delay worker, bukan handshake).
+- **Reverse path ARP Reply / ICMP Reply**: arah hop balik kini benar (endpoint ditukar), memperbaiki CAM learning port dan arah animasi paket.
+- **Type-check**: ~40 error TypeScript diselesaikan (constraint `Record<string, unknown>` pada `Node<T>` @xyflow/react v12, unused imports, implicit `any`, `vite-env.d.ts` baru untuk import CSS). `npm run type-check` kini 0 error.
+- **CLI (`src/engine/cli/cliEngine.ts`)**: parser dipindah dari komponen React ke engine murni (INV-001), `ping` dan `show ip route` kini benar-benar berfungsi, dan `ip address` divalidasi (`isValidIp`/`isValidSubnetMask`) sebelum menyimpan.
+- **Sinkronisasi `deviceCounters`** saat load topologi/template — device baru tidak lagi berpotensi bernama duplikat.
+
+### Added
+- **Multi-echo ping**: echo pertama dianimasikan penuh; echo berikutnya deterministik via cache (warm-cache tanpa ARP ulang).
+- **Format output ping ganda**: `windows` (dari PC, 4 echo) dan `ios` (dari terminal, 5 echo) sesuai konteks — resolusi kontradiksi SRS FR-007 vs PRD-002 AC-SIM-001 (lihat Decisions).
+- **Kontrol kecepatan simulasi** kini berfungsi: `SET_SIMULATION_SPEED` mengubah delay per hop worker (800ms ÷ speed).
+- **Unit test**: 18 test (dari 2) mencakup routing L3 via router + TTL, warm cache ARP, no-route, tanpa gateway, subnetting (`ipUtils`), dan state machine CLI.
+
+### Decisions (resolusi kontradiksi blueprint, disetujui pemilik project)
+1. **Format output ping mengikuti perilaku Packet Tracer**: dari PC/Toolbar memakai format Windows (`Reply from ...: bytes=32 time<1ms TTL=128` — memenuhi AC-SIM-001 PRD-002); dari terminal IOS memakai format Cisco (`!!!!! Success rate is 100 percent (5/5)` — memenuhi FR-007 SRS).
+2. **10 perintah CLI P0 kanonik**: `enable`, `configure terminal`, `hostname`, `interface`, `ip address`, `no shutdown`, `shutdown`, `show ip interface brief`, `show ip route`, `ping`; `exit`/`end` sebagai navigasi mode; `show mac-address-table` & `show arp` dipertahankan sebagai ekstensi yang sudah ada.
+3. **Pacing animasi memakai delay worker** (800ms ÷ speed), bukan handshake `STEP_ANIMATION_COMPLETE` — deteksi selesai animasi SVG `animateMotion` deklaratif memerlukan timer yang setara dengan delay itu sendiri. Pesan handshake dihapus dari kontrak IPC.
 
 ### Status Gate
 - `Gate C` — implementasi P0 berjalan; type-check & unit test hijau; benchmark paritas Packet Tracer (Sprint 7) belum dieksekusi.
