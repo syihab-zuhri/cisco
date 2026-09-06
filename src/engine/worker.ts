@@ -1,4 +1,5 @@
 import { HeadlessSimulationEngine } from './simulationEngine';
+import { createPauseGate, createStepGate } from './gates';
 import {
   type DhcpResultPayload,
   type PingResultPayload,
@@ -13,37 +14,9 @@ import { type SimEvent } from '../types/protocol';
 const BASE_HOP_MS = 800;
 const LOG_PACE_MS = 60;
 let hopDelayMs = BASE_HOP_MS;
-let paused = false;
-let resumeWaiters: Array<() => void> = [];
-let stepMode = false;
-let stepWaiters: Array<() => void> = [];
 
-/** Gerbang pause: engine menunggu di sini sebelum setiap hop saat simulasi dijeda. */
-async function pauseGate(): Promise<void> {
-  while (paused) {
-    await new Promise<void>((resolve) => resumeWaiters.push(resolve));
-  }
-}
-
-function resume(): void {
-  paused = false;
-  const waiters = resumeWaiters;
-  resumeWaiters = [];
-  waiters.forEach((wake) => wake());
-}
-
-/** Gerbang step mode: setiap event menunggu SIM_STEP_NEXT sebelum diputar. */
-async function stepGate(): Promise<void> {
-  while (stepMode) {
-    await new Promise<void>((resolve) => stepWaiters.push(resolve));
-  }
-}
-
-function wakeSteppers(): void {
-  const waiters = stepWaiters;
-  stepWaiters = [];
-  waiters.forEach((wake) => wake());
-}
+const pauseGate = createPauseGate();
+const stepGate = createStepGate();
 
 const engine = new HeadlessSimulationEngine(
   async (event) => {
@@ -72,24 +45,22 @@ self.onmessage = async (e: MessageEvent<UIWorkerMessage>) => {
     }
 
     case 'PAUSE_SIMULATION': {
-      paused = true;
+      pauseGate.pause();
       break;
     }
 
     case 'RESUME_SIMULATION': {
-      resume();
+      pauseGate.resume();
       break;
     }
 
     case 'ENABLE_STEP_MODE': {
-      stepMode = msg.payload.enabled;
-      if (!stepMode) wakeSteppers();
+      stepGate.setEnabled(msg.payload.enabled);
       break;
     }
 
     case 'SIM_STEP_NEXT': {
-      const next = stepWaiters.shift();
-      next?.();
+      stepGate.next();
       break;
     }
 
@@ -211,9 +182,10 @@ async function playPlan(requestId: string, events: SimEvent[]): Promise<void> {
   } as WorkerUIMessage);
 
   for (const event of events) {
-    await pauseGate();
-    if (stepMode) {
-      await stepGate();
+    await pauseGate.wait();
+    if (stepGate.isEnabled()) {
+      // Step mode: tanpa pacing — satu klik Next = tepat satu event.
+      await stepGate.wait();
     } else {
       await new Promise((resolve) =>
         setTimeout(resolve, event.kind === 'LOG' ? LOG_PACE_MS : hopDelayMs)

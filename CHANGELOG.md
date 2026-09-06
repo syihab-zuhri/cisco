@@ -11,6 +11,18 @@
 
 ---
 
+## [2026-09-07] — Version 1.4.2 (Hotfix: Step Mode "Next" Tidak Berfungsi)
+
+### Fixed
+- **Klik Next di Step Mode tidak memutar event apa-apa** (dilaporkan pengguna): gerbang step di worker memakai `while (stepMode)` yang **re-arm sendiri** — stepMode tetap true setelah satu sinyal next, sehingga waiter baru langsung mengantre lagi dan event tidak pernah dilepas. Gerbang diganti tunggu-sekali-per-event (`if`) dan diekstrak ke modul teruji `src/engine/gates.ts` (pause gate ikut direfaktor ke sana).
+- **5 unit test gerbang baru** (`tests/unit/gates.test.ts`) mengunci kontrak: satu next = tepat satu event; next() berlebih tidak bocor; menonaktifkan step melepas semua waiter; pause/resume semantics.
+- **E2E baru**: aktifkan Step → Send Ping → klik Next → counter timeline "1/N event diputar" → Next lagi → "2/N".
+
+### Status Gate
+- `Gate C` — 80 unit test + 9 E2E hijau.
+
+---
+
 ## [2026-09-06] — Version 1.4.1 (Katalog Template Tergrup + Topologi Klasik)
 
 ### Added

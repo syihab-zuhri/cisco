@@ -182,4 +182,24 @@ test.describe('OpenPacket happy path', () => {
     await expect(textNode).toBeVisible();
     await expect(textNode.getByText('Catatan')).toBeVisible();
   });
+
+  test('step mode: klik Next memutar tepat satu event per klik', async ({ page }) => {
+    await page.goto('/');
+
+    // Aktifkan Step Mode SEBELUM ping
+    await page.getByRole('button', { name: /^Step$/ }).click();
+    await page.getByRole('button', { name: 'Template' }).click();
+    await page.getByRole('button', { name: 'Terapkan' }).first().click();
+    await page.locator('select').selectOption('pc-1');
+    await page.getByPlaceholder(/Target IP/).fill('192.168.1.20');
+    await page.getByRole('button', { name: 'Send Ping' }).click();
+
+    // Satu klik Next = tepat satu event diputar (regresi bug "Next tidak berfungsi")
+    await page.getByRole('button', { name: 'Next' }).click();
+    await page.getByRole('button', { name: /Simulasi/ }).click();
+    await expect(page.getByText(/1\/\d+ event diputar/)).toBeVisible({ timeout: 10_000 });
+
+    await page.getByRole('button', { name: 'Next' }).click();
+    await expect(page.getByText(/2\/\d+ event diputar/)).toBeVisible();
+  });
 });
