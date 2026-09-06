@@ -66,7 +66,10 @@ test.describe('OpenPacket happy path', () => {
     await page.goto('/');
 
     await page.getByRole('button', { name: /PC Host/ }).click();
-    await page.locator('button[title="Konfigurasi Perangkat (GUI)"]').first().click();
+    // Toolbar aksi node kini muncul saat node DIKLIK (bukan hover)
+    const pcNodeBaru = page.locator('.react-flow__node', { hasText: 'PC-1' });
+    await pcNodeBaru.click();
+    await pcNodeBaru.locator('button[title="Konfigurasi Perangkat (GUI)"]').click();
 
     await page.getByPlaceholder('e.g. 192.168.1.10').fill('192.168.1.77');
     await page.getByRole('button', { name: 'Simpan Konfigurasi' }).click();
@@ -82,7 +85,10 @@ test.describe('OpenPacket happy path', () => {
     await page.getByRole('button', { name: 'Terapkan' }).first().click();
     await expect(page.getByText('PC-1', { exact: true })).toBeVisible();
 
-    await page.locator('button[title="Terminal CLI Cisco"]').first().click();
+    // Pilih node dulu (toolbar aksi muncul saat klik), lalu buka terminal
+    const cliPcNode = page.locator('.react-flow__node', { hasText: 'PC-1' });
+    await cliPcNode.click();
+    await cliPcNode.locator('button[title="Terminal CLI Cisco"]').click();
     const input = page.locator('div.fixed input');
 
     await input.fill('enable');
@@ -131,8 +137,9 @@ test.describe('OpenPacket happy path', () => {
     await page.getByRole('button', { name: /Mulai Lab/ }).click();
     await expect(page.getByText('PC-Staff', { exact: true })).toBeVisible();
 
-    // Perbaiki gateway PC-Staff lewat form konfigurasi
+    // Perbaiki gateway PC-Staff lewat form konfigurasi (klik node → toolbar muncul)
     const pcNode = page.locator('.react-flow__node', { hasText: 'PC-Staff' });
+    await pcNode.click();
     await pcNode.locator('button[title="Konfigurasi Perangkat (GUI)"]').click();
     await page.getByPlaceholder('e.g. 192.168.1.1', { exact: true }).fill('192.168.1.1');
     await page.getByRole('button', { name: 'Simpan Konfigurasi' }).click();

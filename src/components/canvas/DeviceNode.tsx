@@ -55,9 +55,13 @@ export function DeviceNode({ id, data, selected }: NodeProps) {
           : 'border-[#374151] hover:border-gray-500'
       }`}
     >
-      {/* Action floating buttons on hover / selected — tetap interaktif agar
-          hover bisa "dijangkau" dari node, reveal hanya via opacity */}
-      <div className="nodrag nopan absolute -top-8 right-0 flex items-center gap-1 rounded bg-[#111827] p-1 border border-[#374151] shadow-md z-30 opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100">
+      {/* Action buttons — muncul saat node DIKLIK (terpilih), bukan hover.
+          Tetap nodrag/nopan agar klik tombol tidak menyeret node. */}
+      <div
+        className={`nodrag nopan absolute -top-8 right-0 flex items-center gap-1 rounded bg-[#111827] p-1 border border-[#374151] shadow-md z-30 transition-all duration-150 ${
+          selected ? 'opacity-100 scale-100' : 'opacity-0 scale-95 pointer-events-none'
+        }`}
+      >
         <button
           onClick={(e) => {
             e.stopPropagation();
