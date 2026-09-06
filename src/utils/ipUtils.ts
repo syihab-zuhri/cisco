@@ -65,3 +65,13 @@ export function prefixLength(mask: string): number {
 export function networkAddress(ip: string, mask: string): string {
   return numberToIp((ipToNumber(ip) & ipToNumber(mask)) >>> 0);
 }
+
+/** Apakah IP termasuk rentang privat RFC 1918 (10/8, 172.16/12, 192.168/16). */
+export function isPrivateIp(ip: string): boolean {
+  if (!isValidIp(ip)) return false;
+  const [a, b] = ip.split('.').map(Number);
+  if (a === 10) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 192 && b === 168) return true;
+  return false;
+}

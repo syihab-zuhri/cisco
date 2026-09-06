@@ -58,7 +58,12 @@ function checkObjective(check: LabCheck, input: LabEvalInput): boolean {
     case 'gateway':
       return device?.defaultGateway === check.gateway;
     case 'device-ip':
-      return !!device?.ports.some((p) => p.ipAddress?.startsWith(check.ipPrefix));
+      // Cek port utama DAN sub-interface (router-on-a-stick menyimpan IP di sini)
+      return !!device?.ports.some(
+        (p) =>
+          p.ipAddress?.startsWith(check.ipPrefix) ||
+          p.subInterfaces?.some((s) => s.ipAddress?.startsWith(check.ipPrefix))
+      );
     case 'nat-entry':
       return (device?.natTable?.length ?? 0) > 0;
     case 'route-learned':

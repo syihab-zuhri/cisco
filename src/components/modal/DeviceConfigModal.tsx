@@ -13,7 +13,7 @@ import {
   Network,
 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
-import { isValidIp, isValidSubnetMask } from '../../utils/ipUtils';
+import { isValidIp, isValidSubnetMask, networkAddress } from '../../utils/ipUtils';
 import { type DeviceData } from '../../types/network';
 import { requestDhcp, requestRip } from '../../hooks/useSimulationEngine';
 import { useModalA11y } from '../../hooks/useModalA11y';
@@ -163,6 +163,11 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
     if (poolEnabled) {
       if (!isValidIp(poolNetwork) || !isValidSubnetMask(poolMask) || !isValidIp(poolStartIp)) {
         setErrorMsg('Pool DHCP: network/mask/start IP tidak valid!');
+        return;
+      }
+      // BUG-3: startIp wajib berada di dalam network pool (hindari alokasi lintas subnet)
+      if (networkAddress(poolStartIp.trim(), poolMask.trim()) !== networkAddress(poolNetwork.trim(), poolMask.trim())) {
+        setErrorMsg('Pool DHCP: Start IP berada di luar network pool!');
         return;
       }
     }

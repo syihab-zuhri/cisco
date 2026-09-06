@@ -513,7 +513,7 @@ describe('HeadlessSimulationEngine (nirkabel & cloud internet)', () => {
       id: 'r-1', label: 'R1', type: 'router',
       ports: [
         { id: 'fa0/0', name: 'FastEthernet 0/0', status: 'up', ipAddress: '192.168.1.1', subnetMask: '255.255.255.0', macAddress: '00:50:79:R1:01' },
-        { id: 'fa0/2', name: 'FastEthernet 0/2 (WAN)', status: 'up', ipAddress: '203.0.113.1', subnetMask: '255.255.255.252', macAddress: '00:50:79:R1:02' },
+        { id: 'fa0/2', name: 'FastEthernet 0/2 (WAN)', status: 'up', ipAddress: '203.0.113.1', subnetMask: '255.255.255.252', macAddress: '00:50:79:R1:02', natEnabled: true },
       ],
       routes: [{ network: '0.0.0.0', subnetMask: '0.0.0.0', nextHop: '203.0.113.2', interfaceId: 'fa0/2' }],
       arpTable: {},
@@ -570,13 +570,13 @@ describe('HeadlessSimulationEngine (nirkabel & cloud internet)', () => {
     expect(result.logs.join('\n')).toContain('No route to host 8.8.8.8');
   });
 
-  it('ping IP publik tidak dikenal ditolak cloud dengan pesan eksplisit', async () => {
+  it('ping IP publik tidak dikenal (sumber publik via WAN) ditolak cloud dengan pesan eksplisit', async () => {
     const pc = makePc('pc-1', '192.168.1.10', '00:50:79:AA:BB:01', '192.168.1.1');
     const router: DeviceData = {
       id: 'r-1', label: 'R1', type: 'router',
       ports: [
         { id: 'fa0/0', name: 'FastEthernet 0/0', status: 'up', ipAddress: '192.168.1.1', subnetMask: '255.255.255.0', macAddress: '00:50:79:R1:01' },
-        { id: 'fa0/2', name: 'FastEthernet 0/2 (WAN)', status: 'up', ipAddress: '203.0.113.1', subnetMask: '255.255.255.252', macAddress: '00:50:79:R1:02' },
+        { id: 'fa0/2', name: 'FastEthernet 0/2 (WAN)', status: 'up', ipAddress: '203.0.113.1', subnetMask: '255.255.255.252', macAddress: '00:50:79:R1:02', natEnabled: true },
       ],
       routes: [{ network: '0.0.0.0', subnetMask: '0.0.0.0', nextHop: '203.0.113.2', interfaceId: 'fa0/2' }],
       arpTable: {},
@@ -595,7 +595,8 @@ describe('HeadlessSimulationEngine (nirkabel & cloud internet)', () => {
       ]
     );
 
-    const result = await engine.executePing('pc-1', '9.9.9.9');
+    // Ping DARI ROUTER (sumber 203.0.113.1 = publik) ke IP yang tidak dimiliki cloud
+    const result = await engine.executePing('r-1', '9.9.9.9');
     expect(result.success).toBe(false);
     expect(result.logs.join('\n')).toContain('tidak dikenal di internet tersimulasi');
   });

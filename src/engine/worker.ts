@@ -90,7 +90,7 @@ self.onmessage = async (e: MessageEvent<UIWorkerMessage>) => {
             type: plan.summary.success ? 'SUCCESS' : 'ERROR',
             message: plan.summary.success
               ? `Ping ke ${targetIp} selesai: ${plan.summary.received}/${plan.summary.sent} echo reply diterima (TTL ${plan.summary.ttl}).`
-              : `Ping ke ${targetIp} gagal: ${plan.summary.outputLines[plan.summary.outputLines.length - 1] ?? 'tidak diketahui'}`,
+              : `Ping ke ${targetIp} gagal: ${plan.summary.outputLines.at(-1) ?? plan.events.filter((e) => e.kind === 'LOG' && e.level === 'ERROR').at(-1)?.message ?? 'penyebab tidak diketahui'}`,
           },
         } as WorkerUIMessage);
 
@@ -100,7 +100,7 @@ self.onmessage = async (e: MessageEvent<UIWorkerMessage>) => {
         } as WorkerUIMessage);
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
-        postError(requestId, message);
+        postError(requestId, message, 'ping');
       }
       break;
     }
@@ -137,7 +137,7 @@ self.onmessage = async (e: MessageEvent<UIWorkerMessage>) => {
         } as WorkerUIMessage);
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
-        postError(requestId, message);
+        postError(requestId, message, 'dhcp');
       }
       break;
     }
@@ -167,7 +167,7 @@ self.onmessage = async (e: MessageEvent<UIWorkerMessage>) => {
         } as WorkerUIMessage);
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
-        postError(requestId, message);
+        postError(requestId, message, 'rip');
       }
       break;
     }
@@ -216,6 +216,8 @@ async function playPlan(requestId: string, events: SimEvent[]): Promise<void> {
             ? 'ARP'
             : event.kind.startsWith('DHCP')
             ? 'DHCP'
+            : event.kind.startsWith('RIP')
+            ? 'RIP'
             : 'ICMP',
           summary: event.message,
         },
@@ -224,20 +226,47 @@ async function playPlan(requestId: string, events: SimEvent[]): Promise<void> {
   }
 }
 
-function postError(requestId: string, message: string): void {
+function postError(
+  requestId: string,
+  message: string,
+  kind: 'ping' | 'dhcp' | 'rip'
+): void {
   self.postMessage({
     type: 'LOG',
     payload: { type: 'ERROR', message: `Simulasi error: ${message}` },
   } as WorkerUIMessage);
-  const pingPayload: PingResultPayload = {
-    requestId,
-    sourceNodeId: '',
-    targetIp: '',
-    success: false,
-    rttMs: 0,
-    ttl: 0,
-    logs: [`Simulasi error: ${message}`],
-    outputLines: [`Simulasi error: ${message}`],
-  };
-  self.postMessage({ type: 'PING_RESULT', payload: pingPayload } as WorkerUIMessage);
+  // M4: jawab dengan tipe hasil yang sama dengan permintaan —
+  // promise requestDhcp/requestRip tidak boleh menggantung selamanya.
+  if (kind === 'dhcp') {
+    const payload: DhcpResultPayload = {
+      requestId,
+      nodeId: '',
+      portId: '',
+      success: false,
+      logs: [`Simulasi error: ${message}`],
+      outputLines: [`Simulasi error: ${message}`],
+    };
+    self.postMessage({ type: 'DHCP_RESULT', payload } as WorkerUIMessage);
+  } else if (kind === 'rip') {
+    const payload: RipResultPayload = {
+      requestId,
+      success: false,
+      routesAdded: 0,
+      logs: [`Simulasi error: ${message}`],
+      outputLines: [`Simulasi error: ${message}`],
+    };
+    self.postMessage({ type: 'RIP_RESULT', payload } as WorkerUIMessage);
+  } else {
+    const pingPayload: PingResultPayload = {
+      requestId,
+      sourceNodeId: '',
+      targetIp: '',
+      success: false,
+      rttMs: 0,
+      ttl: 0,
+      logs: [`Simulasi error: ${message}`],
+      outputLines: [`Simulasi error: ${message}`],
+    };
+    self.postMessage({ type: 'PING_RESULT', payload: pingPayload } as WorkerUIMessage);
+  }
 }

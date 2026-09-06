@@ -1,5 +1,5 @@
 import { type DeviceData } from '../../types/network';
-import { isValidIp, isValidSubnetMask } from '../../utils/ipUtils';
+import { isValidIp, isValidSubnetMask, networkAddress, prefixLength } from '../../utils/ipUtils';
 
 export type CliMode = 'user' | 'priv' | 'config' | 'config-if';
 
@@ -206,14 +206,24 @@ export class CliSession {
     if (device.type !== 'router') {
       return this.invalid('IP routing not enabled pada perangkat ini.');
     }
-    const lines = ['Codes: C - connected, S - static', 'Gateway of last resort is not set'];
+    const lines = ['Codes: C - connected, S - static, R - RIP', 'Gateway of last resort is not set'];
     for (const p of device.ports) {
       if (!p.ipAddress || !p.subnetMask) continue;
-      const network = p.ipAddress.split('.').slice(0, 3).join('.') + '.0';
-      lines.push(`C       ${network} is directly connected, ${p.name}`);
+      const network = networkAddress(p.ipAddress, p.subnetMask);
+      lines.push(`C       ${network}/${prefixLength(p.subnetMask)} is directly connected, ${p.name}`);
+    }
+    for (const s of device.ports) {
+      for (const sub of s.subInterfaces ?? []) {
+        const network = networkAddress(sub.ipAddress, sub.subnetMask);
+        lines.push(`C       ${network}/${prefixLength(sub.subnetMask)} is directly connected, ${s.name}.${sub.vlanId}`);
+      }
     }
     for (const r of device.routes ?? []) {
-      lines.push(`S       ${r.network} via ${r.nextHop}, ${r.interfaceId}`);
+      if (r.source === 'rip') {
+        lines.push(`R       ${r.network}/${r.subnetMask} [${r.metric ?? 1}/1] via ${r.nextHop}, ${r.interfaceId}`);
+      } else {
+        lines.push(`S       ${r.network}/${r.subnetMask} via ${r.nextHop}, ${r.interfaceId}`);
+      }
     }
     if (lines.length === 2) {
       lines.push('(Tidak ada route. Konfigurasi IP pada interface terlebih dahulu.)');

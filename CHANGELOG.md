@@ -11,6 +11,23 @@
 
 ---
 
+## [2026-09-07] — Version 1.4.3 (Perbaikan Temuan Audit Bug: BUG-1 s/d BUG-5 + Minor)
+
+### Fixed
+- **BUG-1 (P1): Lab 3 kini bisa diselesaikan 100%** — objektif `device-ip` membaca `subInterfaces` (router-on-a-stick menyimpan IP di sana, bukan di `port.ipAddress`).
+- **BUG-2 (P1): NAT kini bermakna** — Cloud menolak paket bersumber IP privat yang keluar tanpa NAT menuju IP publik (pesan eksplisit). Premis Lab 2 & template hotspot menjadi benar (hotspot kini punya `natEnabled` pada WAN). Router pun men-source ping publik dari interface WAN ber-NAT (perilaku IOS).
+- **BUG-3 (P2): DHCP tidak lagi menawarkan alamat network/broadcast atau di luar subnet pool**; form pool memvalidasi startIp dalam network.
+- **BUG-4 (P2): BFS di-root dari port sumber terpilih** — frame keluar dari port yang benar; PDU Inspector kini konsisten (srcMac = pemilik srcIp, termasuk kasus laptop dual-homed). `resolveNextHopIp` kini mengembalikan interface egress (connected, sub-interface, dan static route).
+- **BUG-5 (P2): chooseSourcePort mengutamakan port UP** — port DOWN ber-IP tidak lagi menggagalkan ping saat jalur WiFi tersedia.
+
+### Fixed (minor)
+- RIP_UPDATE kini ber-`currentProtocol: 'RIP'` (warna/label kanvas benar); PDU DHCP ber-ethertype IPv4 (bukan ARP palsu); CLI `show ip route` memakai `networkAddress` + kode C/S/R + sub-interface; `postError` menjawab sesuai jenis permintaan (DHCP/RIP promise tidak menggantung); `CAM_LEARN` membawa VLAN port ingress; `associateWireless` terkunci saat Mode Lab; dropdown ping direset saat node sumber hilang; antrean penuh (500) kini memperingatkan, tidak diam-diam; urutan grup Dasar dirapikan (P2P, Star, Bus, Ring, Daisy, Hub).
+
+### Status Gate
+- `Gate C` — 85 unit test + 9 E2E hijau.
+
+---
+
 ## [2026-09-07] — Version 1.4.2 (Hotfix: Step Mode "Next" Tidak Berfungsi)
 
 ### Fixed

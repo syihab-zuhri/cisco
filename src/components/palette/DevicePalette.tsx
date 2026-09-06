@@ -20,7 +20,8 @@ import {
 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { type DeviceType } from '../../types/network';
-import { TOPOLOGY_TEMPLATES, type TopologyTemplate } from '../../data/topologyTemplates';
+import { TOPOLOGY_TEMPLATES } from '../../data/topologyTemplates';
+import { type TopologyTemplate } from '../../types/network';
 
 /** Urutan grup template: dari topologi kecil (klasik) sampai enterprise. */
 const TEMPLATE_GROUPS: Array<{ category: TopologyTemplate['category']; title: string; blurb: string }> = [

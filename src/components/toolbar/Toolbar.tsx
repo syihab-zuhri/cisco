@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Pause,
   Play,
@@ -39,6 +39,13 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs }: ToolbarProps)
 
   const [pingSource, setPingSource] = useState<string>('');
   const [pingTargetIp, setPingTargetIp] = useState<string>('');
+
+  // M7: reset dropdown bila node sumber hilang dari topologi (ganti template/reset)
+  useEffect(() => {
+    if (pingSource && !nodes.some((n) => n.id === pingSource)) {
+      setPingSource('');
+    }
+  }, [nodes, pingSource]);
 
   const pingableNodes = nodes.filter((n) =>
     n.data.ports.some((p) => p.ipAddress)

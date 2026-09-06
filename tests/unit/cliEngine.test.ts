@@ -104,7 +104,7 @@ describe('CliSession (Mini Cisco IOS, 10 perintah P0)', () => {
     device.ports[0] = { ...device.ports[0], ipAddress: '192.168.1.1', subnetMask: '255.255.255.0' };
 
     const routerLines = await session.handle('show ip route');
-    expect(routerLines.join('\n')).toContain('192.168.1.0 is directly connected');
+    expect(routerLines.join('\n')).toContain('192.168.1.0\/24 is directly connected');
 
     device.type = 'pc';
     const pcLines = await session.handle('show ip route');

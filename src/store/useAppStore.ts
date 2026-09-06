@@ -441,6 +441,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   associateWireless: (clientNodeId, clientPortId, apNodeId, apPortId) => {
+    if (get().activeLabId) {
+      get().addSimulationLog('ERROR', 'Topologi lab terkunci — asosiasi WiFi tidak bisa diubah.');
+      return false;
+    }
     const { nodes } = get();
     const clientNode = nodes.find((n) => n.id === clientNodeId);
     const apNode = nodes.find((n) => n.id === apNodeId);

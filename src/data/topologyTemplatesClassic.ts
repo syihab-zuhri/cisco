@@ -1,4 +1,4 @@
-import { type TopologyTemplate } from './topologyTemplates';
+import { type TopologyTemplate } from '../types/network';
 
 /**
  * Template topologi klasik (Star/Bus/Ring/Daisy Chain/Hybrid) — dipisah dari

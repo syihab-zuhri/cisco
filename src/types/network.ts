@@ -1,3 +1,4 @@
+import type { Edge, Node } from '@xyflow/react';
 export type DeviceType =
   | 'pc'
   | 'laptop'
@@ -46,6 +47,16 @@ export interface NatTranslation {
   globalIp: string; // IP WAN router
   icmpId: number;
   echoSeq: number;
+}
+
+/** Template topologi siap pakai di palet. */
+export interface TopologyTemplate {
+  id: string;
+  name: string;
+  description: string;
+  category: 'Dasar' | 'LAN' | 'Routing L3' | 'Enterprise' | 'Nirkabel';
+  nodes: Node<DeviceData>[];
+  edges: Edge[];
 }
 
 export interface PhysicalPort {
