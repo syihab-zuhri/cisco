@@ -53,8 +53,8 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
             </div>
           </div>
           <div className="flex items-center gap-2">
-              <span className="rounded bg-blue-950/60 px-2 py-0.5 text-[10px] text-blue-300 border border-blue-800/50 font-mono">
-                Dokumentasi v1.3.0
+              <span className="rounded bg-blue-950/60 px-2 py-0.5 text-[11px] text-blue-300 border border-blue-800/50 font-mono">
+                Dokumentasi v1.3.0-alpha
               </span>
             <button
               onClick={onClose}
@@ -141,7 +141,7 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
                   Apa Saja yang Bisa Dilakukan oleh Web Ini?
                 </h3>
                 <p className="text-xs text-gray-300 leading-relaxed">
-                  OpenPacket adalah simulator jaringan komputer interaktif client-side yang dirancang sebagai alternatif ringan untuk media belajar praktikum jaringan komputer dan penelitian skripsi tanpa perlu menginstal aplikasi berat seperti Cisco Packet Tracer. Dokumentasi ini mencerminkan kondisi implementasi versi <b>1.0.3</b>.
+                  OpenPacket adalah simulator jaringan komputer interaktif client-side yang dirancang sebagai alternatif ringan untuk media belajar praktikum jaringan komputer dan penelitian skripsi tanpa perlu menginstal aplikasi berat seperti Cisco Packet Tracer. Dokumentasi ini mencerminkan kondisi implementasi versi <b>1.3.0-alpha</b>.
                 </p>
 
                 <div className="grid grid-cols-2 gap-3.5 pt-2">
@@ -207,8 +207,8 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
                       6. Kualitas yang Terukur (Quality Gates)
                     </h4>
                     <ul className="text-xs text-gray-300 space-y-1.5 list-disc list-inside">
-                      <li><b>66 unit test</b> Vitest — coverage engine <b>&gt; 94% lines</b> (target skripsi &gt; 90%).</li>
-                      <li><b>4 skenario E2E</b> Playwright: tambah perangkat, ping beranimasi, konfigurasi GUI, dan CLI — tanpa console error.</li>
+                      <li><b>70 unit test</b> Vitest — coverage engine <b>&gt; 94% lines</b> (target skripsi &gt; 90%).</li>
+                      <li><b>6 skenario E2E</b> Playwright: tambah perangkat, ping antar-PC, konfigurasi GUI, CLI, hotspot WiFi via cloud, dan Lab 1 — tanpa console error.</li>
                       <li><b>CI GitHub Actions</b> menjalankan type-check, coverage, build web, E2E, dan build installer Tauri di setiap push.</li>
                     </ul>
                   </div>
@@ -233,7 +233,7 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
                     <h4 className="text-xs font-bold text-blue-300 uppercase tracking-wide">
                       Target 0: Menjalankan Lokal (Development & Testing)
                     </h4>
-                    <span className="rounded bg-blue-950/70 px-2 py-0.5 text-[10px] text-blue-400 border border-blue-800">
+                    <span className="rounded bg-blue-950/70 px-2 py-0.5 text-[11px] text-blue-400 border border-blue-800">
                       Node.js 20/22 LTS
                     </span>
                   </div>
@@ -248,7 +248,7 @@ npm run dev            # buka http://localhost:5173
 
 # Verifikasi kualitas (opsional):
 npm run type-check     # tsc strict, harus 0 error
-npm test               # unit test (35 test)
+npm test               # unit test (70 test)
 npm run test:coverage  # unit test + coverage engine
 npm run e2e            # E2E Playwright (butuh Microsoft Edge/chromium)`}
                   </pre>
@@ -260,7 +260,7 @@ npm run e2e            # E2E Playwright (butuh Microsoft Edge/chromium)`}
                     <h4 className="text-xs font-bold text-emerald-300 uppercase tracking-wide">
                       Target 1: Web Statis (GitHub Pages, Cloudflare Pages, Vercel)
                     </h4>
-                    <span className="rounded bg-emerald-950/70 px-2 py-0.5 text-[10px] text-emerald-400 border border-emerald-800">
+                    <span className="rounded bg-emerald-950/70 px-2 py-0.5 text-[11px] text-emerald-400 border border-emerald-800">
                       Zero Cost / Serverless
                     </span>
                   </div>
@@ -282,7 +282,7 @@ npm run build
                     <h4 className="text-xs font-bold text-sky-300 uppercase tracking-wide">
                       Target 2: Desktop Executable Windows (.exe mandiri via Tauri v2)
                     </h4>
-                    <span className="rounded bg-sky-950/70 px-2 py-0.5 text-[10px] text-sky-400 border border-sky-800">
+                    <span className="rounded bg-sky-950/70 px-2 py-0.5 text-[11px] text-sky-400 border border-sky-800">
                       Ukuran Sangat Ringan (~15 MB)
                     </span>
                   </div>
@@ -298,7 +298,7 @@ npm run tauri dev
 npm run tauri build
 
 # Hasil installer tersimpan di:
-# ./src-tauri/target/release/bundle/nsis/OpenPacket_1.0.0_x64-setup.exe`}
+# ./src-tauri/target/release/bundle/nsis/OpenPacket_1.3.0-alpha_x64-setup.exe`}
                   </pre>
                 </div>
 
@@ -308,7 +308,7 @@ npm run tauri build
                     <h4 className="text-xs font-bold text-amber-300 uppercase tracking-wide">
                       Target 3: Porting ke Mobile Android APK (via Capacitor)
                     </h4>
-                    <span className="rounded bg-amber-950/70 px-2 py-0.5 text-[10px] text-amber-400 border border-amber-800">
+                    <span className="rounded bg-amber-950/70 px-2 py-0.5 text-[11px] text-amber-400 border border-amber-800">
                       Opsional Tablet / Mobile
                     </span>
                   </div>

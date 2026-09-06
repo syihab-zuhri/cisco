@@ -91,7 +91,7 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs }: ToolbarProps)
   };
 
   return (
-    <header className="flex h-14 items-center justify-between border-b border-[#374151] bg-[#111827] px-4 select-none">
+    <header className="flex min-h-14 flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-[#374151] bg-[#111827] px-4 py-1 select-none">
       {/* Brand & Status */}
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2">
@@ -105,7 +105,7 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs }: ToolbarProps)
 
         {/* Speed Controls */}
         <div className="flex items-center gap-1 bg-[#1F2937] p-1 rounded border border-[#374151]">
-          <span className="text-[10px] text-gray-400 px-1 font-mono uppercase">Speed:</span>
+          <span className="text-[11px] text-gray-400 px-1 font-mono uppercase">Speed:</span>
           {([0.5, 1, 2] as const).map((spd) => (
             <button
               key={spd}
@@ -194,7 +194,7 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs }: ToolbarProps)
           placeholder="Target IP (e.g. 192.168.1.20)"
           value={pingTargetIp}
           onChange={(e) => setPingTargetIp(e.target.value)}
-          className="w-44 rounded bg-[#111827] px-2 py-1 text-xs font-mono text-gray-200 border border-[#374151] placeholder-gray-500 focus:outline-none focus:border-blue-500"
+          className="w-32 lg:w-44 rounded bg-[#111827] px-2 py-1 text-xs font-mono text-gray-200 border border-[#374151] placeholder-gray-500 focus:outline-none focus:border-blue-500"
         />
 
         <button
@@ -219,7 +219,7 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs }: ToolbarProps)
           }`}
         >
           <GraduationCap className="h-3.5 w-3.5" />
-          <span className="font-semibold">{activeLabId ? 'Lab Aktif' : 'Lab'}</span>
+          <span className="hidden font-semibold lg:inline">{activeLabId ? 'Lab Aktif' : 'Lab'}</span>
         </button>
 
         <button
@@ -228,12 +228,15 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs }: ToolbarProps)
           title="Panduan Lengkap & Porting"
         >
           <Activity className="h-3.5 w-3.5 text-blue-400" />
-          <span className="font-semibold">Docs & Porting</span>
+          <span className="hidden font-semibold lg:inline">Docs & Porting</span>
         </button>
 
-        <label className="flex cursor-pointer items-center gap-1.5 rounded bg-[#1F2937] px-2.5 py-1.5 text-xs text-gray-300 border border-[#374151] hover:bg-[#374151]">
+        <label
+          className="flex cursor-pointer items-center gap-1.5 rounded bg-[#1F2937] px-2.5 py-1.5 text-xs text-gray-300 border border-[#374151] hover:bg-[#374151]"
+          title="Muat Topologi dari file JSON"
+        >
           <FolderOpen className="h-3.5 w-3.5 text-gray-400" />
-          <span>Load</span>
+          <span className="hidden lg:inline">Load</span>
           <input
             type="file"
             accept=".json"
@@ -244,10 +247,11 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs }: ToolbarProps)
 
         <button
           onClick={handleExportJson}
+          title="Simpan Topologi ke file JSON"
           className="flex items-center gap-1.5 rounded bg-[#1F2937] px-2.5 py-1.5 text-xs text-gray-300 border border-[#374151] hover:bg-[#374151]"
         >
           <Save className="h-3.5 w-3.5 text-gray-400" />
-          <span>Save</span>
+          <span className="hidden lg:inline">Save</span>
         </button>
 
         <button
@@ -264,7 +268,7 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs }: ToolbarProps)
           title="Reset Topologi"
         >
           <RotateCcw className="h-3.5 w-3.5" />
-          <span>Reset</span>
+          <span className="hidden lg:inline">Reset</span>
         </button>
       </div>
     </header>

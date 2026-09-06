@@ -105,7 +105,7 @@ export function DeviceNode({ id, data, selected }: NodeProps) {
         </div>
         <div>
           <span className="block text-xs font-bold text-gray-100">{deviceData.label}</span>
-          <span className="block text-[10px] text-gray-400 uppercase tracking-wider font-mono">
+          <span className="block text-[11px] text-gray-400 uppercase tracking-wider font-mono">
             {deviceData.type}
           </span>
         </div>
@@ -113,7 +113,7 @@ export function DeviceNode({ id, data, selected }: NodeProps) {
 
       {/* IP / Info Tag */}
       {hasConfiguredIp && (
-        <div className="mt-2 text-[10px] font-mono text-cyan-300 bg-cyan-950/60 px-2 py-0.5 rounded-full border border-cyan-800/60 font-semibold shadow-xs pointer-events-none">
+        <div className="mt-2 text-[11px] font-mono text-cyan-300 bg-cyan-950/60 px-2 py-0.5 rounded-full border border-cyan-800/60 font-semibold shadow-xs pointer-events-none">
           {deviceData.ports.find((p) => p.ipAddress)?.ipAddress}
         </div>
       )}
@@ -146,7 +146,7 @@ export function DeviceNode({ id, data, selected }: NodeProps) {
                 id={port.id}
                 className="!h-3.5 !w-3.5 !rounded-full !border-0 !opacity-0 !pointer-events-none"
               />
-              <span className="mt-1 text-[9px] font-mono font-medium text-gray-400 pointer-events-none">
+              <span className="mt-1 text-[11px] font-mono font-medium text-gray-400 pointer-events-none">
                 {isWireless
                   ? 'wifi'
                   : deviceData.type === 'switch' || deviceData.type === 'hub'

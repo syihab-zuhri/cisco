@@ -119,6 +119,8 @@ interface AppStoreState {
   checkLabObjectives: () => void;
 
   // Import / Export / Reset
+  /** Naik setiap kali topologi baru dimuat (template/import/lab) — pemicu fitView kanvas. */
+  topologyVersion: number;
   loadTopology: (data: { nodes: Node<DeviceData>[]; edges: Edge[] }) => void;
   resetTopology: () => void;
 
@@ -799,9 +801,12 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       nodes,
       edges: data.edges,
       selectedNodeId: null,
+      topologyVersion: get().topologyVersion + 1,
     });
     get().addSimulationLog('SUCCESS', 'Topologi berhasil dimuat.');
   },
+
+  topologyVersion: 0,
 
   resetTopology: () => {
     deviceCounters = { ...EMPTY_DEVICE_COUNTERS };

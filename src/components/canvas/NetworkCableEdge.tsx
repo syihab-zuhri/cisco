@@ -5,6 +5,7 @@ import {
   getBezierPath,
   type EdgeProps,
 } from '@xyflow/react';
+import { Zap } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 
 
@@ -197,7 +198,7 @@ export function NetworkCableEdge({
               <span className="text-emerald-300 font-bold">
                 {sourcePortName || 'Port'}
               </span>
-              <span className="text-gray-400">⚡</span>
+              <Zap className="h-3 w-3 text-amber-400" />
               <span className="text-emerald-300 font-bold">
                 {targetPortName || 'Port'}
               </span>

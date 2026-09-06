@@ -38,7 +38,7 @@ export function PduInspectorDrawer() {
             PDU Inspector
           </span>
           {inspectorEvent && (
-            <span className="rounded bg-gray-800 px-1.5 py-0.2 text-[9px] font-mono text-gray-400">
+            <span className="rounded bg-gray-800 px-1.5 py-0.2 text-[11px] font-mono text-gray-400">
               seq #{inspectorEvent.seq} · t={inspectorEvent.simTimeMs}ms
             </span>
           )}
@@ -47,6 +47,7 @@ export function PduInspectorDrawer() {
           <button
             onClick={() => setInspectorAutoFollow(!inspectorAutoFollow)}
             title={inspectorAutoFollow ? 'Auto-follow aktif (ikuti paket berjalan)' : 'Auto-follow mati — klik event untuk memilih manual'}
+            aria-label="Auto-follow paket"
             className={`rounded p-1 transition-colors ${
               inspectorAutoFollow
                 ? 'text-violet-300 bg-violet-950/60'
@@ -57,6 +58,8 @@ export function PduInspectorDrawer() {
           </button>
           <button
             onClick={() => setInspectorOpen(false)}
+            title="Tutup PDU Inspector"
+            aria-label="Tutup PDU Inspector"
             className="rounded p-1 text-gray-400 hover:bg-gray-800 hover:text-white"
           >
             <X className="h-3.5 w-3.5" />
@@ -84,7 +87,7 @@ export function PduInspectorDrawer() {
 
             {/* L2 — Ethernet Frame */}
             <div className="rounded border border-emerald-800/60 bg-black/40 p-2.5">
-              <div className="text-[10px] font-bold uppercase text-emerald-400 mb-1.5">
+              <div className="text-[11px] font-bold uppercase text-emerald-400 mb-1.5">
                 L2 · Ethernet Frame
               </div>
               <HeaderRow label="Src MAC" value={pdu.frame.srcMac} />
@@ -102,7 +105,7 @@ export function PduInspectorDrawer() {
             {/* L3 — IPv4 Packet */}
             {pdu.packet && (
               <div className="rounded border border-violet-800/60 bg-black/40 p-2.5">
-                <div className="text-[10px] font-bold uppercase text-violet-400 mb-1.5">
+                <div className="text-[11px] font-bold uppercase text-violet-400 mb-1.5">
                   L3 · IPv4 Packet
                 </div>
                 <HeaderRow label="Src IP" value={pdu.packet.srcIp} />
@@ -116,7 +119,7 @@ export function PduInspectorDrawer() {
             {/* L4 — ARP / ICMP */}
             {pdu.segment && isArp(pdu.segment) ? (
               <div className="rounded border border-cyan-800/60 bg-black/40 p-2.5">
-                <div className="text-[10px] font-bold uppercase text-cyan-400 mb-1.5">
+                <div className="text-[11px] font-bold uppercase text-cyan-400 mb-1.5">
                   L4 payload · ARP (RFC 826)
                 </div>
                 <HeaderRow
@@ -131,7 +134,7 @@ export function PduInspectorDrawer() {
               </div>
             ) : pdu.segment ? (
               <div className="rounded border border-cyan-800/60 bg-black/40 p-2.5">
-                <div className="text-[10px] font-bold uppercase text-cyan-400 mb-1.5">
+                <div className="text-[11px] font-bold uppercase text-cyan-400 mb-1.5">
                   L4 payload · ICMP (RFC 792)
                 </div>
                 <HeaderRow
@@ -148,7 +151,7 @@ export function PduInspectorDrawer() {
             {/* DHCP (UDP 67/68) */}
             {pdu.dhcp && (
               <div className="rounded border border-amber-800/60 bg-black/40 p-2.5">
-                <div className="text-[10px] font-bold uppercase text-amber-400 mb-1.5">
+                <div className="text-[11px] font-bold uppercase text-amber-400 mb-1.5">
                   L4 payload · DHCP (UDP 67/68)
                 </div>
                 <HeaderRow

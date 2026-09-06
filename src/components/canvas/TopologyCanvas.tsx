@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import {
   ReactFlow,
   Background,
@@ -6,6 +7,7 @@ import {
   type Connection,
   BackgroundVariant,
   ConnectionMode,
+  useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useAppStore } from '../../store/useAppStore';
@@ -21,6 +23,22 @@ const edgeTypes = {
   networkCable: NetworkCableEdge,
   wirelessLink: WirelessLinkEdge,
 };
+
+/** Pasang ulang fitView setiap kali topologi baru dimuat (template/import/lab). */
+function FitViewOnTopologyLoad() {
+  const topologyVersion = useAppStore((s) => s.topologyVersion);
+  const { fitView } = useReactFlow();
+
+  useEffect(() => {
+    if (topologyVersion === 0) return;
+    const t = window.setTimeout(() => {
+      void fitView({ padding: 0.15, duration: 300 });
+    }, 60);
+    return () => window.clearTimeout(t);
+  }, [topologyVersion, fitView]);
+
+  return null;
+}
 
 export function TopologyCanvas() {
   const {
@@ -137,6 +155,8 @@ export function TopologyCanvas() {
           size={1.5}
           variant={BackgroundVariant.Dots}
         />
+        {/* Anak langsung <ReactFlow> sudah berada di dalam provider-nya */}
+        <FitViewOnTopologyLoad />
         <Controls />
         <MiniMap
           maskColor="rgb(11 15 25 / 0.72)"

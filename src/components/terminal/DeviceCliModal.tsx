@@ -15,13 +15,16 @@ export function DeviceCliModal() {
 
   const [history, setHistory] = useState<string[]>([
     'Cisco IOS Software, C2900 Software (C2900-UNIVERSALK9-M), Version 15.1(4)M4',
-    'OpenPacket Simulated IOS Terminal v1.0.0',
+    'OpenPacket Simulated IOS Terminal v1.3.0-alpha',
     'Ketik "help" atau "?" untuk bantuan perintah.',
     '',
   ]);
   const [session, setSession] = useState<CliSession | null>(null);
   const [inputVal, setInputVal] = useState<string>('');
   const [isBusy, setIsBusy] = useState<boolean>(false);
+  // Riwayat perintah untuk navigasi ArrowUp/ArrowDown
+  const [cmdHistory, setCmdHistory] = useState<string[]>([]);
+  const [histIdx, setHistIdx] = useState<number | null>(null);
   const dialogRef = useModalA11y({
     onClose: () => setActiveCliModalNodeId(null),
     enabled: Boolean(activeCliModalNodeId),
@@ -56,7 +59,7 @@ export function DeviceCliModal() {
     setSession(cliSession);
     setHistory([
       'Cisco IOS Software, C2900 Software (C2900-UNIVERSALK9-M), Version 15.1(4)M4',
-      'OpenPacket Simulated IOS Terminal v1.0.0',
+      'OpenPacket Simulated IOS Terminal v1.3.0-alpha',
       'Ketik "help" atau "?" untuk bantuan perintah.',
       '',
     ]);
@@ -74,6 +77,10 @@ export function DeviceCliModal() {
     const prompt = session.prompt();
     setHistory((prev) => [...prev, `${prompt} ${cmd}`]);
     setInputVal('');
+    setHistIdx(null);
+    if (cmd.trim()) {
+      setCmdHistory((prev) => [...prev.slice(-49), cmd]);
+    }
 
     if (!cmd.trim()) return;
 
@@ -94,6 +101,24 @@ export function DeviceCliModal() {
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       void handleCommand(inputVal);
+      return;
+    }
+    // Navigasi riwayat perintah ala terminal asli
+    if (e.key === 'ArrowUp' && cmdHistory.length > 0) {
+      e.preventDefault();
+      const next = histIdx === null ? cmdHistory.length - 1 : Math.max(0, histIdx - 1);
+      setHistIdx(next);
+      setInputVal(cmdHistory[next]);
+    } else if (e.key === 'ArrowDown' && histIdx !== null) {
+      e.preventDefault();
+      const next = histIdx + 1;
+      if (next >= cmdHistory.length) {
+        setHistIdx(null);
+        setInputVal('');
+      } else {
+        setHistIdx(next);
+        setInputVal(cmdHistory[next]);
+      }
     }
   };
 

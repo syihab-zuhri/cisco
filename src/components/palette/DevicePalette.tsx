@@ -63,6 +63,7 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
         <button
           onClick={onToggle}
           title="Buka Sidebar Panel"
+          aria-label="Buka Panel Alat"
           className="flex h-9 w-9 items-center justify-center rounded-lg border border-[#374151] bg-[#1F2937] text-gray-300 shadow-md hover:border-blue-500 hover:bg-[#374151] hover:text-white"
         >
           <PanelLeftOpen className="h-5 w-5" />
@@ -84,11 +85,12 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
       {/* Header with Close/Toggle Button */}
       <div className="flex h-10 items-center justify-between border-b border-[#374151] px-3 bg-[#111827]">
         <span className="text-xs font-bold uppercase tracking-wider text-gray-300">
-          Panel Navigasi
+          Panel Alat
         </span>
         <button
           onClick={onToggle}
           title="Tutup Sidebar Panel"
+          aria-label="Tutup Panel Alat"
           className="rounded p-1 text-gray-400 hover:bg-gray-800 hover:text-white"
         >
           <PanelLeftClose className="h-4 w-4" />
@@ -126,7 +128,7 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
         <div className="flex flex-1 flex-col p-3 overflow-y-auto">
           <div className="mb-3">
             <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400">
-              Device Palette
+              Palet Perangkat
             </h2>
             <p className="text-[11px] text-gray-500">Klik untuk menambah ke kanvas</p>
           </div>
@@ -143,7 +145,7 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
                 </div>
                 <div className="text-left">
                   <span className="block text-xs font-medium text-gray-100">PC Host</span>
-                  <span className="block text-[10px] text-gray-400">End Device (1 Port)</span>
+                  <span className="block text-[11px] text-gray-400">End Device (1 Port)</span>
                 </div>
               </div>
               <Plus className="h-4 w-4 text-gray-400" />
@@ -160,7 +162,7 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
                 </div>
                 <div className="text-left">
                   <span className="block text-xs font-medium text-gray-100">Laptop</span>
-                  <span className="block text-[10px] text-gray-400">End Device (1 Port)</span>
+                  <span className="block text-[11px] text-gray-400">End Device (1 Port)</span>
                 </div>
               </div>
               <Plus className="h-4 w-4 text-gray-400" />
@@ -177,7 +179,7 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
                 </div>
                 <div className="text-left">
                   <span className="block text-xs font-medium text-gray-100">Server</span>
-                  <span className="block text-[10px] text-gray-400">End Device (1 Port)</span>
+                  <span className="block text-[11px] text-gray-400">End Device (1 Port)</span>
                 </div>
               </div>
               <Plus className="h-4 w-4 text-gray-400" />
@@ -194,7 +196,7 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
                 </div>
                 <div className="text-left">
                   <span className="block text-xs font-medium text-gray-100">Switch L2</span>
-                  <span className="block text-[10px] text-gray-400">8 FE Ports (CAM Learning)</span>
+                  <span className="block text-[11px] text-gray-400">8 FE Ports (CAM Learning)</span>
                 </div>
               </div>
               <Plus className="h-4 w-4 text-gray-400" />
@@ -211,7 +213,7 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
                 </div>
                 <div className="text-left">
                   <span className="block text-xs font-medium text-gray-100">Hub</span>
-                  <span className="block text-[10px] text-gray-400">8 FE Ports (Repeater Murni)</span>
+                  <span className="block text-[11px] text-gray-400">8 FE Ports (Repeater Murni)</span>
                 </div>
               </div>
               <Plus className="h-4 w-4 text-gray-400" />
@@ -228,7 +230,7 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
                 </div>
                 <div className="text-left">
                   <span className="block text-xs font-medium text-gray-100">Access Point</span>
-                  <span className="block text-[10px] text-gray-400">Radio WiFi + Uplink</span>
+                  <span className="block text-[11px] text-gray-400">Radio WiFi + Uplink</span>
                 </div>
               </div>
               <Plus className="h-4 w-4 text-gray-400" />
@@ -245,7 +247,7 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
                 </div>
                 <div className="text-left">
                   <span className="block text-xs font-medium text-gray-100">Router L3</span>
-                  <span className="block text-[10px] text-gray-400">3 FE Ports (Routed)</span>
+                  <span className="block text-[11px] text-gray-400">3 FE Ports (Routed)</span>
                 </div>
               </div>
               <Plus className="h-4 w-4 text-gray-400" />
@@ -262,7 +264,7 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
                 </div>
                 <div className="text-left">
                   <span className="block text-xs font-medium text-gray-100">Cloud Internet</span>
-                  <span className="block text-[10px] text-gray-400">IP Publik Tersimulasi (8.8.8.8)</span>
+                  <span className="block text-[11px] text-gray-400">IP Publik Tersimulasi (8.8.8.8)</span>
                 </div>
               </div>
               <Plus className="h-4 w-4 text-gray-400" />
@@ -303,7 +305,7 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
                   <span className="text-xs font-semibold text-gray-100">
                     {tpl.name}
                   </span>
-                  <span className="rounded bg-gray-800 px-1.5 py-0.5 text-[9px] font-mono text-gray-400 border border-gray-700">
+                  <span className="rounded bg-gray-800 px-1.5 py-0.5 text-[11px] font-mono text-gray-400 border border-gray-700">
                     {tpl.category}
                   </span>
                 </div>
@@ -312,7 +314,7 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
                   {tpl.description}
                 </p>
 
-                <div className="flex items-center justify-between border-t border-gray-700/60 pt-2 text-[10px] text-gray-400">
+                <div className="flex items-center justify-between border-t border-gray-700/60 pt-2 text-[11px] text-gray-400">
                   <span>
                     {tpl.nodes.length} Nodes • {tpl.edges.length} Links
                   </span>

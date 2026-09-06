@@ -285,16 +285,20 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
         {/* Content */}
         <div className="flex flex-col gap-4 overflow-y-auto p-5">
           {errorMsg && (
-            <div className="rounded-lg bg-red-950/60 p-2.5 text-xs text-red-300 border border-red-800/60">
+            <div
+              role="alert"
+              className="rounded-lg bg-red-950/60 p-2.5 text-xs text-red-300 border border-red-800/60"
+            >
               {errorMsg}
             </div>
           )}
 
           <div>
-            <label className="block text-xs font-medium text-gray-300 mb-1">
+            <label htmlFor="cfg-hostname" className="block text-xs font-medium text-gray-300 mb-1">
               Nama Perangkat (Hostname)
             </label>
             <input
+              id="cfg-hostname"
               type="text"
               value={label}
               onChange={(e) => setLabel(e.target.value)}
@@ -345,18 +349,19 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
               {isWirelessPort ? (
                 /* Konfigurasi port nirkabel: SSID */
                 <div className="pt-2 border-t border-gray-800">
-                  <label className="flex items-center gap-1.5 block text-xs text-violet-300 mb-1">
+                  <label htmlFor="cfg-ssid" className="flex items-center gap-1.5 block text-xs text-violet-300 mb-1">
                     <Wifi className="h-3.5 w-3.5" />
                     {device.type === 'accessPoint' ? 'SSID yang Di-broadcast' : 'SSID Access Point Tujuan'}
                   </label>
                   <input
+                    id="cfg-ssid"
                     type="text"
                     placeholder={device.type === 'accessPoint' ? 'e.g. KantorWiFi' : 'e.g. KantorWiFi (harus sama dengan AP)'}
                     value={ssid}
                     onChange={(e) => setSsid(e.target.value)}
                     className="w-full rounded bg-[#1F2937] px-3 py-1.5 font-mono text-xs text-gray-100 border border-violet-800/60 focus:outline-none focus:border-violet-500"
                   />
-                  <p className="mt-1.5 text-[10px] text-gray-500 leading-relaxed">
+                  <p className="mt-1.5 text-[11px] text-gray-500 leading-relaxed">
                     {device.type === 'accessPoint'
                       ? 'Simpan untuk mengubah SSID radio — semua klien yang terasosiasi akan divalidasi ulang otomatis.'
                       : 'Simpan untuk mencari & berasosiasi otomatis dengan AP ber-SSID yang sama. Kosongkan untuk memutus WiFi.'}
@@ -374,7 +379,7 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
                           type="checkbox"
                           checked={dhcpClient}
                           onChange={(e) => setDhcpClient(e.target.checked)}
-                          className="accent-blue-500"
+                          className="h-4 w-4 accent-blue-500"
                         />
                         <Server className="h-3.5 w-3.5 text-blue-400" />
                         Obtain IP via DHCP (otomatis dari router)
@@ -384,8 +389,9 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
                     {!dhcpClient && (
                       <>
                         <div className="pt-2 border-t border-gray-800">
-                          <label className="block text-xs text-gray-300 mb-1">IPv4 Address</label>
+                          <label htmlFor="cfg-ip" className="block text-xs text-gray-300 mb-1">IPv4 Address</label>
                           <input
+                            id="cfg-ip"
                             type="text"
                             placeholder="e.g. 192.168.1.10"
                             value={ipAddress}
@@ -395,8 +401,9 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
                         </div>
 
                         <div>
-                          <label className="block text-xs text-gray-300 mb-1">Subnet Mask</label>
+                          <label htmlFor="cfg-mask" className="block text-xs text-gray-300 mb-1">Subnet Mask</label>
                           <input
+                            id="cfg-mask"
                             type="text"
                             placeholder="255.255.255.0"
                             value={subnetMask}
@@ -415,7 +422,7 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
                             type="checkbox"
                             checked={natEnabled}
                             onChange={(e) => setNatEnabled(e.target.checked)}
-                            className="accent-sky-500"
+                            className="h-4 w-4 accent-sky-500"
                           />
                           <Globe className="h-3.5 w-3.5 text-sky-400" />
                           NAT/PAT keluar pada interface ini (WAN)
@@ -426,7 +433,7 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
                             type="checkbox"
                             checked={poolEnabled}
                             onChange={(e) => setPoolEnabled(e.target.checked)}
-                            className="accent-emerald-500"
+                            className="h-4 w-4 accent-emerald-500"
                           />
                           <Server className="h-3.5 w-3.5 text-emerald-400" />
                           DHCP Server pada interface ini
@@ -436,33 +443,37 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
                           <div className="grid grid-cols-2 gap-1.5">
                             <input
                               type="text"
+                              aria-label="Network pool DHCP"
                               placeholder="Network (192.168.1.0)"
                               value={poolNetwork}
                               onChange={(e) => setPoolNetwork(e.target.value)}
-                              className="rounded bg-[#1F2937] px-2 py-1 font-mono text-[10px] text-gray-100 border border-gray-700 focus:outline-none focus:border-blue-500"
+                              className="rounded bg-[#1F2937] px-2 py-1 font-mono text-[11px] text-gray-100 border border-gray-700 focus:outline-none focus:border-blue-500"
                             />
                             <input
                               type="text"
+                              aria-label="Subnet mask pool DHCP"
                               placeholder="Mask (255.255.255.0)"
                               value={poolMask}
                               onChange={(e) => setPoolMask(e.target.value)}
-                              className="rounded bg-[#1F2937] px-2 py-1 font-mono text-[10px] text-gray-100 border border-gray-700 focus:outline-none focus:border-blue-500"
+                              className="rounded bg-[#1F2937] px-2 py-1 font-mono text-[11px] text-gray-100 border border-gray-700 focus:outline-none focus:border-blue-500"
                             />
                             <input
                               type="text"
+                              aria-label="IP awal pool DHCP"
                               placeholder="Start IP (192.168.1.100)"
                               value={poolStartIp}
                               onChange={(e) => setPoolStartIp(e.target.value)}
-                              className="rounded bg-[#1F2937] px-2 py-1 font-mono text-[10px] text-gray-100 border border-gray-700 focus:outline-none focus:border-blue-500"
+                              className="rounded bg-[#1F2937] px-2 py-1 font-mono text-[11px] text-gray-100 border border-gray-700 focus:outline-none focus:border-blue-500"
                             />
                             <input
                               type="number"
+                              aria-label="Jumlah maksimum klien pool DHCP"
                               min={1}
                               max={254}
                               placeholder="Max clients"
                               value={poolMaxClients}
                               onChange={(e) => setPoolMaxClients(Number(e.target.value))}
-                              className="rounded bg-[#1F2937] px-2 py-1 font-mono text-[10px] text-gray-100 border border-gray-700 focus:outline-none focus:border-blue-500"
+                              className="rounded bg-[#1F2937] px-2 py-1 font-mono text-[11px] text-gray-100 border border-gray-700 focus:outline-none focus:border-blue-500"
                             />
                           </div>
                         )}
@@ -483,8 +494,9 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
               </label>
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-[10px] text-gray-400 mb-1">Mode Port</label>
+                  <label htmlFor="cfg-vlan-mode" className="block text-[11px] text-gray-400 mb-1">Mode Port</label>
                   <select
+                    id="cfg-vlan-mode"
                     value={portMode}
                     onChange={(e) => setPortMode(e.target.value as 'access' | 'trunk')}
                     className="w-full rounded bg-[#1F2937] px-2 py-1 font-mono text-xs text-gray-100 border border-gray-700 focus:outline-none focus:border-blue-500"
@@ -494,8 +506,9 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[10px] text-gray-400 mb-1">VLAN ID</label>
+                  <label htmlFor="cfg-vlan-id" className="block text-[11px] text-gray-400 mb-1">VLAN ID</label>
                   <input
+                    id="cfg-vlan-id"
                     type="number"
                     min={1}
                     max={4094}
@@ -506,7 +519,7 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
                   />
                 </div>
               </div>
-              <p className="mt-1.5 text-[10px] text-gray-500">
+              <p className="mt-1.5 text-[11px] text-gray-500">
                 Port access hanya berkomunikasi dengan port se-VLAN; port trunk membawa semua VLAN.
               </p>
             </div>
@@ -520,11 +533,11 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
                 Sub-interface VLAN (router-on-a-stick) — {selectedPort.name}
               </label>
               {(subIfs.length === 0) && (
-                <div className="text-[10px] text-gray-500 mb-1.5">Belum ada sub-interface.</div>
+                <div className="text-[11px] text-gray-500 mb-1.5">Belum ada sub-interface.</div>
               )}
               <div className="flex flex-col gap-1 mb-2">
                 {subIfs.map((s, idx) => (
-                  <div key={idx} className="flex items-center justify-between rounded bg-black/40 px-2 py-1.5 font-mono text-[10px] text-gray-300 border border-gray-800">
+                  <div key={idx} className="flex items-center justify-between rounded bg-black/40 px-2 py-1.5 font-mono text-[11px] text-gray-300 border border-gray-800">
                     <span>
                       VLAN {s.vlanId}: {s.ipAddress}/{s.subnetMask}
                     </span>
@@ -540,26 +553,29 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
               <div className="grid grid-cols-3 gap-1.5">
                 <input
                   type="number"
+                  aria-label="VLAN ID sub-interface"
                   min={1}
                   max={4094}
                   placeholder="VLAN"
                   value={subVlan}
                   onChange={(e) => setSubVlan(e.target.value)}
-                  className="rounded bg-[#1F2937] px-2 py-1 font-mono text-[10px] text-gray-100 border border-gray-700 focus:outline-none focus:border-blue-500"
+                  className="rounded bg-[#1F2937] px-2 py-1 font-mono text-[11px] text-gray-100 border border-gray-700 focus:outline-none focus:border-blue-500"
                 />
                 <input
                   type="text"
+                  aria-label="IP sub-interface"
                   placeholder="IP (192.168.10.1)"
                   value={subIp}
                   onChange={(e) => setSubIp(e.target.value)}
-                  className="rounded bg-[#1F2937] px-2 py-1 font-mono text-[10px] text-gray-100 border border-gray-700 focus:outline-none focus:border-blue-500"
+                  className="rounded bg-[#1F2937] px-2 py-1 font-mono text-[11px] text-gray-100 border border-gray-700 focus:outline-none focus:border-blue-500"
                 />
                 <input
                   type="text"
+                  aria-label="Subnet mask sub-interface"
                   placeholder="Mask"
                   value={subMask}
                   onChange={(e) => setSubMask(e.target.value)}
-                  className="rounded bg-[#1F2937] px-2 py-1 font-mono text-[10px] text-gray-100 border border-gray-700 focus:outline-none focus:border-blue-500"
+                  className="rounded bg-[#1F2937] px-2 py-1 font-mono text-[11px] text-gray-100 border border-gray-700 focus:outline-none focus:border-blue-500"
                 />
               </div>
               <button
@@ -574,7 +590,7 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
                   setSubIp('');
                   setErrorMsg('');
                 }}
-                className="mt-2 flex items-center gap-1 rounded bg-sky-600/80 px-2.5 py-1 text-[10px] font-medium text-white hover:bg-sky-500"
+                className="mt-2 flex items-center gap-1 rounded bg-sky-600/80 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-sky-500"
               >
                 <Plus className="h-3 w-3" />
                 Tambah Sub-interface
@@ -585,10 +601,11 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
           {/* Default Gateway untuk end device */}
           {['pc', 'laptop', 'server'].includes(device.type) && (
             <div>
-              <label className="block text-xs font-medium text-gray-300 mb-1">
+              <label htmlFor="cfg-gateway" className="block text-xs font-medium text-gray-300 mb-1">
                 Default Gateway
               </label>
               <input
+                id="cfg-gateway"
                 type="text"
                 placeholder="e.g. 192.168.1.1"
                 value={defaultGateway}
@@ -607,10 +624,10 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
               </label>
               <div className="flex flex-col gap-1.5 mb-2.5">
                 {(device.routes ?? []).length === 0 && (
-                  <span className="text-[10px] text-gray-500">Belum ada static route.</span>
+                  <span className="text-[11px] text-gray-500">Belum ada static route.</span>
                 )}
                 {(device.routes ?? []).map((r, idx) => (
-                  <div key={idx} className="flex items-center justify-between rounded bg-black/40 px-2 py-1.5 font-mono text-[10px] text-gray-300 border border-gray-800">
+                  <div key={idx} className="flex items-center justify-between rounded bg-black/40 px-2 py-1.5 font-mono text-[11px] text-gray-300 border border-gray-800">
                     <span>
                       {r.network}/{r.subnetMask} → {r.nextHop}
                     </span>
@@ -627,29 +644,32 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
               <div className="grid grid-cols-3 gap-1.5">
                 <input
                   type="text"
+                  aria-label="Network static route"
                   placeholder="Network"
                   value={routeNetwork}
                   onChange={(e) => setRouteNetwork(e.target.value)}
-                  className="rounded bg-[#1F2937] px-2 py-1 font-mono text-[10px] text-gray-100 border border-gray-700 focus:outline-none focus:border-blue-500"
+                  className="rounded bg-[#1F2937] px-2 py-1 font-mono text-[11px] text-gray-100 border border-gray-700 focus:outline-none focus:border-blue-500"
                 />
                 <input
                   type="text"
+                  aria-label="Subnet mask static route"
                   placeholder="Mask"
                   value={routeMask}
                   onChange={(e) => setRouteMask(e.target.value)}
-                  className="rounded bg-[#1F2937] px-2 py-1 font-mono text-[10px] text-gray-100 border border-gray-700 focus:outline-none focus:border-blue-500"
+                  className="rounded bg-[#1F2937] px-2 py-1 font-mono text-[11px] text-gray-100 border border-gray-700 focus:outline-none focus:border-blue-500"
                 />
                 <input
                   type="text"
+                  aria-label="Next-hop static route"
                   placeholder="Next-hop"
                   value={routeNextHop}
                   onChange={(e) => setRouteNextHop(e.target.value)}
-                  className="rounded bg-[#1F2937] px-2 py-1 font-mono text-[10px] text-gray-100 border border-gray-700 focus:outline-none focus:border-blue-500"
+                  className="rounded bg-[#1F2937] px-2 py-1 font-mono text-[11px] text-gray-100 border border-gray-700 focus:outline-none focus:border-blue-500"
                 />
               </div>
               <button
                 onClick={handleAddRoute}
-                className="mt-2 flex items-center gap-1 rounded bg-sky-600/80 px-2.5 py-1 text-[10px] font-medium text-white hover:bg-sky-500"
+                className="mt-2 flex items-center gap-1 rounded bg-sky-600/80 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-sky-500"
               >
                 <Plus className="h-3 w-3" />
                 Tambah Route
@@ -662,7 +682,7 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
                     type="checkbox"
                     checked={ripEnabled}
                     onChange={(e) => setRipEnabled(e.target.checked)}
-                    className="accent-violet-500"
+                    className="h-4 w-4 accent-violet-500"
                   />
                   <Route className="h-3.5 w-3.5 text-violet-400" />
                   Aktifkan RIPv2 pada router ini
@@ -676,7 +696,7 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
                         addSimulationLog('ERROR', message === 'SIM_BUSY' ? 'Simulasi lain sedang berjalan.' : `RIP gagal: ${message}`);
                       });
                     }}
-                    className="mt-2 rounded bg-violet-600/90 px-2.5 py-1 text-[10px] font-medium text-white hover:bg-violet-500"
+                    className="mt-2 rounded bg-violet-600/90 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-violet-500"
                   >
                     Jalankan Konvergensi RIP
                   </button>

@@ -56,16 +56,16 @@ function SimTimelineRow({ event, isPlayed, isCurrent, onSelect }: {
         isCurrent ? 'bg-violet-950/50 ring-1 ring-violet-700/60' : 'hover:bg-gray-900/60'
       } ${isPlayed ? '' : 'opacity-40'}`}
     >
-      <span className="text-gray-500 shrink-0 font-mono text-[10px] w-14">
+      <span className="text-gray-500 shrink-0 font-mono text-[11px] w-14">
         t={event.simTimeMs}ms
       </span>
-      <span className={`rounded px-1.5 py-0.2 text-[10px] font-semibold border shrink-0 ${color}`}>
+      <span className={`rounded px-1.5 py-0.2 text-[11px] font-semibold border shrink-0 ${color}`}>
         {isHop ? event.kind : event.level}
       </span>
       <span className="text-gray-300 break-words">{event.message}</span>
       {event.effects && event.effects.length > 0 && (
         <span
-          className="ml-auto shrink-0 rounded bg-amber-950/60 border border-amber-800/60 px-1 text-[9px] text-amber-300"
+          className="ml-auto shrink-0 rounded bg-amber-950/60 border border-amber-800/60 px-1 text-[11px] text-amber-300"
           title="Event ini mengubah tabel (CAM/ARP)"
         >
           table
@@ -194,7 +194,7 @@ export function EventLogPanel() {
           <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-300">
             Network Event Log & PDU Inspection
           </span>
-          <span className="rounded bg-gray-800 px-1.5 py-0.2 text-[10px] text-gray-400">
+          <span className="rounded bg-gray-800 px-1.5 py-0.2 text-[11px] text-gray-400">
             {simulationLogs.length} events
           </span>
         </div>
@@ -204,6 +204,7 @@ export function EventLogPanel() {
           <button
             onClick={clearSimulationLogs}
             title="Bersihkan Log"
+            aria-label="Bersihkan Log"
             className="rounded p-1 text-gray-400 hover:bg-gray-800 hover:text-red-400 transition-colors"
           >
             <Trash2 className="h-3.5 w-3.5" />
@@ -212,6 +213,7 @@ export function EventLogPanel() {
           <button
             onClick={handleMaximize}
             title={height > 350 ? 'Kecilkan Panel' : 'Perbesar Panel'}
+            aria-label={height > 350 ? 'Kecilkan Panel' : 'Perbesar Panel'}
             className="rounded p-1 text-gray-400 hover:bg-gray-800 hover:text-white transition-colors"
           >
             {height > 350 ? (
@@ -224,6 +226,7 @@ export function EventLogPanel() {
           <button
             onClick={toggleCollapse}
             title={isCollapsed ? 'Buka Panel' : 'Sembunyikan Panel'}
+            aria-label={isCollapsed ? 'Buka Panel' : 'Sembunyikan Panel'}
             className="rounded p-1 text-gray-400 hover:bg-gray-800 hover:text-white transition-colors"
           >
             {isCollapsed ? (
@@ -242,7 +245,7 @@ export function EventLogPanel() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-1.5 px-2.5 text-[10px] font-semibold uppercase tracking-wider border-b-2 transition-colors ${
+              className={`flex items-center gap-1.5 px-2.5 text-[11px] font-semibold uppercase tracking-wider border-b-2 transition-colors ${
                 activeTab === tab.id
                   ? 'border-blue-500 text-white'
                   : 'border-transparent text-gray-500 hover:text-gray-300'
@@ -253,7 +256,7 @@ export function EventLogPanel() {
             </button>
           ))}
           {activeTab === 'sim' && simPlan.length > 0 && (
-            <span className="ml-auto self-center text-[10px] text-gray-500 font-mono">
+            <span className="ml-auto self-center text-[11px] text-gray-500 font-mono">
               {Math.min(simPlayedUpTo, simPlan.length)}/{simPlan.length} event diputar
             </span>
           )}
@@ -275,11 +278,11 @@ export function EventLogPanel() {
                   key={log.id}
                   className="flex items-start gap-2.5 leading-relaxed hover:bg-gray-900/60 px-1 py-0.5 rounded"
                 >
-                  <span className="text-gray-500 shrink-0 font-mono text-[10px]">
+                  <span className="text-gray-500 shrink-0 font-mono text-[11px]">
                     {timeStr}
                   </span>
                   <span
-                    className={`rounded px-1.5 py-0.2 text-[10px] font-semibold border shrink-0 ${getBadgeColor(
+                    className={`rounded px-1.5 py-0.2 text-[11px] font-semibold border shrink-0 ${getBadgeColor(
                       log.type
                     )}`}
                   >
@@ -323,78 +326,88 @@ export function EventLogPanel() {
             <div className="text-gray-500 italic py-2 text-center">
               Pilih perangkat di kanvas untuk melihat tabel CAM, ARP, dan Routing secara real-time.
             </div>
+          ) : selectedDevice.type === 'hub' ? (
+            <div className="text-gray-500 italic py-2 text-center">
+              Hub adalah repeater Layer-1 murni — sinyal hanya diulang ke semua port, tidak ada tabel.
+            </div>
           ) : (
             <div className="grid grid-cols-2 gap-2.5">
-              {/* CAM Table */}
-              <div className="rounded border border-gray-800 bg-black/40 p-2">
-                <div className="text-[10px] font-bold uppercase text-emerald-400 mb-1">
-                  CAM Table — {selectedDevice.label}
+              {/* CAM Table — hanya switch (L2 MAC learning) */}
+              {selectedDevice.type === 'switch' && (
+                <div className="rounded border border-gray-800 bg-black/40 p-2">
+                  <div className="text-[11px] font-bold uppercase text-emerald-400 mb-1">
+                    CAM Table — {selectedDevice.label}
+                  </div>
+                  {Object.keys(selectedDevice.macTable ?? {}).length === 0 ? (
+                    <div className="text-gray-600 italic">(kosong)</div>
+                  ) : (
+                    Object.entries(selectedDevice.macTable ?? {}).map(([mac, port]) => (
+                      <div key={mac} className="flex items-center gap-1 text-gray-300">
+                        <span className="truncate">{mac.toLowerCase()}</span>
+                        <ArrowRight className="h-2.5 w-2.5 text-gray-600 shrink-0" />
+                        <span className="text-emerald-300">{port}</span>
+                      </div>
+                    ))
+                  )}
                 </div>
-                {Object.keys(selectedDevice.macTable ?? {}).length === 0 ? (
-                  <div className="text-gray-600 italic">(kosong)</div>
-                ) : (
-                  Object.entries(selectedDevice.macTable ?? {}).map(([mac, port]) => (
-                    <div key={mac} className="flex items-center gap-1 text-gray-300">
-                      <span className="truncate">{mac.toLowerCase()}</span>
-                      <ArrowRight className="h-2.5 w-2.5 text-gray-600 shrink-0" />
-                      <span className="text-emerald-300">{port}</span>
-                    </div>
-                  ))
-                )}
-              </div>
+              )}
 
-              {/* ARP Cache */}
-              <div className="rounded border border-gray-800 bg-black/40 p-2">
-                <div className="text-[10px] font-bold uppercase text-cyan-400 mb-1">
-                  ARP Cache — {selectedDevice.label}
+              {/* ARP Cache — perangkat ber-IP */}
+              {selectedDevice.type !== 'switch' && (
+                <div className="rounded border border-gray-800 bg-black/40 p-2">
+                  <div className="text-[11px] font-bold uppercase text-cyan-400 mb-1">
+                    ARP Cache — {selectedDevice.label}
+                  </div>
+                  {Object.keys(selectedDevice.arpTable ?? {}).length === 0 ? (
+                    <div className="text-gray-600 italic">(kosong)</div>
+                  ) : (
+                    Object.entries(selectedDevice.arpTable ?? {}).map(([ip, mac]) => (
+                      <div key={ip} className="flex items-center gap-1 text-gray-300">
+                        <span>{ip}</span>
+                        <ArrowRight className="h-2.5 w-2.5 text-gray-600 shrink-0" />
+                        <span className="text-cyan-300 truncate">{mac.toLowerCase()}</span>
+                      </div>
+                    ))
+                  )}
                 </div>
-                {Object.keys(selectedDevice.arpTable ?? {}).length === 0 ? (
-                  <div className="text-gray-600 italic">(kosong)</div>
-                ) : (
-                  Object.entries(selectedDevice.arpTable ?? {}).map(([ip, mac]) => (
-                    <div key={ip} className="flex items-center gap-1 text-gray-300">
-                      <span>{ip}</span>
-                      <ArrowRight className="h-2.5 w-2.5 text-gray-600 shrink-0" />
-                      <span className="text-cyan-300 truncate">{mac.toLowerCase()}</span>
-                    </div>
-                  ))
-                )}
-              </div>
+              )}
 
-              {/* Routing Table */}
-              <div className="rounded border border-gray-800 bg-black/40 p-2">
-                <div className="text-[10px] font-bold uppercase text-amber-400 mb-1">
-                  Routing — {selectedDevice.label}
+              {/* Routing Table — hanya router */}
+              {selectedDevice.type === 'router' && (
+                <div className="rounded border border-gray-800 bg-black/40 p-2">
+                  <div className="text-[11px] font-bold uppercase text-amber-400 mb-1">
+                    Routing — {selectedDevice.label}
+                  </div>
+                  {(selectedDevice.routes ?? []).length === 0 ? (
+                    <div className="text-gray-600 italic">(kosong)</div>
+                  ) : (
+                    (selectedDevice.routes ?? []).map((r, idx) => (
+                      <div key={idx} className="text-gray-300 truncate">
+                        {r.network}/{r.subnetMask} → <span className="text-amber-300">{r.nextHop}</span>
+                      </div>
+                    ))
+                  )}
                 </div>
-                {selectedDevice.type !== 'router' ? (
-                  <div className="text-gray-600 italic">bukan router</div>
-                ) : (selectedDevice.routes ?? []).length === 0 ? (
-                  <div className="text-gray-600 italic">(kosong)</div>
-                ) : (
-                  (selectedDevice.routes ?? []).map((r, idx) => (
-                    <div key={idx} className="text-gray-300 truncate">
-                      {r.network}/{r.subnetMask} → <span className="text-amber-300">{r.nextHop}</span>
-                    </div>
-                  ))
-                )}
-              </div>
+              )}
 
-              {/* NAT Translations */}
-              <div className="rounded border border-gray-800 bg-black/40 p-2">
-                <div className="text-[10px] font-bold uppercase text-sky-400 mb-1">
-                  NAT Table — {selectedDevice.label}
+              {/* NAT Translations — hanya router */}
+              {selectedDevice.type === 'router' && (
+                <div className="rounded border border-gray-800 bg-black/40 p-2">
+                  <div className="text-[11px] font-bold uppercase text-sky-400 mb-1">
+                    NAT Table — {selectedDevice.label}
+                  </div>
+                  {(selectedDevice.natTable ?? []).length === 0 ? (
+                    <div className="text-gray-600 italic">(kosong)</div>
+                  ) : (
+                    (selectedDevice.natTable ?? []).map((t, idx) => (
+                      <div key={idx} className="text-gray-300 truncate">
+                        {t.insideIp} → <span className="text-sky-300">{t.globalIp}</span>
+                        <span className="text-gray-600"> (id {t.icmpId}#{t.echoSeq})</span>
+                      </div>
+                    ))
+                  )}
                 </div>
-                {(selectedDevice.natTable ?? []).length === 0 ? (
-                  <div className="text-gray-600 italic">(kosong)</div>
-                ) : (
-                  (selectedDevice.natTable ?? []).map((t, idx) => (
-                    <div key={idx} className="text-gray-300 truncate">
-                      {t.insideIp} → <span className="text-sky-300">{t.globalIp}</span>
-                      <span className="text-gray-600"> (id {t.icmpId}#{t.echoSeq})</span>
-                    </div>
-                  ))
-                )}
-              </div>
+              )}
             </div>
           )}
         </div>

@@ -16,6 +16,7 @@ export function LabModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
 
   useEffect(() => {
     if (allDone) {
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
       confetti({ particleCount: 160, spread: 75, origin: { y: 0.6 } });
     }
   }, [allDone]);
@@ -42,7 +43,7 @@ export function LabModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
             <GraduationCap className="h-5 w-5 text-amber-400" />
             <span id="lab-modal-title" className="text-sm font-bold text-white">Mode Lab Praktikum</span>
             {activeLab && (
-              <span className="rounded bg-amber-950/70 px-2 py-0.5 text-[10px] text-amber-300 border border-amber-800/60">
+              <span className="rounded bg-amber-950/70 px-2 py-0.5 text-[11px] text-amber-300 border border-amber-800/60">
                 berjalan: {activeLab.title}
               </span>
             )}
@@ -73,7 +74,7 @@ export function LabModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="text-sm font-bold text-gray-100">{lab.title}</span>
                     <span
-                      className={`rounded px-2 py-0.5 text-[10px] font-semibold border ${
+                      className={`rounded px-2 py-0.5 text-[11px] font-semibold border ${
                         lab.difficulty === 'Dasar'
                           ? 'bg-emerald-950/70 text-emerald-300 border-emerald-800'
                           : 'bg-amber-950/70 text-amber-300 border-amber-800'
@@ -102,7 +103,7 @@ export function LabModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
               <h3 className="text-base font-bold text-white">{selected.title}</h3>
               <p className="text-xs text-gray-300 leading-relaxed">{selected.story}</p>
               <div className="rounded-lg border border-gray-800 bg-black/40 p-3">
-                <div className="text-[10px] font-bold uppercase text-gray-400 mb-1.5">Objektif</div>
+                <div className="text-[11px] font-bold uppercase text-gray-400 mb-1.5">Objektif</div>
                 <ul className="text-xs text-gray-300 space-y-1 list-disc list-inside">
                   {selected.objectives.map((o) => (
                     <li key={o.id}>{o.description}</li>
@@ -136,7 +137,7 @@ export function LabModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
               <p className="text-xs text-gray-300 leading-relaxed">{activeLab.story}</p>
 
               <div className="rounded-lg border border-gray-800 bg-black/40 p-3 space-y-1.5">
-                <div className="text-[10px] font-bold uppercase text-gray-400 mb-1">
+                <div className="text-[11px] font-bold uppercase text-gray-400 mb-1">
                   Objektif ({Object.values(labCompleted).filter(Boolean).length}/{activeLab.objectives.length})
                 </div>
                 {activeLab.objectives.map((o) => {
