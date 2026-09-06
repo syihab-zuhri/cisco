@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useReactFlow } from '@xyflow/react';
 import {
   Cable,
   Cloud,
@@ -27,27 +28,30 @@ interface DevicePaletteProps {
 export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
   const { addDevice, loadTopology, addSimulationLog } = useAppStore();
   const labLocked = useAppStore((s) => s.activeLabId !== null);
+  const reactFlow = useReactFlow();
   const [activeTab, setActiveTab] = useState<'devices' | 'templates'>('devices');
 
   const handleAdd = (type: DeviceType) => {
-    // Cari posisi yang tidak menumpuk perangkat lain: geser kandidat sampai
-    // cukup jauh (node ±150px) dari semua node yang sudah ada di kanvas.
+    // 1) Perangkat baru muncul di TENGAH viewport kanvas yang terlihat,
+    //    bukan posisi acak — mudah langsung ditemukan pengguna.
+    const canvasEl = document.querySelector('.react-flow');
+    const rect = canvasEl?.getBoundingClientRect();
+    const centerX = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
+    const centerY = rect ? rect.top + rect.height / 2 : window.innerHeight / 2;
+    const center = reactFlow.screenToFlowPosition({ x: centerX, y: centerY });
+
+    // 2) Cascade: jika sudah ada perangkat di sekitar titik tengah, geser
+    //    perangkat baru 28px diagonal per tumpukan sehingga perangkat
+    //    sebelumnya tetap terlihat sebagian (tidak tertutup penuh).
     const existing = useAppStore.getState().nodes;
-    const collides = (x: number, y: number) =>
-      existing.some(
-        (n) => Math.abs(n.position.x - x) < 210 && Math.abs(n.position.y - y) < 210
-      );
-    let x = 180 + Math.random() * 160;
-    let y = 140 + Math.random() * 160;
-    for (let tries = 0; collides(x, y) && tries < 50; tries += 1) {
-      x += 90;
-      if (x > 1000) {
-        x = 180 + Math.random() * 100;
-        y += 170;
-        if (y > 800) y = 140 + Math.random() * 100;
-      }
-    }
-    addDevice(type, { x, y });
+    const stackedNearCenter = existing.filter(
+      (n) =>
+        Math.abs(n.position.x - center.x) < 160 &&
+        Math.abs(n.position.y - center.y) < 160
+    ).length;
+    const shift = Math.min(stackedNearCenter, 10) * 28;
+
+    addDevice(type, { x: center.x + shift, y: center.y + shift });
   };
 
   const handleApplyTemplate = (template: TopologyTemplate) => {
