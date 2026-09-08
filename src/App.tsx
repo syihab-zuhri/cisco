@@ -9,6 +9,7 @@ import { DeviceConfigModal } from './components/modal/DeviceConfigModal';
 import { DeviceCliModal } from './components/terminal/DeviceCliModal';
 import { DocumentationModal } from './components/modal/DocumentationModal';
 import { LabModal } from './components/modal/LabModal';
+import { TestAllModal } from './components/modal/TestAllModal';
 import { ToastHost } from './components/ui/ToastHost';
 import { ConfirmDialog } from './components/ui/ConfirmDialog';
 import { useSimulationEngine } from './hooks/useSimulationEngine';
@@ -18,6 +19,7 @@ export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
   const [isDocsOpen, setIsDocsOpen] = useState<boolean>(false);
   const [isLabOpen, setIsLabOpen] = useState<boolean>(false);
+  const [isTestAllOpen, setIsTestAllOpen] = useState<boolean>(false);
 
   const handleTriggerPing = (sourceNodeId: string, targetIp: string) => {
     triggerPing(sourceNodeId, targetIp);
@@ -30,6 +32,7 @@ export default function App() {
           onTriggerPing={handleTriggerPing}
           onOpenDocs={() => setIsDocsOpen(true)}
           onOpenLabs={() => setIsLabOpen(true)}
+          onOpenTestAll={() => setIsTestAllOpen(true)}
         />
         <div className="flex flex-1 overflow-hidden">
           <DevicePalette
@@ -49,6 +52,7 @@ export default function App() {
         <DeviceConfigModal />
         <DeviceCliModal />
         <LabModal isOpen={isLabOpen} onClose={() => setIsLabOpen(false)} />
+        <TestAllModal isOpen={isTestAllOpen} onClose={() => setIsTestAllOpen(false)} />
         <DocumentationModal
           isOpen={isDocsOpen}
           onClose={() => setIsDocsOpen(false)}

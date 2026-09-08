@@ -111,7 +111,16 @@ export function PduInspectorDrawer() {
                 <HeaderRow label="Src IP" value={pdu.packet.srcIp} />
                 <HeaderRow label="Dst IP" value={pdu.packet.dstIp} />
                 <HeaderRow label="TTL" value={pdu.packet.ttl} />
-                <HeaderRow label="Protocol" value={`${pdu.packet.protocol} (1)`} />
+                <HeaderRow
+                  label="Protocol"
+                  value={
+                    pdu.packet.protocol === 'ICMP'
+                      ? 'ICMP (1)'
+                      : pdu.packet.protocol === 'RIP'
+                      ? 'UDP 520 / RIP (17)'
+                      : `${pdu.packet.protocol} (17)`
+                  }
+                />
                 <HeaderRow label="Identification" value={`0x${pdu.packet.id.toString(16).padStart(4, '0')}`} />
               </div>
             )}
@@ -165,6 +174,19 @@ export function PduInspectorDrawer() {
                 <HeaderRow label="Client MAC" value={pdu.dhcp.clientId} />
                 {pdu.dhcp.yiaddr && <HeaderRow label="yiaddr (IP)" value={pdu.dhcp.yiaddr} />}
                 {pdu.dhcp.serverId && <HeaderRow label="Server ID" value={pdu.dhcp.serverId} />}
+              </div>
+            )}
+
+            {/* RIP (UDP 520) */}
+            {pdu.packet?.protocol === 'RIP' && (
+              <div className="rounded border border-indigo-800/60 bg-black/40 p-2.5">
+                <div className="text-[11px] font-bold uppercase text-indigo-400 mb-1.5">
+                  L4 payload · RIPv2 (UDP 520)
+                </div>
+                <HeaderRow label="Routing Protocol" value="RIPv2 (RFC 2453)" />
+                <HeaderRow label="Transport" value="UDP port 520" />
+                <HeaderRow label="Destination IP" value={`${pdu.packet.dstIp} (RIP multicast)`} />
+                {pdu.note && <HeaderRow label="Update Content" value={pdu.note} />}
               </div>
             )}
           </>

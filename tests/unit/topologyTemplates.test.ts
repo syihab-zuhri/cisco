@@ -67,4 +67,62 @@ describe('Integritas template topologi', () => {
     expect(r1!.data.routes?.length ?? 0).toBeGreaterThan(0);
     expect(r2!.data.routes?.length ?? 0).toBeGreaterThan(0);
   });
+
+  it('semua template dapat dimuat ke simulation engine dan diping tanpa error', async () => {
+    const { HeadlessSimulationEngine } = await import('../../src/engine/simulationEngine');
+    const { runTestAll } = await import('../../src/utils/testAllRunner');
+    expect(TOPOLOGY_TEMPLATES.length).toBeGreaterThanOrEqual(16);
+
+    for (const tpl of TOPOLOGY_TEMPLATES) {
+      const engine = new HeadlessSimulationEngine();
+      const devices = tpl.nodes.map((n) => n.data);
+      const links = tpl.edges.map((e) => ({
+        sourceNodeId: e.source,
+        sourcePortId: e.sourceHandle!,
+        targetNodeId: e.target,
+        targetPortId: e.targetHandle!,
+      }));
+
+      expect(() => engine.setTopology(devices, links)).not.toThrow();
+
+      // Verify runTestAll runs cleanly across every template without crash
+      expect(() => runTestAll(devices, links, ['ping', 'gateway'])).not.toThrow();
+
+      const hosts = devices.filter((d) => d.ports.some((p) => p.ipAddress && p.status === 'up'));
+      if (hosts.length >= 2) {
+        const src = hosts[0];
+        const dst = hosts[1];
+        const targetIp = dst.ports.find((p) => p.ipAddress && p.status === 'up')?.ipAddress;
+        if (targetIp) {
+          const res = await engine.executePing(src.id, targetIp);
+          expect(res).toBeDefined();
+          expect(res.outputLines.length).toBeGreaterThan(0);
+        }
+      }
+    }
+  });
+
+  it('semua skenario lab (3 lab) dapat dimuat ke engine dan dievaluasi tanpa error', async () => {
+    const { LAB_SCENARIOS, evaluateLab } = await import('../../src/data/labs');
+    const { HeadlessSimulationEngine } = await import('../../src/engine/simulationEngine');
+    expect(LAB_SCENARIOS.length).toBeGreaterThanOrEqual(3);
+
+    for (const lab of LAB_SCENARIOS) {
+      const engine = new HeadlessSimulationEngine();
+      const devices = lab.nodes.map((n) => n.data);
+      const links = lab.edges.map((e) => ({
+        sourceNodeId: e.source,
+        sourcePortId: e.sourceHandle!,
+        targetNodeId: e.target,
+        targetPortId: e.targetHandle!,
+      }));
+
+      expect(() => engine.setTopology(devices, links)).not.toThrow();
+      const evalResult = evaluateLab(lab, { nodes: lab.nodes, lastPing: null });
+      expect(evalResult).toBeDefined();
+      for (const obj of lab.objectives) {
+        expect(typeof evalResult[obj.id]).toBe('boolean');
+      }
+    }
+  });
 });

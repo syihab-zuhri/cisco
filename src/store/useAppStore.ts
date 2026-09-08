@@ -20,6 +20,7 @@ import {
 import { generateMacAddress } from '../utils/ipUtils';
 import { type SimEvent } from '../types/protocol';
 import { LAB_SCENARIOS, evaluateLab, type LabScenario } from '../data/labs';
+import { abortSimulation } from '../hooks/useSimulationEngine';
 
 export interface ToastItem {
   id: string;
@@ -262,13 +263,38 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   activePackets: [],
 
   onNodesChange: (changes) => {
+    if (get().activeLabId) {
+      const hasRemove = changes.some((c) => c.type === 'remove');
+      if (hasRemove) {
+        get().addSimulationLog('ERROR', 'Topologi lab terkunci — tidak bisa menghapus perangkat.');
+        return;
+      }
+    }
+    const removedNodeIds = changes
+      .filter((c) => c.type === 'remove')
+      .map((c) => c.id);
+    if (removedNodeIds.length > 0) {
+      for (const nodeId of removedNodeIds) {
+        const connectedEdges = get().edges.filter(
+          (e) => e.source === nodeId || e.target === nodeId
+        );
+        connectedEdges.forEach((edge) => get().disconnectEdge(edge.id));
+      }
+    }
+
     set({
       nodes: applyNodeChanges(changes, get().nodes),
     });
   },
 
   onEdgesChange: (changes) => {
-    // Check if any edges are being removed to bring down port status
+    if (get().activeLabId) {
+      const hasRemove = changes.some((c) => c.type === 'remove');
+      if (hasRemove) {
+        get().addSimulationLog('ERROR', 'Topologi lab terkunci — kabel tidak bisa dilepas.');
+        return;
+      }
+    }
     const removedEdgeIds = changes
       .filter((c) => c.type === 'remove')
       .map((c) => c.id);
@@ -338,24 +364,51 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   setSelectedNodeId: (id) => set({ selectedNodeId: id }),
-  setActiveConfigModalNodeId: (id) => set({ activeConfigModalNodeId: id }),
-  setActiveCliModalNodeId: (id) => set({ activeCliModalNodeId: id }),
+  setActiveConfigModalNodeId: (id) =>
+    set({
+      activeConfigModalNodeId: id,
+      activeCliModalNodeId: id ? null : get().activeCliModalNodeId,
+    }),
+  setActiveCliModalNodeId: (id) =>
+    set({
+      activeCliModalNodeId: id,
+      activeConfigModalNodeId: id ? null : get().activeConfigModalNodeId,
+    }),
 
   updatePortConfig: (nodeId, portId, updates) => {
-    set((state) => ({
-      nodes: state.nodes.map((node) => {
-        if (node.id !== nodeId) return node;
-        return {
-          ...node,
-          data: {
-            ...node.data,
-            ports: node.data.ports.map((port) =>
-              port.id === portId ? { ...port, ...updates } : port
-            ),
-          },
-        };
-      }),
-    }));
+    set((state) => {
+      const targetNode = state.nodes.find((n) => n.id === nodeId);
+      const targetPort = targetNode?.data.ports.find((p) => p.id === portId);
+      const oldIp = targetPort?.ipAddress;
+      const ipChanged = updates.ipAddress && updates.ipAddress !== oldIp;
+
+      return {
+        nodes: state.nodes.map((node) => {
+          let arpTable = node.data.arpTable;
+          // Invalidate stale ARP entries on other devices when IP changes (Bug 8 / INV-006)
+          if (ipChanged && arpTable && oldIp && arpTable[oldIp]) {
+            const nextArp = { ...arpTable };
+            delete nextArp[oldIp];
+            arpTable = nextArp;
+          }
+          if (node.id !== nodeId) {
+            return arpTable !== node.data.arpTable
+              ? { ...node, data: { ...node.data, arpTable } }
+              : node;
+          }
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              arpTable,
+              ports: node.data.ports.map((port) =>
+                port.id === portId ? { ...port, ...updates } : port
+              ),
+            },
+          };
+        }),
+      };
+    });
   },
 
   updateDeviceConfig: (nodeId, updates) => {
@@ -733,6 +786,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   labCompleted: {},
   lastPingResult: null,
   startLab: (lab) => {
+    abortSimulation();
+    set({ activeLabId: null });
     const nodes = JSON.parse(JSON.stringify(lab.nodes));
     const edges = JSON.parse(JSON.stringify(lab.edges));
     get().loadTopology({ nodes, edges });
@@ -740,6 +795,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     get().addSimulationLog('INFO', `Lab dimulai: ${lab.title} — topologi terkunci.`);
   },
   stopLab: () => {
+    abortSimulation();
     set({ activeLabId: null, labCompleted: {} });
     get().addSimulationLog('INFO', 'Lab dihentikan. Kanvas terbuka kembali.');
   },
@@ -752,19 +808,22 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     if (!activeLabId) return;
     const lab = LAB_SCENARIOS.find((l) => l.id === activeLabId);
     if (!lab) return;
-    const result = evaluateLab(lab, { nodes, lastPing: lastPingResult });
-    // Monoton: objektif yang pernah terverifikasi tetap tercentang
-    const merged = { ...labCompleted };
-    let changed = false;
-    for (const [key, value] of Object.entries(result)) {
-      if (value && !merged[key]) {
-        merged[key] = true;
-        changed = true;
+    const currentEval = evaluateLab(lab, { nodes, lastPing: lastPingResult });
+    const merged: Record<string, boolean> = { ...labCompleted };
+    for (const objective of lab.objectives) {
+      if (objective.check.type === 'ping-success') {
+        merged[objective.id] = (labCompleted[objective.id] ?? false) || (currentEval[objective.id] ?? false);
+      } else {
+        merged[objective.id] = currentEval[objective.id] ?? false;
+      }
+    }
+    for (const [key, value] of Object.entries(merged)) {
+      if (value && !labCompleted[key]) {
         const objective = lab.objectives.find((o) => o.id === key);
         get().addSimulationLog('SUCCESS', `Lab: objektif tercapai — ${objective?.description ?? key}`);
       }
     }
-    if (changed) set({ labCompleted: merged });
+    set({ labCompleted: merged });
   },
 
   addSquare: (position) => {
@@ -830,12 +889,17 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       get().addSimulationLog('ERROR', 'Topologi lab terkunci — tidak bisa memuat topologi/template lain.');
       return;
     }
+    abortSimulation();
     // Sinkronkan counter penamaan dengan label yang dimuat agar tidak ada nama duplikat.
     const counters: Record<DeviceType, number> = { ...EMPTY_DEVICE_COUNTERS };
     for (const n of data.nodes) {
-      const match = n.data.label.match(/-(\d+)\s*$/);
-      if (match && n.data.type in counters) {
-        counters[n.data.type] = Math.max(counters[n.data.type], parseInt(match[1], 10));
+      if (n.data?.type && n.data.type in counters) {
+        const match = n.data.label?.match(/\d+$/);
+        if (match) {
+          counters[n.data.type] = Math.max(counters[n.data.type], parseInt(match[0], 10));
+        } else {
+          counters[n.data.type] = Math.max(counters[n.data.type] + 1, counters[n.data.type]);
+        }
       }
     }
     deviceCounters = counters;
@@ -879,6 +943,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   topologyVersion: 0,
 
   resetTopology: () => {
+    abortSimulation();
     deviceCounters = { ...EMPTY_DEVICE_COUNTERS };
     set({
       nodes: [],
@@ -886,6 +951,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       selectedNodeId: null,
       activeConfigModalNodeId: null,
       activeCliModalNodeId: null,
+      activeLabId: null,
+      labCompleted: {},
       simulationLogs: [],
       activePackets: [],
       simulationStatus: 'idle',

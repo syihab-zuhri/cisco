@@ -23,7 +23,7 @@ export interface IPv4Packet {
   srcIp: string;
   dstIp: string;
   ttl: number;
-  protocol: 'ICMP';
+  protocol: 'ICMP' | 'RIP' | 'UDP';
   id: number;
 }
 

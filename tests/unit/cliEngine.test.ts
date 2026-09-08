@@ -187,6 +187,16 @@ describe('CliSession tambahan', () => {
     expect(lines.join(' ')).toContain('fa0/0, fa0/1');
   });
 
+  it('menolak konfigurasi alamat network atau broadcast sebagai IP interface', async () => {
+    await session.handle('enable');
+    await session.handle('conf t');
+    await session.handle('int fa0/0');
+    const linesBcast = await session.handle('ip address 192.168.1.255 255.255.255.0');
+    expect(linesBcast[0]).toBe('% Bad mask /24 for address 192.168.1.255');
+    const linesNet = await session.handle('ip address 192.168.1.0 255.255.255.0');
+    expect(linesNet[0]).toBe('% Bad mask /24 for address 192.168.1.0');
+  });
+
   it('perintah tidak dikenal memberi pesan IOS-style', async () => {
     await session.handle('enable');
     const lines = await session.handle('reload');

@@ -566,6 +566,7 @@ export const TOPOLOGY_TEMPLATES: TopologyTemplate[] = [
           ports: [
             { id: 'fa0/1', name: 'FastEthernet 0/1', status: 'up', macAddress: '00:50:79:C1:00:01', connectedEdgeId: 'edge-swa-swc', connectedToNodeId: 'sw-a', connectedToPortId: 'fa0/2' },
             { id: 'fa0/2', name: 'FastEthernet 0/2', status: 'up', macAddress: '00:50:79:C1:00:02', connectedEdgeId: 'edge-swb-swc', connectedToNodeId: 'sw-b', connectedToPortId: 'fa0/2' },
+            { id: 'fa0/3', name: 'FastEthernet 0/3', status: 'up', macAddress: '00:50:79:C1:00:03', connectedEdgeId: 'edge-pcb-swc', connectedToNodeId: 'pc-b', connectedToPortId: 'fa0' },
           ],
           macTable: {},
         },
@@ -573,12 +574,24 @@ export const TOPOLOGY_TEMPLATES: TopologyTemplate[] = [
       {
         id: 'pc-a',
         type: 'deviceNode',
-        position: { x: 380, y: 440 },
+        position: { x: 280, y: 440 },
         data: {
           id: 'pc-a',
-          label: 'Host-PC',
+          label: 'Host-PC-A',
           type: 'pc',
           ports: [{ id: 'fa0', name: 'FastEthernet 0', status: 'up', ipAddress: '10.0.0.10', subnetMask: '255.0.0.0', macAddress: '00:50:79:CC:00:01', connectedEdgeId: 'edge-pca-swa', connectedToNodeId: 'sw-a', connectedToPortId: 'fa0/3' }],
+          arpTable: {},
+        },
+      },
+      {
+        id: 'pc-b',
+        type: 'deviceNode',
+        position: { x: 580, y: 440 },
+        data: {
+          id: 'pc-b',
+          label: 'Host-PC-B',
+          type: 'pc',
+          ports: [{ id: 'fa0', name: 'FastEthernet 0', status: 'up', ipAddress: '10.0.0.20', subnetMask: '255.0.0.0', macAddress: '00:50:79:CC:00:02', connectedEdgeId: 'edge-pcb-swc', connectedToNodeId: 'sw-c', connectedToPortId: 'fa0/3' }],
           arpTable: {},
         },
       },
@@ -588,6 +601,7 @@ export const TOPOLOGY_TEMPLATES: TopologyTemplate[] = [
       { id: 'edge-swa-swc', source: 'sw-a', target: 'sw-c', sourceHandle: 'fa0/2', targetHandle: 'fa0/1', type: 'networkCable', data: { sourcePortName: 'fa0/2', targetPortName: 'fa0/1' } },
       { id: 'edge-swb-swc', source: 'sw-b', target: 'sw-c', sourceHandle: 'fa0/2', targetHandle: 'fa0/2', type: 'networkCable', data: { sourcePortName: 'fa0/2', targetPortName: 'fa0/2' } },
       { id: 'edge-pca-swa', source: 'pc-a', target: 'sw-a', sourceHandle: 'fa0', targetHandle: 'fa0/3', type: 'networkCable', data: { sourcePortName: 'fa0', targetPortName: 'fa0/3' } },
+      { id: 'edge-pcb-swc', source: 'pc-b', target: 'sw-c', sourceHandle: 'fa0', targetHandle: 'fa0/3', type: 'networkCable', data: { sourcePortName: 'fa0', targetPortName: 'fa0/3' } },
     ],
   },
 

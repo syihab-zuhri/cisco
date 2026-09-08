@@ -55,6 +55,12 @@ export type UIWorkerMessage =
     }
   | {
       type: 'START_RIP';
+      payload: {
+        requestId: string;
+      };
+    }
+  | {
+      type: 'ABORT_SIMULATION';
     };
 
 export interface DhcpResultPayload {

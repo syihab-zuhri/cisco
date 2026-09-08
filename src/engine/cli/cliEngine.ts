@@ -1,5 +1,5 @@
 import { type DeviceData } from '../../types/network';
-import { isValidIp, isValidSubnetMask, networkAddress, prefixLength } from '../../utils/ipUtils';
+import { isValidIp, isValidSubnetMask, networkAddress, prefixLength, ipToNumber } from '../../utils/ipUtils';
 
 export type CliMode = 'user' | 'priv' | 'config' | 'config-if';
 
@@ -57,17 +57,51 @@ export class CliSession {
 
   private findPort(identifier: string) {
     const device = this.deps.getDevice();
-    return device.ports.find(
-      (p) => p.id === identifier || p.name.toLowerCase() === identifier.toLowerCase()
-    );
+    const clean = identifier.toLowerCase().replace(/\s+/g, '');
+    const direct = device.ports.find((p) => {
+      const pId = p.id.toLowerCase().replace(/\s+/g, '');
+      const pName = p.name.toLowerCase().replace(/\s+/g, '');
+      return (
+        pId === clean ||
+        pName === clean ||
+        pId.replace(/^fastethernet/, 'fa') === clean ||
+        pName.replace(/^fastethernet/, 'fa') === clean ||
+        clean.replace(/^fastethernet/, 'fa') === pId ||
+        clean.replace(/^fastethernet/, 'fa') === pName ||
+        clean.replace(/^f(\d)/, 'fa$1') === pId
+      );
+    });
+    if (direct) return direct;
+
+    // Cek sub-interface (contoh: fa0/0.10)
+    for (const p of device.ports) {
+      for (const s of p.subInterfaces ?? []) {
+        const sId = s.id.toLowerCase().replace(/\s+/g, '');
+        if (sId === clean || sId.replace(/^fastethernet/, 'fa') === clean) {
+          return {
+            id: s.id,
+            name: s.id,
+            status: p.status,
+            ipAddress: s.ipAddress,
+            subnetMask: s.subnetMask,
+            macAddress: p.macAddress,
+            vlanId: s.vlanId,
+            type: p.type,
+          } as PhysicalPort;
+        }
+      }
+    }
+    return undefined;
   }
 
   public async handle(raw: string): Promise<string[]> {
     const trimmed = raw.trim();
     if (!trimmed) return [];
 
-    const tokens = trimmed.split(/\s+/);
-    const primary = tokens[0].toLowerCase();
+    const rawTokens = trimmed.split(/\s+/);
+    const lowerTokens = rawTokens.map((t) => t.toLowerCase());
+    const primary = lowerTokens[0];
+    const cmd = lowerTokens.join(' ');
 
     // --- Navigasi mode ---
     if (primary === 'exit') {
@@ -115,16 +149,16 @@ export class CliSession {
       case 'user':
         return this.handleUser(primary);
       case 'priv':
-        return this.handlePriv(primary, tokens, trimmed);
+        return this.handlePriv(lowerTokens, rawTokens, cmd);
       case 'config':
-        return this.handleConfig(tokens);
+        return this.handleConfig(lowerTokens, rawTokens);
       case 'config-if':
-        return this.handleConfigIf(tokens, trimmed);
+        return this.handleConfigIf(lowerTokens, rawTokens, cmd);
     }
   }
 
   private handleUser(primary: string): string[] {
-    if (primary === 'enable') {
+    if (primary === 'enable' || primary === 'en') {
       this.mode = 'priv';
       return [];
     }
@@ -132,39 +166,50 @@ export class CliSession {
   }
 
   private async handlePriv(
-    primary: string,
-    tokens: string[],
-    trimmed: string
+    lowerTokens: string[],
+    rawTokens: string[],
+    cmd: string
   ): Promise<string[]> {
-    if (trimmed === 'configure terminal' || trimmed === 'conf t') {
+    if (
+      cmd === 'configure terminal' ||
+      cmd === 'conf t' ||
+      cmd === 'config t' ||
+      cmd === 'conf term' ||
+      cmd === 'config terminal' ||
+      cmd === 'configure t'
+    ) {
       this.mode = 'config';
       return [];
     }
 
-    if (primary === 'ping') {
-      return this.handlePing(tokens);
+    if (lowerTokens[0] === 'ping') {
+      return this.handlePing(rawTokens);
     }
 
     if (
-      trimmed.startsWith('show ip interface brief') ||
-      trimmed === 'sh ip int br'
+      (lowerTokens[0] === 'show' || lowerTokens[0] === 'sh') &&
+      lowerTokens[1] === 'ip' &&
+      (lowerTokens[2] === 'interface' || lowerTokens[2] === 'int') &&
+      (lowerTokens[3] === 'brief' || lowerTokens[3] === 'br')
     ) {
       return this.showIpInterfaceBrief();
     }
 
-    if (primary === 'show' || primary === 'sh') {
-      if (trimmed.startsWith('show ip route') || trimmed === 'sh ip route') {
+    if (lowerTokens[0] === 'show' || lowerTokens[0] === 'sh') {
+      if (
+        (lowerTokens[1] === 'ip' && (lowerTokens[2] === 'route' || lowerTokens[2] === 'ro'))
+      ) {
         return this.showIpRoute();
       }
-      if (trimmed.startsWith('show mac-address-table') || trimmed === 'sh mac') {
+      if (cmd === 'show mac-address-table' || cmd === 'sh mac-address-table' || cmd === 'sh mac' || cmd === 'show mac') {
         return this.showMacTable();
       }
-      if (trimmed.startsWith('show arp') || trimmed === 'sh arp') {
+      if (cmd === 'show arp' || cmd === 'sh arp') {
         return this.showArp();
       }
     }
 
-    return this.invalid(`Perintah tidak dikenal: "${trimmed}"`);
+    return this.invalid(`Perintah tidak dikenal: "${cmd}"`);
   }
 
   private async handlePing(tokens: string[]): Promise<string[]> {
@@ -197,6 +242,12 @@ export class CliSession {
       lines.push(
         `${p.name.padEnd(23)}${ip.padEnd(16)}YES ${status.padEnd(22)}${p.status}`
       );
+      for (const s of p.subInterfaces ?? []) {
+        const sIp = s.ipAddress || 'unassigned';
+        lines.push(
+          `${s.id.padEnd(23)}${sIp.padEnd(16)}YES ${status.padEnd(22)}${p.status}`
+        );
+      }
     }
     return lines;
   }
@@ -240,7 +291,9 @@ export class CliSession {
       '----    -----------       --------    -----',
     ];
     for (const [mac, port] of Object.entries(device.macTable ?? {})) {
-      lines.push(`1       ${mac.toLowerCase()}    DYNAMIC     ${port}`);
+      const matchPort = device.ports.find((p) => p.id === port || p.name === port);
+      const vlan = matchPort?.vlanId ?? 1;
+      lines.push(`${String(vlan).padEnd(8)}${mac.toLowerCase()}    DYNAMIC     ${port}`);
     }
     return lines;
   }
@@ -249,16 +302,27 @@ export class CliSession {
     const device = this.deps.getDevice();
     const lines = ['Protocol  Address          Age (min)  Hardware Addr   Type   Interface'];
     for (const [ip, mac] of Object.entries(device.arpTable ?? {})) {
+      const matchPort =
+        device.ports.find((p) => p.ipAddress && isSameSubnet(p.ipAddress, ip, p.subnetMask ?? '255.255.255.0')) ??
+        device.ports[0];
       lines.push(
-        `Internet  ${ip.padEnd(16)} -          ${mac.toLowerCase()}  ARPA   ${device.ports[0]?.name ?? '-'}`
+        `Internet  ${ip.padEnd(16)} -          ${mac.toLowerCase()}  ARPA   ${matchPort?.name ?? '-'}`
       );
     }
     return lines;
   }
 
-  private handleConfig(tokens: string[]): string[] {
-    if (tokens[0] === 'hostname' && tokens[1]) {
-      const name = tokens[1];
+  private async handleConfig(lowerTokens: string[], rawTokens: string[]): Promise<string[]> {
+    if (lowerTokens[0] === 'do' && lowerTokens.length > 1) {
+      return this.handlePriv(
+        lowerTokens.slice(1),
+        rawTokens.slice(1),
+        lowerTokens.slice(1).join(' ')
+      );
+    }
+
+    if (lowerTokens[0] === 'hostname' && rawTokens[1]) {
+      const name = rawTokens[1];
       if (!/^\S+$/.test(name)) {
         return this.invalid('Hostname tidak boleh mengandung spasi.');
       }
@@ -266,8 +330,8 @@ export class CliSession {
       return [`Hostname diubah menjadi ${name}`];
     }
 
-    if (tokens[0] === 'interface' || tokens[0] === 'int') {
-      const target = tokens[1];
+    if (lowerTokens[0] === 'interface' || lowerTokens[0] === 'int') {
+      const target = rawTokens.slice(1).join(' ');
       if (!target) {
         return this.invalid('Incomplete command. Format: interface <id> (contoh: int fa0/0)');
       }
@@ -281,13 +345,30 @@ export class CliSession {
       return [];
     }
 
-    return this.invalid(`Perintah tidak dikenal di global config mode: "${tokens.join(' ')}"`);
+    return this.invalid(`Perintah tidak dikenal di global config mode: "${rawTokens.join(' ')}"`);
   }
 
-  private handleConfigIf(tokens: string[], trimmed: string): string[] {
-    if (tokens[0] === 'ip' && tokens[1] === 'address') {
-      const ip = tokens[2];
-      const mask = tokens[3];
+  private async handleConfigIf(
+    lowerTokens: string[],
+    rawTokens: string[],
+    cmd: string
+  ): Promise<string[]> {
+    if (lowerTokens[0] === 'do' && lowerTokens.length > 1) {
+      return this.handlePriv(
+        lowerTokens.slice(1),
+        rawTokens.slice(1),
+        lowerTokens.slice(1).join(' ')
+      );
+    }
+
+    if (cmd === 'no ip address' || cmd === 'no ip addr') {
+      this.deps.setPortConfig(this.currentInterface!, { ipAddress: undefined, subnetMask: undefined });
+      return [];
+    }
+
+    if (lowerTokens[0] === 'ip' && lowerTokens[1] === 'address') {
+      const ip = rawTokens[2];
+      const mask = rawTokens[3];
       if (!ip || !mask) {
         return this.invalid('Incomplete command. Format: ip address <IP> <SUBNET>');
       }
@@ -297,22 +378,31 @@ export class CliSession {
       if (!isValidSubnetMask(mask)) {
         return this.invalid(`Invalid subnet mask: "${mask}". Contoh: 255.255.255.0`);
       }
+      const net = networkAddress(ip, mask);
+      const netNum = ipToNumber(net);
+      const maskNum = ipToNumber(mask);
+      const bcastNum = (netNum | (~maskNum >>> 0)) >>> 0;
+      const ipNum = ipToNumber(ip);
+      const cidr = prefixLength(mask);
+      if (ipNum === netNum || ipNum === bcastNum) {
+        return this.invalid(`Bad mask /${cidr} for address ${ip}`);
+      }
       this.deps.setPortConfig(this.currentInterface!, { ipAddress: ip, subnetMask: mask });
       return [
         `% IP Address ${ip} ${mask} berhasil dikonfigurasi pada ${this.currentInterface}`,
       ];
     }
 
-    if (trimmed === 'no shutdown' || trimmed === 'no shut') {
+    if (cmd === 'no shutdown' || cmd === 'no shut' || cmd === 'no sh') {
       this.deps.setPortConfig(this.currentInterface!, { status: 'up' });
       return [`% LINK-5-CHANGED: Interface ${this.currentInterface}, changed state to up`];
     }
 
-    if (trimmed === 'shutdown' || trimmed === 'shut') {
+    if (cmd === 'shutdown' || cmd === 'shut') {
       this.deps.setPortConfig(this.currentInterface!, { status: 'down' });
       return [`% Interface ${this.currentInterface}, changed state to administratively down`];
     }
 
-    return this.invalid(`Perintah tidak dikenal di interface mode: "${trimmed}"`);
+    return this.invalid(`Perintah tidak dikenal di interface mode: "${cmd}"`);
   }
 }

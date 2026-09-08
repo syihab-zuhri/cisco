@@ -31,11 +31,27 @@ const engine = new HeadlessSimulationEngine(
   }
 );
 
+let isSimulationRunning = false;
+let activeRunId = 0;
+let cancelDelay: (() => void) | null = null;
+
 self.onmessage = async (e: MessageEvent<UIWorkerMessage>) => {
   const msg = e.data;
   switch (msg.type) {
     case 'INIT_STATE': {
       engine.setTopology(msg.payload.devices, msg.payload.links);
+      break;
+    }
+
+    case 'ABORT_SIMULATION': {
+      activeRunId++;
+      isSimulationRunning = false;
+      pauseGate.resume();
+      stepGate.setEnabled(false);
+      if (cancelDelay) {
+        cancelDelay();
+        cancelDelay = null;
+      }
       break;
     }
 
@@ -66,9 +82,16 @@ self.onmessage = async (e: MessageEvent<UIWorkerMessage>) => {
 
     case 'START_PING': {
       const { requestId, sourceNodeId, targetIp, echoCount, outputStyle } = msg.payload;
+      if (isSimulationRunning) {
+        postError(requestId, 'SIM_BUSY: Simulasi lain sedang berjalan.', 'ping');
+        break;
+      }
+      const runId = ++activeRunId;
+      isSimulationRunning = true;
       try {
         const plan = engine.planPing(sourceNodeId, targetIp, { echoCount, outputStyle });
-        await playPlan(requestId, plan.events);
+        await playPlan(requestId, plan.events, runId);
+        if (runId !== activeRunId) return;
 
         const result: PingResultPayload = {
           requestId,
@@ -99,19 +122,35 @@ self.onmessage = async (e: MessageEvent<UIWorkerMessage>) => {
           payload: { devices: engine.getDevices() },
         } as WorkerUIMessage);
       } catch (err: unknown) {
+        if (runId !== activeRunId) return;
         const message = err instanceof Error ? err.message : String(err);
         postError(requestId, message, 'ping');
+      } finally {
+        if (runId === activeRunId) {
+          isSimulationRunning = false;
+        }
       }
       break;
     }
 
     case 'START_DHCP': {
       const { requestId, nodeId, portId } = msg.payload;
+      if (isSimulationRunning) {
+        postError(requestId, 'SIM_BUSY: Simulasi lain sedang berjalan.', 'dhcp');
+        break;
+      }
+      const runId = ++activeRunId;
+      isSimulationRunning = true;
       try {
         const plan = engine.planDhcp(nodeId, portId);
-        await playPlan(requestId, plan.events);
+        await playPlan(requestId, plan.events, runId);
+        if (runId !== activeRunId) return;
 
-        const assignedIp = plan.summary.success ? plan.summary.outputLines[0] : undefined;
+        const leaseEffect = plan.events
+          .flatMap((ev) => ev.effects ?? [])
+          .find((eff) => eff.type === 'DHCP_LEASE');
+        const assignedIp = leaseEffect?.ipAddress ?? undefined;
+
         const payload: DhcpResultPayload = {
           requestId,
           nodeId,
@@ -136,16 +175,28 @@ self.onmessage = async (e: MessageEvent<UIWorkerMessage>) => {
           payload: { devices: engine.getDevices() },
         } as WorkerUIMessage);
       } catch (err: unknown) {
+        if (runId !== activeRunId) return;
         const message = err instanceof Error ? err.message : String(err);
         postError(requestId, message, 'dhcp');
+      } finally {
+        if (runId === activeRunId) {
+          isSimulationRunning = false;
+        }
       }
       break;
     }
     case 'START_RIP': {
-      const requestId = `rip-${Date.now()}`;
+      const requestId = msg.payload.requestId;
+      if (isSimulationRunning) {
+        postError(requestId, 'SIM_BUSY: Simulasi lain sedang berjalan.', 'rip');
+        break;
+      }
+      const runId = ++activeRunId;
+      isSimulationRunning = true;
       try {
         const plan = engine.planRip();
-        await playPlan(requestId, plan.events);
+        await playPlan(requestId, plan.events, runId);
+        if (runId !== activeRunId) return;
         const payload: RipResultPayload = {
           requestId,
           success: plan.summary.success,
@@ -166,8 +217,13 @@ self.onmessage = async (e: MessageEvent<UIWorkerMessage>) => {
           payload: { devices: engine.getDevices() },
         } as WorkerUIMessage);
       } catch (err: unknown) {
+        if (runId !== activeRunId) return;
         const message = err instanceof Error ? err.message : String(err);
         postError(requestId, message, 'rip');
+      } finally {
+        if (runId === activeRunId) {
+          isSimulationRunning = false;
+        }
       }
       break;
     }
@@ -175,22 +231,33 @@ self.onmessage = async (e: MessageEvent<UIWorkerMessage>) => {
 };
 
 /** Memutar aliran event dengan pacing/pause/step, lalu meneruskannya ke UI. */
-async function playPlan(requestId: string, events: SimEvent[]): Promise<void> {
+async function playPlan(requestId: string, events: SimEvent[], runId: number): Promise<void> {
+  if (runId !== activeRunId) return;
   self.postMessage({
     type: 'SIM_PLAN',
     payload: { requestId, events },
   } as WorkerUIMessage);
 
   for (const event of events) {
+    if (runId !== activeRunId) return;
     await pauseGate.wait();
+    if (runId !== activeRunId) return;
     if (stepGate.isEnabled()) {
       // Step mode: tanpa pacing — satu klik Next = tepat satu event.
       await stepGate.wait();
     } else {
-      await new Promise((resolve) =>
-        setTimeout(resolve, event.kind === 'LOG' ? LOG_PACE_MS : hopDelayMs)
-      );
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(() => {
+          cancelDelay = null;
+          resolve();
+        }, event.kind === 'LOG' ? LOG_PACE_MS : hopDelayMs);
+        cancelDelay = () => {
+          clearTimeout(timer);
+          resolve();
+        };
+      });
     }
+    if (runId !== activeRunId) return;
 
     self.postMessage({
       type: 'EVENT_PLAYED',

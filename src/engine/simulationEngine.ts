@@ -5,7 +5,7 @@ import {
   isL2Intermediate,
   learnsCam,
 } from '../types/network';
-import { isPrivateIp, isSameSubnet, prefixLength, ipToNumber, numberToIp, networkAddress } from '../utils/ipUtils';
+import { isValidIp, isPrivateIp, isSameSubnet, prefixLength, ipToNumber, numberToIp, networkAddress } from '../utils/ipUtils';
 import { type WorkerUIMessage } from '../types/ipc';
 import {
   type ArpPacket,
@@ -106,14 +106,45 @@ export class HeadlessSimulationEngine {
 
   public setTopology(nodes: DeviceData[], links: TopologyLink[]): void {
     this.devices.clear();
+    this.packetSeq = 0;
     for (const n of nodes) {
       this.devices.set(n.id, {
         ...n,
+        ports: n.ports.map((p) => ({
+          ...p,
+          subInterfaces: p.subInterfaces ? p.subInterfaces.map((s) => ({ ...s })) : undefined,
+        })),
+        routes: n.routes ? n.routes.map((r) => ({ ...r })) : undefined,
         arpTable: { ...(n.arpTable || {}) },
         macTable: { ...(n.macTable || {}) },
+        natTable: n.natTable ? n.natTable.map((nt) => ({ ...nt })) : undefined,
       });
     }
+
+    // Penegakan INV-003: Port Singularity (1 port fisik hanya 1 kabel ethernet)
     this.links = links.map((l) => ({ ...l }));
+
+    // Pastikan port switch/hub yang terhubung ke link terdaftar di daftar port.
+    // Jika port tidak dikenal, buat entri dengan MAC valid deterministik dari ID port.
+    for (const l of this.links) {
+      for (const [nId, pId] of [
+        [l.sourceNodeId, l.sourcePortId],
+        [l.targetNodeId, l.targetPortId],
+      ]) {
+        const dev = this.devices.get(nId);
+        if (dev && isL2Intermediate(dev.type) && !dev.ports.some((p) => p.id === pId)) {
+          let hash = 0;
+          for (const ch of pId) hash = ((hash * 31 + ch.charCodeAt(0)) & 0xffffff) >>> 0;
+          const hex = hash.toString(16).toUpperCase().padStart(6, '0');
+          dev.ports.push({
+            id: pId,
+            name: pId,
+            status: 'up',
+            macAddress: `00:50:79:${hex.slice(0, 2)}:${hex.slice(2, 4)}:${hex.slice(4, 6)}`,
+          });
+        }
+      }
+    }
   }
 
   public getDevices(): DeviceData[] {
@@ -188,10 +219,92 @@ export class HeadlessSimulationEngine {
     return p.portMode === 'trunk' || (p.subInterfaces?.length ?? 0) > 0;
   }
 
-  /** Segmen VLAN 802.1Q: dua port access hanya bertetangga bila VLAN-nya sama. */
-  private vlanAllows(a: PhysicalPort, b: PhysicalPort): boolean {
-    if (this.isTrunkPort(a) || this.isTrunkPort(b)) return true;
-    return (a.vlanId ?? 1) === (b.vlanId ?? 1);
+  /**
+   * Evaluasi aturan transmisi Layer 2 802.1Q antar hop fisik/logis.
+   * Mengembalikan { allowed, nextVlan } dengan nextVlan adalah VLAN frame di perangkat tujuan.
+   */
+  private checkL2VlanHop(
+    srcDev: DeviceData,
+    srcPort: PhysicalPort,
+    dstDev: DeviceData,
+    dstPort: PhysicalPort,
+    currentVlan?: number
+  ): { allowed: boolean; nextVlan?: number } {
+    let wireVlan = currentVlan;
+
+    // Larangan isolasi: dua port access switch dengan VLAN berbeda saling menolak
+    if (
+      srcDev.type === 'switch' &&
+      dstDev.type === 'switch' &&
+      !this.isTrunkPort(srcPort) &&
+      !this.isTrunkPort(dstPort) &&
+      (srcPort.vlanId ?? 1) !== (dstPort.vlanId ?? 1)
+    ) {
+      return { allowed: false };
+    }
+
+    // 1. Egress dari srcDev
+    if (srcDev.type === 'switch') {
+      const isTrunk = this.isTrunkPort(srcPort);
+      if (isTrunk) {
+        wireVlan = currentVlan;
+      } else {
+        const accessVlan = srcPort.vlanId ?? 1;
+        // Frame hanya boleh keluar dari access port yang VLAN-nya cocok
+        if (currentVlan !== undefined && currentVlan !== accessVlan) {
+          return { allowed: false };
+        }
+        // Access port melepas tag 802.1Q saat keluar ke kabel
+        wireVlan = undefined;
+      }
+    } else {
+      // Non-switch (Host / Router):
+      if (wireVlan === undefined && srcPort.vlanId) {
+        wireVlan = srcPort.vlanId;
+      }
+    }
+
+    // 2. Ingress ke dstDev
+    if (dstDev.type === 'switch') {
+      const isTrunk = this.isTrunkPort(dstPort);
+      if (isTrunk) {
+        const ingressVlan = wireVlan !== undefined ? wireVlan : (dstPort.vlanId ?? 1);
+        return { allowed: true, nextVlan: ingressVlan };
+      } else {
+        const accessVlan = dstPort.vlanId ?? 1;
+        // Port access switch menolak frame ber-tag yang berbeda VLAN
+        if (wireVlan !== undefined && wireVlan !== accessVlan) {
+          return { allowed: false };
+        }
+        // Frame untagged dimasukkan ke VLAN access port
+        return { allowed: true, nextVlan: accessVlan };
+      }
+    }
+
+    // L2 intermediate non-switch (hub, AP): transparan
+    if (isL2Intermediate(dstDev.type)) {
+      return { allowed: true, nextVlan: wireVlan };
+    }
+
+    // Host tujuan atau Router (dengan sub-interfaces / trunk)
+    if (this.isTrunkPort(dstPort)) {
+      return { allowed: true, nextVlan: wireVlan };
+    }
+
+    // Host biasa (PC / Laptop / Server):
+    if (dstPort.vlanId && wireVlan !== undefined && dstPort.vlanId !== wireVlan) {
+      return { allowed: false };
+    }
+
+    return { allowed: true, nextVlan: wireVlan };
+  }
+
+  /** Kesesuaian SSID pada interface wireless (Bug 3). */
+  private ssidAllows(a: PhysicalPort, b: PhysicalPort): boolean {
+    if (a.ssid && b.ssid && a.ssid.trim() !== b.ssid.trim()) {
+      return false;
+    }
+    return true;
   }
 
   private buildFramePdu(
@@ -207,6 +320,8 @@ export class HeadlessSimulationEngine {
         dstMac:
           kind === 'ARP_REQ' || kind === 'DHCP_DISCOVER' || kind === 'DHCP_REQUEST'
             ? BROADCAST_MAC
+            : kind === 'RIP_UPDATE'
+            ? '01:00:5E:00:00:09' // Multicast RIPv2 (RFC 2453)
             : (toPort?.macAddress ?? '00:00:00:00:00:00'),
         ethertype: kind.startsWith('ARP') ? 'ARP' : 'IPv4',
       },
@@ -262,20 +377,26 @@ export class HeadlessSimulationEngine {
 
   /**
    * Menemukan rute Layer 2 antar host menggunakan BFS. Switch, hub, dan
-   * Access Point dapat menjadi hop antara.
+   * Access Point dapat menjadi hop antara. Membawa konteks 802.1Q VLAN pada frame.
    */
   private findL2Path(
     startNodeId: string,
     targetNodeId: string,
-    fromPortId?: string
+    fromPortId?: string,
+    vlanHint?: number
   ): L2Hop[] | null {
     if (startNodeId === targetNodeId) return [];
 
     let found: L2Hop[] | null = null;
     const visited = new Set<string>([startNodeId]);
-    const queue: Array<{ currentNodeId: string; path: L2Hop[] }> = [];
+    const queue: Array<{ currentNodeId: string; path: L2Hop[]; currentVlan?: number }> = [];
 
-    const consider = (currentNodeId: string, p: PhysicalPort, path: L2Hop[]): void => {
+    const consider = (
+      currentNodeId: string,
+      p: PhysicalPort,
+      path: L2Hop[],
+      currentVlan?: number
+    ): void => {
       if (found) return;
       const link = this.findLink(currentNodeId, p.id);
       if (!link) return;
@@ -286,9 +407,36 @@ export class HeadlessSimulationEngine {
       const peerDev = this.devices.get(peerNodeId);
       if (!peerDev || visited.has(peerNodeId)) return;
 
-      // Segmen VLAN 802.1Q: link ditolak bila kedua port access berbeda VLAN
+      // Port sisi lawan HARUS UP (Bug 1).
       const peerPort = peerDev.ports.find((pp) => pp.id === peerPortId);
-      if (peerPort && !this.vlanAllows(p, peerPort)) return;
+      if (!peerPort) {
+        if (!isL2Intermediate(peerDev.type)) return;
+      } else {
+        if (peerPort.status !== 'up') return;
+      }
+
+      const dev = this.devices.get(currentNodeId);
+      if (!dev) return;
+
+      const dummyPeerPort: PhysicalPort = peerPort ?? {
+        id: peerPortId,
+        name: peerPortId,
+        status: 'up',
+        macAddress: '00:00:00:00:00:00',
+      };
+
+      // Evaluasi aturan 802.1Q VLAN dan isolasi port
+      const { allowed, nextVlan } = this.checkL2VlanHop(
+        dev,
+        p,
+        peerDev,
+        dummyPeerPort,
+        currentVlan
+      );
+      if (!allowed) return;
+
+      // Radio wireless: link ditolak bila SSID berbeda (Bug 3)
+      if (peerPort && !this.ssidAllows(p, peerPort)) return;
 
       const hop: L2Hop = {
         fromNodeId: currentNodeId,
@@ -304,50 +452,82 @@ export class HeadlessSimulationEngine {
       }
       if (isL2Intermediate(peerDev.type)) {
         visited.add(peerDev.id);
-        queue.push({ currentNodeId: peerDev.id, path: [...path, hop] });
+        queue.push({ currentNodeId: peerDev.id, path: [...path, hop], currentVlan: nextVlan });
       }
     };
 
     if (fromPortId) {
-      // BUG-4: BFS di-root dari PORT sumber terpilih — frame keluar dari port
-      // yang benar (srcMac konsisten dengan srcIp di PDU Inspector).
+      // BFS di-root dari PORT sumber terpilih
       const seed = this.portOf(startNodeId, fromPortId);
       if (!seed || seed.status !== 'up') return null;
-      consider(startNodeId, seed, []);
+      const startVlan = vlanHint ?? seed.vlanId;
+      consider(startNodeId, seed, [], startVlan);
       while (queue.length > 0 && !found) {
-        const { currentNodeId, path } = queue.shift()!;
+        const { currentNodeId, path, currentVlan } = queue.shift()!;
         const dev = this.devices.get(currentNodeId);
         if (!dev) continue;
         for (const p of dev.ports) {
           if (p.status !== 'up') continue;
-          consider(currentNodeId, p, path);
+          if (
+            path.length > 0 &&
+            path[path.length - 1].toPortId === p.id &&
+            path[path.length - 1].toNodeId === currentNodeId
+          ) {
+            continue;
+          }
+          consider(currentNodeId, p, path, currentVlan);
           if (found) break;
         }
       }
       return found;
     }
 
-    queue.push({ currentNodeId: startNodeId, path: [] });
+    const startDev = this.devices.get(startNodeId);
+    const startPort = startDev?.ports.find((p) => p.status === 'up');
+    const startVlan = vlanHint ?? startPort?.vlanId;
+    queue.push({ currentNodeId: startNodeId, path: [], currentVlan: startVlan });
     while (queue.length > 0 && !found) {
-      const { currentNodeId, path } = queue.shift()!;
+      const { currentNodeId, path, currentVlan } = queue.shift()!;
       const dev = this.devices.get(currentNodeId);
       if (!dev) continue;
       for (const p of dev.ports) {
         if (p.status !== 'up') continue;
-        consider(currentNodeId, p, path);
+        if (
+          path.length > 0 &&
+          path[path.length - 1].toPortId === p.id &&
+          path[path.length - 1].toNodeId === currentNodeId
+        ) {
+          continue;
+        }
+        consider(currentNodeId, p, path, currentVlan);
         if (found) break;
       }
     }
     return found;
   }
 
-  private resolveOwner(ip: string): { dev: DeviceData; port: PhysicalPort } | null {
+  private resolveOwner(
+    ip: string,
+    fromDevice?: DeviceData,
+    egressPortId?: string,
+    vlanHint?: number
+  ): { dev: DeviceData; port: PhysicalPort } | null {
+    const matches: Array<{ dev: DeviceData; port: PhysicalPort }> = [];
     for (const dev of this.devices.values()) {
       for (const port of dev.ports) {
-        if (port.ipAddress === ip) return { dev, port };
+        if (port.ipAddress === ip) matches.push({ dev, port });
         // IP sub-interface (router-on-a-stick) dimiliki port fisiknya
-        if (port.subInterfaces?.some((s) => s.ipAddress === ip)) return { dev, port };
+        if (port.subInterfaces?.some((s) => s.ipAddress === ip)) matches.push({ dev, port });
       }
+    }
+    if (matches.length > 0) {
+      if (matches.length > 1 && fromDevice) {
+        // Jika ada duplikasi IP, utamakan host di broadcast domain L2 yang sama dari egress port
+        const scope = this.broadcastPaths(fromDevice.id, egressPortId, vlanHint);
+        const local = matches.find((m) => scope.some((s) => s.dev.id === m.dev.id));
+        if (local) return local;
+      }
+      return matches[0];
     }
     // IP publik tersimulasi dimiliki oleh perangkat Cloud Internet
     if ((CLOUD_PUBLIC_IPS as readonly string[]).includes(ip)) {
@@ -361,8 +541,16 @@ export class HeadlessSimulationEngine {
     return null;
   }
 
+  private deviceOwnsIp(dev: DeviceData, ip: string): boolean {
+    return dev.ports.some(
+      (p) => p.ipAddress === ip || p.subInterfaces?.some((s) => s.ipAddress === ip)
+    );
+  }
+
   private chooseSourcePort(dev: DeviceData, targetIp: string): PhysicalPort | null {
-    const configured = dev.ports.filter((p) => p.ipAddress && p.subnetMask);
+    const configured = dev.ports.filter(
+      (p) => (p.ipAddress && p.subnetMask) || (p.subInterfaces && p.subInterfaces.length > 0)
+    );
     if (configured.length === 0) return null;
     // BUG-5: utamakan port UP — port DOWN ber-IP jangan mendahului port UP
     const up = configured.filter((p) => p.status === 'up');
@@ -370,12 +558,22 @@ export class HeadlessSimulationEngine {
     let candidates = pool;
     // Router menuju tujuan non-lokal: IOS men-source ping dari interface egress —
     // sukai interface WAN ber-NAT agar sumber tidak ber-IP privat (konsisten BUG-2).
-    const nonLocal = !configured.some((p) => isSameSubnet(p.ipAddress!, targetIp, p.subnetMask!));
+    const nonLocal = !configured.some(
+      (p) =>
+        (p.ipAddress && isSameSubnet(p.ipAddress, targetIp, p.subnetMask!)) ||
+        p.subInterfaces?.some((s) => isSameSubnet(s.ipAddress, targetIp, s.subnetMask))
+    );
     if (nonLocal && dev.type === 'router') {
       const natPorts = candidates.filter((p) => p.natEnabled && p.ipAddress);
       if (natPorts.length > 0) candidates = natPorts;
     }
-    return candidates.find((p) => isSameSubnet(p.ipAddress!, targetIp, p.subnetMask!)) ?? candidates[0];
+    return (
+      candidates.find(
+        (p) =>
+          (p.ipAddress && isSameSubnet(p.ipAddress, targetIp, p.subnetMask!)) ||
+          p.subInterfaces?.some((s) => isSameSubnet(s.ipAddress, targetIp, s.subnetMask))
+      ) ?? candidates[0]
+    );
   }
 
   /**
@@ -386,15 +584,31 @@ export class HeadlessSimulationEngine {
     dev: DeviceData,
     fromPort: PhysicalPort,
     targetIp: string
-  ): { nextHopIp: string; egressPortId: string } | { error: string } {
+  ):
+    | { nextHopIp: string; egressPortId: string; subIfIp?: string; vlanId?: number }
+    | { error: string } {
     if (dev.type === 'router') {
-      let best: { nextHopIp: string; prefix: number; portId: string } | null = null;
+      let best: {
+        nextHopIp: string;
+        prefix: number;
+        portId: string;
+        subIfIp?: string;
+        vlanId?: number;
+      } | null = null;
       for (const p of dev.ports) {
         // Connected network via sub-interface (router-on-a-stick) — cek semua port
         for (const s of p.subInterfaces ?? []) {
           if (isSameSubnet(s.ipAddress, targetIp, s.subnetMask)) {
             const prefix = prefixLength(s.subnetMask);
-            if (!best || prefix > best.prefix) best = { nextHopIp: targetIp, prefix, portId: p.id };
+            if (!best || prefix > best.prefix) {
+              best = {
+                nextHopIp: targetIp,
+                prefix,
+                portId: p.id,
+                subIfIp: s.ipAddress,
+                vlanId: s.vlanId,
+              };
+            }
           }
         }
         if (!p.ipAddress || !p.subnetMask || p.status !== 'up') continue;
@@ -404,12 +618,17 @@ export class HeadlessSimulationEngine {
         }
       }
       for (const r of dev.routes ?? []) {
-        if (isSameSubnet(targetIp, r.network, r.subnetMask)) {
-          const prefix = prefixLength(r.subnetMask);
+        const isDefault =
+          r.network === '0.0.0.0' && (r.subnetMask === '0.0.0.0' || r.subnetMask === '0');
+        if (isDefault || isSameSubnet(targetIp, r.network, r.subnetMask)) {
+          const prefix = isDefault ? 0 : prefixLength(r.subnetMask);
           // Egress interface static route: cari port yang satu segmen dengan nextHop
           const egress =
             dev.ports.find(
-              (p) => p.ipAddress && p.status === 'up' && isSameSubnet(p.ipAddress, r.nextHop, p.subnetMask ?? '255.255.255.0')
+              (p) =>
+                p.ipAddress &&
+                p.status === 'up' &&
+                isSameSubnet(p.ipAddress, r.nextHop, p.subnetMask ?? '255.255.255.0')
             ) ?? dev.ports.find((p) => p.id === r.interfaceId);
           if (!best || prefix > best.prefix)
             best = { nextHopIp: r.nextHop, prefix, portId: egress?.id ?? r.interfaceId };
@@ -420,19 +639,29 @@ export class HeadlessSimulationEngine {
           error: `${dev.label}: No route to host ${targetIp} (tidak ada connected network / static route). Destination Unreachable.`,
         };
       }
-      return { nextHopIp: best.nextHopIp, egressPortId: best.portId };
+      return {
+        nextHopIp: best.nextHopIp,
+        egressPortId: best.portId,
+        subIfIp: best.subIfIp,
+        vlanId: best.vlanId,
+      };
     }
 
     // Host (PC / Laptop / Server / switch management)
     if (isSameSubnet(fromPort.ipAddress!, targetIp, fromPort.subnetMask!)) {
-      return { nextHopIp: targetIp, egressPortId: fromPort.id };
+      return { nextHopIp: targetIp, egressPortId: fromPort.id, vlanId: fromPort.vlanId };
     }
     if (!dev.defaultGateway) {
       return {
         error: `${dev.label}: Destination host ${targetIp} di luar subnet, dan Default Gateway belum dikonfigurasi!`,
       };
     }
-    return { nextHopIp: dev.defaultGateway, egressPortId: fromPort.id };
+    if (!isSameSubnet(fromPort.ipAddress!, dev.defaultGateway, fromPort.subnetMask!)) {
+      return {
+        error: `${dev.label}: Default Gateway ${dev.defaultGateway} tidak berada dalam subnet yang sama dengan ${fromPort.ipAddress} (${fromPort.subnetMask})!`,
+      };
+    }
+    return { nextHopIp: dev.defaultGateway, egressPortId: fromPort.id, vlanId: fromPort.vlanId };
   }
 
   /**
@@ -485,31 +714,31 @@ export class HeadlessSimulationEngine {
       const sw = this.devices.get(hop.toNodeId);
       if (sw && learnsCam(sw.type)) {
         sw.macTable = sw.macTable || {};
-        if (!sw.macTable[sender.port.macAddress]) {
-          sw.macTable[sender.port.macAddress] = hop.toPortId;
-          if (animate) {
-            this.record(
-              ctx,
-              'INFO',
-              `${sw.label}: CAM Table belajar MAC ${sender.port.macAddress} pada port ${hop.toPortId}`
-            );
-            // Tempelkan efek CAM_LEARN ke event hop ARP_REQ yang tiba di switch ini
-            const hopEvent = ctx.queue
-              .snapshot()
-              .reverse()
-              .find((e) => e.hop && e.hop.targetNodeId === sw.id && e.kind === 'ARP_REQ');
-            if (hopEvent) {
-              hopEvent.effects = [
-                ...(hopEvent.effects ?? []),
-                {
-                  type: 'CAM_LEARN',
-                  nodeId: sw.id,
-                  mac: sender.port.macAddress,
-                  portId: hop.toPortId,
-                  vlan: this.portOf(hop.toNodeId, hop.toPortId)?.vlanId ?? 1,
-                },
-              ];
-            }
+        const oldPort = sw.macTable[sender.port.macAddress];
+        // Port migration (Bug 5): CAM belajar/update port baru untuk MAC ini
+        sw.macTable[sender.port.macAddress] = hop.toPortId;
+        if (animate && oldPort !== hop.toPortId) {
+          this.record(
+            ctx,
+            'INFO',
+            `${sw.label}: CAM Table belajar MAC ${sender.port.macAddress} pada port ${hop.toPortId}`
+          );
+          // Tempelkan efek CAM_LEARN ke event hop ARP_REQ yang tiba di switch ini
+          const hopEvent = ctx.queue
+            .snapshot()
+            .reverse()
+            .find((e) => e.hop && e.hop.targetNodeId === sw.id && e.kind === 'ARP_REQ');
+          if (hopEvent) {
+            hopEvent.effects = [
+              ...(hopEvent.effects ?? []),
+              {
+                type: 'CAM_LEARN',
+                nodeId: sw.id,
+                mac: sender.port.macAddress,
+                portId: hop.toPortId,
+                vlan: this.portOf(hop.toNodeId, hop.toPortId)?.vlanId ?? 1,
+              },
+            ];
           }
         }
       }
@@ -553,21 +782,24 @@ export class HeadlessSimulationEngine {
         const sw = this.devices.get(hop.toNodeId);
         if (sw && learnsCam(sw.type)) {
           sw.macTable = sw.macTable || {};
-          sw.macTable[owner.port.macAddress] =
-            sw.macTable[owner.port.macAddress] ?? hop.toPortId;
-          this.record(
-            ctx,
-            'INFO',
-            `${sw.label}: CAM Table belajar MAC ${owner.port.macAddress} pada port ${hop.toPortId}`
-          );
-          const hopEvent = ctx.queue.snapshot().at(-1);
-          hopEvent?.effects?.push({
-            type: 'CAM_LEARN',
-            nodeId: sw.id,
-            mac: owner.port.macAddress,
-            portId: hop.toPortId,
-            vlan: this.portOf(hop.toNodeId, hop.toPortId)?.vlanId ?? 1,
-          });
+          const oldPort = sw.macTable[owner.port.macAddress];
+          // Port migration (Bug 5): CAM belajar/update port baru
+          sw.macTable[owner.port.macAddress] = hop.toPortId;
+          if (oldPort !== hop.toPortId) {
+            this.record(
+              ctx,
+              'INFO',
+              `${sw.label}: CAM Table belajar MAC ${owner.port.macAddress} pada port ${hop.toPortId}`
+            );
+            const hopEvent = ctx.queue.snapshot().at(-1);
+            hopEvent?.effects?.push({
+              type: 'CAM_LEARN',
+              nodeId: sw.id,
+              mac: owner.port.macAddress,
+              portId: hop.toPortId,
+              vlan: this.portOf(hop.toNodeId, hop.toPortId)?.vlanId ?? 1,
+            });
+          }
         }
         if (idx === backwardPath.length - 1) {
           const lastEvent = ctx.queue.snapshot().at(-1);
@@ -599,8 +831,21 @@ export class HeadlessSimulationEngine {
     echoIndex: number,
     animate: boolean
   ): EchoOutcome {
-    // Ping ke IP sendiri (loopback interface)
-    if (source.port.ipAddress === targetIp) {
+    // Ping ke IP sendiri (loopback 127.0.0.0/8 RFC 1122 atau port/subinterface manapun pada perangkat pengirim)
+    if (targetIp.startsWith('127.') || this.deviceOwnsIp(source.dev, targetIp)) {
+      if (!targetIp.startsWith('127.')) {
+        const duplicate = Array.from(this.devices.values()).some(
+          (d) => d.id !== source.dev.id && this.deviceOwnsIp(d, targetIp)
+        );
+        if (duplicate) {
+          return {
+            ok: false,
+            rttMs: 0,
+            replyTtl: 0,
+            error: `Konflik IP terdeteksi: IP ${targetIp} digunakan oleh perangkat lain di topologi!`,
+          };
+        }
+      }
       return { ok: true, rttMs: 0, replyTtl: INITIAL_TTL };
     }
 
@@ -615,7 +860,7 @@ export class HeadlessSimulationEngine {
       const next = this.resolveNextHopIp(sender.dev, sender.port, targetIp);
       if ('error' in next) return { ok: false, rttMs: 0, replyTtl: 0, error: next.error };
 
-      const owner = this.resolveOwner(next.nextHopIp);
+      const owner = this.resolveOwner(next.nextHopIp, sender.dev, next.egressPortId, next.vlanId);
       if (!owner) {
         return {
           ok: false,
@@ -625,8 +870,8 @@ export class HeadlessSimulationEngine {
         };
       }
 
-      const path = this.findL2Path(sender.dev.id, owner.dev.id, next.egressPortId);
-      if (!path) {
+      const path = this.findL2Path(sender.dev.id, owner.dev.id, next.egressPortId, next.vlanId);
+      if (!path || path.length === 0) {
         return {
           ok: false,
           rttMs: 0,
@@ -635,15 +880,32 @@ export class HeadlessSimulationEngine {
         };
       }
 
-      this.planArp(ctx, sender, next.nextHopIp, owner, path, animate);
+      // Router egress ARP: gunakan port egress router untuk ARP di segmen egress
+      const egressPort = (path.length > 0 ? this.portOf(sender.dev.id, path[0].fromPortId) : null) ?? sender.port;
+      let effectiveEgressPort = egressPort;
+      if (!egressPort.ipAddress && egressPort.subInterfaces?.length) {
+        const subIf =
+          egressPort.subInterfaces.find((s) => s.ipAddress === next.subIfIp) ??
+          egressPort.subInterfaces.find((s) => isSameSubnet(s.ipAddress, next.nextHopIp, s.subnetMask)) ??
+          egressPort.subInterfaces[0];
+        if (subIf) {
+          effectiveEgressPort = {
+            ...egressPort,
+            ipAddress: subIf.ipAddress,
+            subnetMask: subIf.subnetMask,
+            vlanId: subIf.vlanId,
+          };
+        }
+      }
+      const arpSender = sender.dev.type === 'router' ? { dev: sender.dev, port: effectiveEgressPort } : sender;
+      this.planArp(ctx, arpSender, next.nextHopIp, owner, path, animate);
 
-      // NAT/PAT: segmen keluar router melalui port natEnabled menuju IP publik —
+      // NAT/PAT: segmen keluar router melalui port natEnabled menuju IP publik/non-privat —
       // src IP di-rewrite menjadi IP WAN dan translasi dicatat di tabel router.
       let natInfo: { routerId: string; globalIp: string; insideIp: string } | null = null;
-      const egressPort = sender.dev.ports.find((p) => p.id === path[0].fromPortId);
       if (
         sender.dev.type === 'router' &&
-        (CLOUD_PUBLIC_IPS as readonly string[]).includes(targetIp) &&
+        !isPrivateIp(targetIp) &&
         egressPort?.natEnabled &&
         egressPort.ipAddress
       ) {
@@ -711,13 +973,45 @@ export class HeadlessSimulationEngine {
       }
       requestPath.push(...path);
 
-      if (next.nextHopIp === targetIp) {
+      if (
+        next.nextHopIp === targetIp ||
+        this.deviceOwnsIp(owner.dev, targetIp) ||
+        owner.dev.type === 'cloud'
+      ) {
         // Sampai di perangkat tujuan
         const routerCount = this.countInteriorRouters(requestPath);
         const returnPath = this.reversePath(requestPath);
 
         // Cloud Internet menjawab untuk IP publik tersimulasi (TTL/RTT termasuk hop WAN)
         if (owner.dev.type === 'cloud') {
+          const sourceIp = source.port.ipAddress!;
+          if (isPrivateIp(sourceIp) && !natInfo) {
+            this.record(
+              ctx,
+              'ERROR',
+              `${owner.dev.label}: Paket dari IP privat ${sourceIp} DITOLAK — sumber belum ditranslasikan NAT. Aktifkan NAT pada interface WAN router.`
+            );
+            return {
+              ok: false,
+              rttMs: 0,
+              replyTtl: 0,
+              error: `${owner.dev.label}: Cloud menolak paket dari IP privat ${sourceIp} tanpa NAT — aktifkan NAT pada interface WAN router.`,
+            };
+          }
+          const isCloudInterface = owner.dev.ports.some((p) => p.ipAddress === targetIp);
+          if (!isCloudInterface && !(CLOUD_PUBLIC_IPS as readonly string[]).includes(targetIp)) {
+            this.record(
+              ctx,
+              'ERROR',
+              `${owner.dev.label}: IP ${targetIp} tidak dikenal di internet tersimulasi.`
+            );
+            return {
+              ok: false,
+              rttMs: 0,
+              replyTtl: 0,
+              error: `${owner.dev.label}: IP ${targetIp} tidak dikenal di internet tersimulasi.`,
+            };
+          }
           const replyTtl = INITIAL_TTL - routerCount - 1;
           const rttMs = routerCount + 1;
           this.record(
@@ -743,46 +1037,8 @@ export class HeadlessSimulationEngine {
         return { ok: true, rttMs: routerCount, replyTtl };
       }
 
-      // Transit: pemilik nextHopIp haruslah router — atau Cloud untuk IP publik
+      // Transit: pemilik nextHopIp haruslah router
       const router = owner.dev;
-      if (router.type === 'cloud') {
-        // BUG-2: Cloud menolak paket bersumber IP privat yang tidak ditranslasikan
-        // NAT — tanpa ini, NAT jadi tidak bermakna dan premis lab internet keliru.
-        const sourceIp = source.port.ipAddress!;
-        if (isPrivateIp(sourceIp) && !natInfo) {
-          this.record(
-            ctx,
-            'ERROR',
-            `${router.label}: Paket dari IP privat ${sourceIp} DITOLAK — sumber belum ditranslasikan NAT. Aktifkan NAT pada interface WAN router.`
-          );
-          return {
-            ok: false,
-            rttMs: 0,
-            replyTtl: 0,
-            error: `${router.label}: Cloud menolak paket dari IP privat ${sourceIp} tanpa NAT — aktifkan NAT pada interface WAN router.`,
-          };
-        }
-        if (!(CLOUD_PUBLIC_IPS as readonly string[]).includes(targetIp)) {
-          return {
-            ok: false,
-            rttMs: 0,
-            replyTtl: 0,
-            error: `${router.label}: IP ${targetIp} tidak dikenal di internet tersimulasi.`,
-          };
-        }
-        const routerCount = this.countInteriorRouters(requestPath);
-        const replyTtl = INITIAL_TTL - routerCount - 1;
-        const rttMs = routerCount + 1;
-        this.record(
-          ctx,
-          'ICMP',
-          `${router.label}: Menerima paket untuk IP publik ${targetIp}. Membalas ICMP Echo Reply...`
-        );
-        if (animate) {
-          this.emitReplyHops(ctx, this.reversePath(requestPath), source, targetIp, echoIndex, natInfo);
-        }
-        return { ok: true, rttMs, replyTtl };
-      }
       if (router.type !== 'router') {
         return {
           ok: false,
@@ -815,7 +1071,9 @@ export class HeadlessSimulationEngine {
         'ICMP',
         `${router.label}: Menerima paket (TTL sisa ${ttl}). Meneruskan ke subnet tujuan...`
       );
-      sender = { dev: router, port: owner.port };
+      const arrivalPortId = requestPath.at(-1)?.toPortId;
+      const ingressPort = (arrivalPortId ? this.portOf(router.id, arrivalPortId) : null) ?? router.ports[0];
+      sender = { dev: router, port: ingressPort };
     }
 
     return { ok: false, rttMs: 0, replyTtl: 0, error: 'Hop routing melebihi batas kedalaman.' };
@@ -932,47 +1190,102 @@ export class HeadlessSimulationEngine {
    * Cakupan broadcast Layer-2 dari sebuah node: semua perangkat yang terjangkau
    * melewati switch/hub/AP, beserta jalur hop ke masing-masing (urutan BFS deterministik).
    */
-  private broadcastPaths(startNodeId: string): Array<{ dev: DeviceData; path: L2Hop[] }> {
+  private broadcastPaths(
+    startNodeId: string,
+    fromPortId?: string,
+    vlanHint?: number
+  ): Array<{ dev: DeviceData; path: L2Hop[] }> {
     const results: Array<{ dev: DeviceData; path: L2Hop[] }> = [];
     const visited = new Set<string>([startNodeId]);
-    const queue: Array<{ currentNodeId: string; path: L2Hop[] }> = [
-      { currentNodeId: startNodeId, path: [] },
-    ];
+    const queue: Array<{ currentNodeId: string; path: L2Hop[]; currentVlan?: number }> = [];
+
+    const consider = (
+      currentNodeId: string,
+      p: PhysicalPort,
+      path: L2Hop[],
+      currentVlan?: number
+    ): void => {
+      const link = this.findLink(currentNodeId, p.id);
+      if (!link) return;
+
+      const peerNodeId =
+        link.sourceNodeId === currentNodeId ? link.targetNodeId : link.sourceNodeId;
+      const peerPortId =
+        link.sourceNodeId === currentNodeId ? link.targetPortId : link.sourcePortId;
+      const peerDev = this.devices.get(peerNodeId);
+      if (!peerDev || visited.has(peerNodeId)) return;
+
+      const peerPort = peerDev.ports.find((pp) => pp.id === peerPortId);
+      if (!peerPort) {
+        if (!isL2Intermediate(peerDev.type)) return;
+      } else {
+        if (peerPort.status !== 'up') return;
+      }
+
+      const dev = this.devices.get(currentNodeId);
+      if (!dev) return;
+
+      const dummyPeerPort: PhysicalPort = peerPort ?? {
+        id: peerPortId,
+        name: peerPortId,
+        status: 'up',
+        macAddress: '00:00:00:00:00:00',
+      };
+
+      const { allowed, nextVlan } = this.checkL2VlanHop(
+        dev,
+        p,
+        peerDev,
+        dummyPeerPort,
+        currentVlan
+      );
+      if (!allowed) return;
+
+      if (peerPort && !this.ssidAllows(p, peerPort)) return;
+
+      const hop: L2Hop = {
+        fromNodeId: currentNodeId,
+        fromPortId: p.id,
+        toNodeId: peerNodeId,
+        toPortId: peerPortId,
+        kind: link.kind ?? 'ethernet',
+      };
+      results.push({ dev: peerDev, path: [...path, hop] });
+
+      if (isL2Intermediate(peerDev.type)) {
+        visited.add(peerNodeId);
+        queue.push({ currentNodeId: peerNodeId, path: [...path, hop], currentVlan: nextVlan });
+      }
+    };
+
+    if (fromPortId) {
+      const seed = this.portOf(startNodeId, fromPortId);
+      if (seed && seed.status === 'up') {
+        const startVlan = vlanHint ?? seed.vlanId;
+        consider(startNodeId, seed, [], startVlan);
+      }
+    } else {
+      const startDev = this.devices.get(startNodeId);
+      const startPort = startDev?.ports.find((p) => p.status === 'up');
+      const startVlan = vlanHint ?? startPort?.vlanId;
+      queue.push({ currentNodeId: startNodeId, path: [], currentVlan: startVlan });
+    }
 
     while (queue.length > 0) {
-      const { currentNodeId, path } = queue.shift()!;
+      const { currentNodeId, path, currentVlan } = queue.shift()!;
       const dev = this.devices.get(currentNodeId);
       if (!dev) continue;
 
       for (const p of dev.ports) {
         if (p.status !== 'up') continue;
-        const link = this.findLink(currentNodeId, p.id);
-        if (!link) continue;
-
-        const peerNodeId =
-          link.sourceNodeId === currentNodeId ? link.targetNodeId : link.sourceNodeId;
-        const peerPortId =
-          link.sourceNodeId === currentNodeId ? link.targetPortId : link.sourcePortId;
-        const peerDev = this.devices.get(peerNodeId);
-        if (!peerDev || visited.has(peerNodeId)) continue;
-
-        // Segmen VLAN 802.1Q: link ditolak bila kedua port access berbeda VLAN
-        const peerPort = peerDev.ports.find((pp) => pp.id === peerPortId);
-        if (peerPort && !this.vlanAllows(p, peerPort)) continue;
-
-        const hop: L2Hop = {
-          fromNodeId: currentNodeId,
-          fromPortId: p.id,
-          toNodeId: peerNodeId,
-          toPortId: peerPortId,
-          kind: link.kind ?? 'ethernet',
-        };
-        results.push({ dev: peerDev, path: [...path, hop] });
-
-        if (isL2Intermediate(peerDev.type)) {
-          visited.add(peerNodeId);
-          queue.push({ currentNodeId: peerNodeId, path: [...path, hop] });
+        if (
+          path.length > 0 &&
+          path[path.length - 1].toPortId === p.id &&
+          path[path.length - 1].toNodeId === currentNodeId
+        ) {
+          continue;
         }
+        consider(currentNodeId, p, path, currentVlan);
       }
     }
     return results;
@@ -995,6 +1308,19 @@ export class HeadlessSimulationEngine {
     if (!client || !port) {
       this.record(ctx, 'ERROR', `Klien ${clientNodeId}/${portId} tidak ditemukan.`);
       return { success: false, rttMs: 0, ttl: 0, logs: [], outputLines: [], sent: 0, received: 0 };
+    }
+
+    if (port.status !== 'up') {
+      this.record(ctx, 'ERROR', `DHCP: Port ${port.name} dalam status DOWN (kabel belum terhubung).`);
+      return {
+        success: false,
+        rttMs: 0,
+        ttl: 0,
+        logs: [],
+        outputLines: [`DHCP gagal: Port ${port.name} berstatus DOWN.`],
+        sent: 0,
+        received: 0,
+      };
     }
 
     this.record(
@@ -1042,10 +1368,33 @@ export class HeadlessSimulationEngine {
       };
     }
 
+    const poolNet = networkAddress(chosen.pool.network, chosen.pool.mask);
+    if (!isSameSubnet(chosen.pool.startIp, poolNet, chosen.pool.mask)) {
+      this.record(
+        ctx,
+        'ERROR',
+        `DHCP: Konfigurasi startIp (${chosen.pool.startIp}) di luar subnet pool ${chosen.pool.network}/${chosen.pool.mask}.`
+      );
+      return {
+        success: false,
+        rttMs: 0,
+        ttl: 0,
+        logs: [],
+        outputLines: [`DHCP: startIp di luar subnet pool ${chosen.pool.network}/${chosen.pool.mask}.`],
+        sent: 0,
+        received: 0,
+      };
+    }
+
     // Alokasi deterministik: IP pertama yang bebas mulai dari pool.startIp
     const occupied = new Set<string>();
     for (const dev of this.devices.values()) {
-      for (const p of dev.ports) if (p.ipAddress) occupied.add(p.ipAddress);
+      for (const p of dev.ports) {
+        if (p.ipAddress) occupied.add(p.ipAddress);
+        for (const s of p.subInterfaces ?? []) {
+          if (s.ipAddress) occupied.add(s.ipAddress);
+        }
+      }
     }
     let offeredIp: string | null = null;
     const base = ipToNumber(chosen.pool.startIp);
@@ -1238,73 +1587,72 @@ export class HeadlessSimulationEngine {
       for (const r of routers) {
         const rState = state.get(r.id)!;
 
-        for (const link of this.links) {
-          let nId: string | null = null;
-          let pr: PhysicalPort | undefined;
-          let pn: PhysicalPort | undefined;
-          if (link.sourceNodeId === r.id) {
-            pr = this.portOf(r.id, link.sourcePortId);
-            pn = this.portOf(link.targetNodeId, link.targetPortId);
-            nId = link.targetNodeId;
-          } else if (link.targetNodeId === r.id) {
-            pr = this.portOf(r.id, link.targetPortId);
-            pn = this.portOf(link.sourceNodeId, link.sourcePortId);
-            nId = link.sourceNodeId;
-          }
-          if (!nId || !pr || !pn || pr.status !== 'up' || pn.status !== 'up') continue;
-          if (!this.vlanAllows(pr, pn)) continue;
-          const neighbor = this.devices.get(nId);
-          if (!neighbor || neighbor.type !== 'router' || !neighbor.ripEnabled) continue;
+        // Cari tetangga router yang terjangkau lewat L2 (kabel langsung atau switch/hub)
+        for (const pr of r.ports) {
+          if (pr.status !== 'up' || !pr.ipAddress) continue;
+          for (const neighbor of routers) {
+            if (neighbor.id === r.id || !neighbor.ripEnabled) continue;
+            const path = this.findL2Path(r.id, neighbor.id, pr.id);
+            if (!path || path.length === 0) continue;
+            const arrivalPortId = path.at(-1)?.toPortId;
+            const pn = neighbor.ports.find((p) => p.id === arrivalPortId);
+            if (!pn || pn.status !== 'up' || !pn.ipAddress) continue;
+            if (!isSameSubnet(pr.ipAddress, pn.ipAddress, pr.subnetMask ?? '255.255.255.0')) continue;
 
-          const nState = state.get(nId)!;
-          const nextHopIp = pr.ipAddress;
-          if (!nextHopIp) continue;
+            const nId = neighbor.id;
+            const nState = state.get(nId)!;
+            const nextHopIp = pr.ipAddress;
 
-          for (const [key, route] of rState) {
-            // Split horizon sederhana: jangan iklankan lewat interface asal route
-            if (route.interfaceId === pr.id) continue;
-            const newMetric = route.metric + 1;
-            const existing = nState.get(key);
-            if (existing && (existing.metric <= newMetric || !existing.learned)) continue;
+            for (const [key, route] of rState) {
+              // Split horizon sederhana: jangan iklankan lewat interface asal route
+              if (route.interfaceId === pr.id) continue;
+              const newMetric = route.metric + 1;
+              const existing = nState.get(key);
+              if (existing && (existing.metric <= newMetric || !existing.learned)) continue;
 
-            nState.set(key, {
-              network: route.network,
-              mask: route.mask,
-              metric: newMetric,
-              nextHop: nextHopIp,
-              interfaceId: pn.id,
-              learned: true,
-            });
-            changed = true;
-            routesAdded += 1;
-
-            const hop: L2Hop = {
-              fromNodeId: r.id,
-              fromPortId: pr.id,
-              toNodeId: nId,
-              toPortId: pn.id,
-              kind: link.kind ?? 'ethernet',
-            };
-            const event = this.recordHop(
-              ctx,
-              hop,
-              'RIP_UPDATE',
-              `RIPv2 ronde ${round}: ${r.label} mengirim ${route.network}/${route.mask} (metric ${route.metric}) ke ${neighbor.label} → metric ${newMetric}`,
-              this.buildFramePdu(hop, 'ICMP_REQ', {
-                note: `RIPv2: ${route.network}/${route.mask} metric ${newMetric} via ${nextHopIp}`,
-              })
-            );
-            event.effects = [
-              {
-                type: 'ROUTE_LEARN',
-                nodeId: nId,
+              nState.set(key, {
                 network: route.network,
-                subnetMask: route.mask,
+                mask: route.mask,
+                metric: newMetric,
                 nextHop: nextHopIp,
                 interfaceId: pn.id,
-                metric: newMetric,
-              },
-            ];
+                learned: true,
+              });
+              changed = true;
+              routesAdded += 1;
+
+              for (const hop of path) {
+                const event = this.recordHop(
+                  ctx,
+                  hop,
+                  'RIP_UPDATE',
+                  `RIPv2 ronde ${round}: ${r.label} mengirim ${route.network}/${route.mask} (metric ${route.metric}) ke ${neighbor.label} → metric ${newMetric}`,
+                  this.buildFramePdu(hop, 'RIP_UPDATE', {
+                    packet: {
+                      srcIp: pr.ipAddress ?? '0.0.0.0',
+                      dstIp: '224.0.0.9',
+                      ttl: 1,
+                      protocol: 'RIP',
+                      id: 0,
+                    },
+                    note: `RIPv2: ${route.network}/${route.mask} metric ${newMetric} via ${nextHopIp}`,
+                  })
+                );
+                if (hop === path.at(-1)) {
+                  event.effects = [
+                    {
+                      type: 'ROUTE_LEARN',
+                      nodeId: nId,
+                      network: route.network,
+                      subnetMask: route.mask,
+                      nextHop: nextHopIp,
+                      interfaceId: pn.id,
+                      metric: newMetric,
+                    },
+                  ];
+                }
+              }
+            }
           }
         }
       }
@@ -1313,6 +1661,8 @@ export class HeadlessSimulationEngine {
 
     // Terapkan hasil konvergensi ke device state (rute RIP menggantikan rute RIP lama)
     for (const r of routers) {
+      const dev = this.devices.get(r.id);
+      if (!dev) continue;
       const ripRoutes = [...(state.get(r.id) ?? new Map<string, RipRoute>())]
         .filter(([, v]) => v.learned)
         .map(([, v]) => ({
@@ -1323,8 +1673,8 @@ export class HeadlessSimulationEngine {
           metric: v.metric,
           source: 'rip' as const,
         }));
-      const statics = (r.routes ?? []).filter((rt) => rt.source !== 'rip');
-      r.routes = [...statics, ...ripRoutes];
+      const statics = (dev.routes ?? []).filter((rt) => rt.source !== 'rip');
+      dev.routes = [...statics, ...ripRoutes];
     }
 
     this.record(
@@ -1397,33 +1747,64 @@ export class HeadlessSimulationEngine {
     const echoCount = Math.max(1, options.echoCount ?? 1);
     const style = options.outputStyle ?? 'windows';
 
+    if (!isValidIp(targetIp)) {
+      this.record(ctx, 'ERROR', `Invalid IP address: "${targetIp}".`);
+      return {
+        success: false,
+        rttMs: 0,
+        ttl: 0,
+        logs: [],
+        outputLines: [`Invalid IP address: "${targetIp}".`],
+        sent: 0,
+        received: 0,
+      };
+    }
+
     const sourceDev = this.devices.get(sourceNodeId);
     if (!sourceDev) {
-      this.record(ctx, 'ERROR', `Source node ${sourceNodeId} tidak ditemukan.`);
+      const msg = `Source node ${sourceNodeId} tidak ditemukan.`;
+      this.record(ctx, 'ERROR', msg);
       return {
-        success: false, rttMs: 0, ttl: 0, logs: [], outputLines: [], sent: 0, received: 0,
+        success: false, rttMs: 0, ttl: 0, logs: [msg], outputLines: [msg], sent: 0, received: 0,
       };
     }
 
     const sourcePort = this.chooseSourcePort(sourceDev, targetIp);
     if (!sourcePort) {
-      this.record(ctx, 'ERROR', `${sourceDev.label}: Port belum memiliki konfigurasi IP/Subnet.`);
+      const msg = `${sourceDev.label}: Port belum memiliki konfigurasi IP/Subnet.`;
+      this.record(ctx, 'ERROR', msg);
       return {
-        success: false, rttMs: 0, ttl: 0, logs: [], outputLines: [], sent: 0, received: 0,
+        success: false, rttMs: 0, ttl: 0, logs: [msg], outputLines: [msg], sent: 0, received: 0,
       };
     }
 
     if (sourcePort.status !== 'up') {
-      this.record(ctx, 'ERROR', `${sourceDev.label}: Kabel tidak terhubung (Link DOWN).`);
+      const msg = `${sourceDev.label}: Kabel tidak terhubung (Link DOWN).`;
+      this.record(ctx, 'ERROR', msg);
       return {
-        success: false, rttMs: 0, ttl: 0, logs: [], outputLines: [], sent: 0, received: 0,
+        success: false, rttMs: 0, ttl: 0, logs: [msg], outputLines: [msg], sent: 0, received: 0,
       };
+    }
+
+    let effectiveSourcePort = sourcePort;
+    if (!sourcePort.ipAddress && sourcePort.subInterfaces?.length) {
+      const subIf =
+        sourcePort.subInterfaces.find((s) => isSameSubnet(s.ipAddress, targetIp, s.subnetMask)) ??
+        sourcePort.subInterfaces[0];
+      if (subIf) {
+        effectiveSourcePort = {
+          ...sourcePort,
+          ipAddress: subIf.ipAddress,
+          subnetMask: subIf.subnetMask,
+          vlanId: subIf.vlanId,
+        };
+      }
     }
 
     this.record(
       ctx,
       'INFO',
-      `Memulai PING dari ${sourceDev.label} (${sourcePort.ipAddress}) ke ${targetIp}...`
+      `Memulai PING dari ${sourceDev.label} (${effectiveSourcePort.ipAddress}) ke ${targetIp}...`
     );
 
     const outcomes: EchoOutcome[] = [];
@@ -1431,15 +1812,14 @@ export class HeadlessSimulationEngine {
       if (i > 0) this.record(ctx, 'ICMP', `Echo #${i + 1} ke ${targetIp}...`);
       const outcome = this.planEchoOnce(
         ctx,
-        { dev: sourceDev, port: sourcePort },
+        { dev: sourceDev, port: effectiveSourcePort },
         targetIp,
         i,
-        i === 0
+        true
       );
       outcomes.push(outcome);
       if (!outcome.ok) {
         this.record(ctx, 'ERROR', outcome.error ?? 'Ping gagal tanpa alasan yang diketahui.');
-        break; // kondisi gagal bersifat deterministik — tidak perlu mengulang
       }
     }
 

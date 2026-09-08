@@ -13,7 +13,7 @@ import {
   Network,
 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
-import { isValidIp, isValidSubnetMask, networkAddress } from '../../utils/ipUtils';
+import { isValidIp, isValidSubnetMask, networkAddress, ipToNumber, prefixLength } from '../../utils/ipUtils';
 import { type DeviceData } from '../../types/network';
 import { requestDhcp, requestRip } from '../../hooks/useSimulationEngine';
 import { useModalA11y } from '../../hooks/useModalA11y';
@@ -120,7 +120,10 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
   };
 
   const handleAddRoute = () => {
-    if (!isValidIp(routeNetwork.trim()) || !isValidSubnetMask(routeMask.trim())) {
+    const net = routeNetwork.trim();
+    const mask = routeMask.trim();
+    const isDefaultRoute = net === '0.0.0.0' && (mask === '0.0.0.0' || mask === '0');
+    if (!isValidIp(net) || (!isValidSubnetMask(mask) && !isDefaultRoute)) {
       setErrorMsg('Format network/subnet mask route tidak valid!');
       return;
     }
@@ -129,8 +132,8 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
       return;
     }
     addStaticRoute(device.id, {
-      network: routeNetwork.trim(),
-      subnetMask: routeMask.trim(),
+      network: net,
+      subnetMask: isDefaultRoute ? '0.0.0.0' : mask,
       nextHop: routeNextHop.trim(),
       interfaceId: device.ports[0]?.id ?? 'fa0/0',
     });
@@ -153,11 +156,33 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
         setErrorMsg('Format Subnet Mask tidak valid! Contoh: 255.255.255.0');
         return;
       }
+      const net = networkAddress(ipAddress.trim(), subnetMask.trim());
+      const netNum = ipToNumber(net);
+      const maskNum = ipToNumber(subnetMask.trim());
+      const bcastNum = (netNum | (~maskNum >>> 0)) >>> 0;
+      const ipNum = ipToNumber(ipAddress.trim());
+      const cidr = prefixLength(subnetMask.trim());
+      if (ipNum === netNum || ipNum === bcastNum) {
+        setErrorMsg(`% Bad mask /${cidr} for address ${ipAddress.trim()}`);
+        return;
+      }
     }
 
-    if (defaultGateway.trim() && !isValidIp(defaultGateway)) {
-      setErrorMsg('Format Default Gateway tidak valid!');
-      return;
+    if (defaultGateway.trim()) {
+      if (!isValidIp(defaultGateway.trim())) {
+        setErrorMsg('Format Default Gateway tidak valid!');
+        return;
+      }
+      const hostIp = ipAddress.trim() || selectedPort?.ipAddress;
+      const hostMask = subnetMask.trim() || selectedPort?.subnetMask;
+      if (hostIp && hostMask && isValidIp(hostIp) && isValidSubnetMask(hostMask)) {
+        if (!isSameSubnet(hostIp, defaultGateway.trim(), hostMask)) {
+          setErrorMsg(
+            `Default Gateway (${defaultGateway.trim()}) harus berada dalam subnet yang sama dengan IP port (${hostIp}/${hostMask})!`
+          );
+          return;
+        }
+      }
     }
 
     if (poolEnabled) {
@@ -175,6 +200,16 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
     for (const s of subIfs) {
       if (!isValidIp(s.ipAddress) || !isValidSubnetMask(s.subnetMask)) {
         setErrorMsg(`Sub-interface VLAN ${s.vlanId}: IP/mask tidak valid!`);
+        return;
+      }
+      const net = networkAddress(s.ipAddress.trim(), s.subnetMask.trim());
+      const netNum = ipToNumber(net);
+      const maskNum = ipToNumber(s.subnetMask.trim());
+      const bcastNum = (netNum | (~maskNum >>> 0)) >>> 0;
+      const ipNum = ipToNumber(s.ipAddress.trim());
+      const cidr = prefixLength(s.subnetMask.trim());
+      if (ipNum === netNum || ipNum === bcastNum) {
+        setErrorMsg(`Sub-interface VLAN ${s.vlanId}: % Bad mask /${cidr} for address ${s.ipAddress.trim()}`);
         return;
       }
     }
@@ -588,6 +623,16 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
                   const vlan = Number(subVlan);
                   if (!vlan || vlan < 1 || vlan > 4094 || !isValidIp(subIp) || !isValidSubnetMask(subMask)) {
                     setErrorMsg('Sub-interface: VLAN/IP/mask tidak valid!');
+                    return;
+                  }
+                  const net = networkAddress(subIp.trim(), subMask.trim());
+                  const netNum = ipToNumber(net);
+                  const maskNum = ipToNumber(subMask.trim());
+                  const bcastNum = (netNum | (~maskNum >>> 0)) >>> 0;
+                  const ipNum = ipToNumber(subIp.trim());
+                  const cidr = prefixLength(subMask.trim());
+                  if (ipNum === netNum || ipNum === bcastNum) {
+                    setErrorMsg(`Sub-interface VLAN ${vlan}: % Bad mask /${cidr} for address ${subIp.trim()}`);
                     return;
                   }
                   setSubIfs([...subIfs, { vlanId: vlan, ipAddress: subIp.trim(), subnetMask: subMask.trim() }]);

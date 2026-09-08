@@ -9,7 +9,7 @@ import { type DeviceData } from '../types/network';
 export type LabCheck =
   | { type: 'ping-success'; sourceNodeId: string; targetIp: string }
   | { type: 'gateway'; deviceId: string; gateway: string }
-  | { type: 'device-ip'; deviceId: string; ipPrefix: string }
+  | { type: 'device-ip'; deviceId: string; ipPrefix: string; secondaryIpPrefix?: string }
   | { type: 'nat-entry'; deviceId: string }
   | { type: 'route-learned'; deviceId: string; network: string };
 
@@ -57,13 +57,22 @@ function checkObjective(check: LabCheck, input: LabEvalInput): boolean {
       );
     case 'gateway':
       return device?.defaultGateway === check.gateway;
-    case 'device-ip':
+    case 'device-ip': {
       // Cek port utama DAN sub-interface (router-on-a-stick menyimpan IP di sini)
-      return !!device?.ports.some(
-        (p) =>
-          p.ipAddress?.startsWith(check.ipPrefix) ||
-          p.subInterfaces?.some((s) => s.ipAddress?.startsWith(check.ipPrefix))
-      );
+      const matchIp = (ip?: string, prefix?: string) => {
+        if (!ip || !prefix) return false;
+        if (ip === prefix) return true;
+        const normalized = prefix.endsWith('.') ? prefix : `${prefix}.`;
+        return ip.startsWith(normalized);
+      };
+      const hasPrefix = (prefix?: string) => {
+        if (!prefix) return true;
+        return !!device?.ports.some(
+          (p) => matchIp(p.ipAddress, prefix) || p.subInterfaces?.some((s) => matchIp(s.ipAddress, prefix))
+        );
+      };
+      return hasPrefix(check.ipPrefix) && hasPrefix(check.secondaryIpPrefix);
+    }
     case 'nat-entry':
       return (device?.natTable?.length ?? 0) > 0;
     case 'route-learned':
@@ -312,7 +321,16 @@ const labVlan: LabScenario = {
     { id: 'edge-l3-pc2', source: 'pc-2', target: 'sw-1', sourceHandle: 'fa0', targetHandle: 'fa0/3', type: 'networkCable', data: { sourcePortName: 'fa0 (VLAN 20)', targetPortName: 'fa0/3 (VLAN 20)' } },
   ],
   objectives: [
-    { id: 'subif', description: 'Router punya sub-interface VLAN 10 (192.168.10.1/24) & VLAN 20 (192.168.20.1/24)', check: { type: 'device-ip', deviceId: 'r-1', ipPrefix: '192.168.10.1' } },
+    {
+      id: 'subif',
+      description: 'Router punya sub-interface VLAN 10 (192.168.10.1/24) & VLAN 20 (192.168.20.1/24)',
+      check: {
+        type: 'device-ip',
+        deviceId: 'r-1',
+        ipPrefix: '192.168.10.1',
+        secondaryIpPrefix: '192.168.20.1',
+      },
+    },
     { id: 'ping', description: 'Ping dari PC-Staff ke PC-Guest (192.168.20.10) berhasil', check: { type: 'ping-success', sourceNodeId: 'pc-1', targetIp: '192.168.20.10' } },
   ],
   hints: [

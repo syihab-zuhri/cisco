@@ -78,6 +78,8 @@ function ensureWorker(): Worker {
           store.updateDeviceConfig(dev.id, {
             arpTable: dev.arpTable,
             macTable: dev.macTable,
+            routes: dev.routes,
+            natTable: dev.natTable,
           });
         });
         break;
@@ -97,6 +99,54 @@ function ensureWorker(): Worker {
   };
 
   return worker;
+}
+
+export function abortSimulation(): void {
+  if (worker) {
+    worker.postMessage({ type: 'ABORT_SIMULATION' } as UIWorkerMessage);
+  }
+  for (const [requestId, resolve] of pendingPings) {
+    resolve({
+      requestId,
+      sourceNodeId: '',
+      targetIp: '',
+      success: false,
+      rttMs: 0,
+      ttl: 0,
+      logs: ['Simulasi dibatalkan.'],
+      outputLines: ['Simulasi dibatalkan.'],
+    });
+  }
+  pendingPings.clear();
+  for (const [requestId, resolve] of pendingDhcp) {
+    resolve({
+      requestId,
+      nodeId: '',
+      portId: '',
+      success: false,
+      logs: ['Simulasi dibatalkan.'],
+      outputLines: ['Simulasi dibatalkan.'],
+    });
+  }
+  pendingDhcp.clear();
+  for (const [requestId, resolve] of pendingRip) {
+    resolve({
+      requestId,
+      success: false,
+      routesAdded: 0,
+      logs: ['Simulasi dibatalkan.'],
+      outputLines: ['Simulasi dibatalkan.'],
+    });
+  }
+  pendingRip.clear();
+
+  const store = useAppStore.getState();
+  if (store.simulationStatus !== 'idle') {
+    store.setSimulationStatus('idle');
+  }
+  if (store.activePackets.length > 0) {
+    store.setActivePackets([]);
+  }
 }
 
 export function setEngineSpeed(speed: SimulationSpeed): void {
@@ -154,7 +204,7 @@ export async function requestRip(): Promise<RipResultPayload> {
   const requestId = `rip-${Date.now()}-${++requestSeq}`;
   return new Promise<RipResultPayload>((resolve) => {
     pendingRip.set(requestId, resolve);
-    w.postMessage({ type: 'START_RIP' } as UIWorkerMessage);
+    w.postMessage({ type: 'START_RIP', payload: { requestId } } as UIWorkerMessage);
   });
 }
 /** Meminta IP via DHCP (DORA) untuk port klien — router sebagai server. */

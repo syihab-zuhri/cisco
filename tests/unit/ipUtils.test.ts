@@ -8,6 +8,7 @@ import {
   numberToIp,
   ipToNumber,
   prefixLength,
+  isPrivateIp,
 } from '../../src/utils/ipUtils';
 
 describe('ipUtils (RFC 791 IPv4)', () => {
@@ -62,5 +63,18 @@ describe('ipUtils tambahan', () => {
 
   it('isSameSubnet mengembalikan false untuk IP tidak valid (catch branch)', () => {
     expect(isSameSubnet('bukan.ip', '192.168.1.1', '255.255.255.0')).toBe(false);
+  });
+
+  it('validasi subnet mask menolak 0.0.0.0 dan prefixLength aman dari non-kontigu', () => {
+    expect(isValidSubnetMask('0.0.0.0')).toBe(false);
+    expect(prefixLength('255.0.255.0')).toBe(0);
+    expect(prefixLength('255.255.255.0')).toBe(24);
+  });
+
+  it('isPrivateIp mengenali loopback, link-local, dan multicast', () => {
+    expect(isPrivateIp('127.0.0.1')).toBe(true);
+    expect(isPrivateIp('169.254.1.1')).toBe(true);
+    expect(isPrivateIp('224.0.0.9')).toBe(true);
+    expect(isPrivateIp('8.8.8.8')).toBe(false);
   });
 });

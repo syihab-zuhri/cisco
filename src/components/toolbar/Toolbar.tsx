@@ -10,6 +10,7 @@ import {
   StepForward,
   ChevronLast,
   GraduationCap,
+  ListChecks,
 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { pauseSimulation, resumeSimulation, simStepNext } from '../../hooks/useSimulationEngine';
@@ -18,9 +19,10 @@ interface ToolbarProps {
   onTriggerPing: (sourceNodeId: string, targetIp: string) => void;
   onOpenDocs: () => void;
   onOpenLabs: () => void;
+  onOpenTestAll: () => void;
 }
 
-export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs }: ToolbarProps) {
+export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs, onOpenTestAll }: ToolbarProps) {
   const {
     nodes,
     edges,
@@ -71,14 +73,38 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs }: ToolbarProps)
     reader.onload = (event) => {
       try {
         const json = JSON.parse(event.target?.result as string);
-        if (json.nodes && json.edges) {
-          loadTopology(json);
-        } else {
+        if (!Array.isArray(json.nodes) || !Array.isArray(json.edges)) {
           pushToast(
             'error',
-            'Format file JSON tidak valid! Pastikan file berisi objek "nodes" dan "edges".'
+            'Format file JSON tidak valid! "nodes" dan "edges" harus berupa array.'
           );
+          return;
         }
+        // Validasi node & port
+        for (const n of json.nodes) {
+          if (!n.id || !n.data?.type || !Array.isArray(n.data?.ports)) {
+            pushToast('error', `Node "${n.id ?? 'tanpa-id'}" tidak valid dalam format JSON.`);
+            return;
+          }
+        }
+        // Validasi INV-003: 1 port ethernet hanya terhubung ke 1 kabel
+        const portConnections = new Set<string>();
+        for (const edge of json.edges) {
+          if (edge.type !== 'wirelessLink') {
+            const srcKey = `${edge.source}:${edge.sourceHandle}`;
+            const dstKey = `${edge.target}:${edge.targetHandle}`;
+            if (portConnections.has(srcKey) || portConnections.has(dstKey)) {
+              pushToast(
+                'error',
+                'File JSON melanggar INV-003: Terdeteksi lebih dari satu kabel pada port fisik yang sama.'
+              );
+              return;
+            }
+            portConnections.add(srcKey);
+            portConnections.add(dstKey);
+          }
+        }
+        loadTopology(json);
       } catch (err) {
         pushToast('error', 'Gagal membaca file JSON! File tidak dapat di-parse.');
       }
@@ -216,6 +242,15 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs }: ToolbarProps)
 
       {/* Persistence & Tools */}
       <div className="flex items-center gap-2">
+        <button
+          onClick={onOpenTestAll}
+          title="Test All — uji otomatis seluruh konfigurasi"
+          className="flex items-center gap-1.5 rounded bg-emerald-600/25 px-2.5 py-1.5 text-xs text-emerald-300 border border-emerald-500/50 hover:bg-emerald-600 hover:text-white transition-colors"
+        >
+          <ListChecks className="h-3.5 w-3.5" />
+          <span className="hidden font-semibold lg:inline">Test All</span>
+        </button>
+
         <button
           onClick={onOpenLabs}
           title="Mode Lab Praktikum"

@@ -13,6 +13,13 @@ export function DeviceCliModal() {
   const node = nodes.find((n) => n.id === activeCliModalNodeId);
   const terminalBottomRef = useRef<HTMLDivElement>(null);
 
+  // Jika perangkat dihapus saat terminal terbuka, tutup modal dengan aman
+  useEffect(() => {
+    if (activeCliModalNodeId && !node) {
+      setActiveCliModalNodeId(null);
+    }
+  }, [activeCliModalNodeId, node, setActiveCliModalNodeId]);
+
   const [history, setHistory] = useState<string[]>([
     'Cisco IOS Software, C2900 Software (C2900-UNIVERSALK9-M), Version 15.1(4)M4',
     'OpenPacket Simulated IOS Terminal v1.3.0',
