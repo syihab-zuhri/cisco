@@ -10,7 +10,6 @@ import {
   StepForward,
   ChevronLast,
   GraduationCap,
-  ListChecks,
 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { pauseSimulation, resumeSimulation, simStepNext } from '../../hooks/useSimulationEngine';
@@ -35,10 +34,9 @@ interface ToolbarProps {
   onTriggerPing: (sourceNodeId: string, targetIp: string) => void;
   onOpenDocs: () => void;
   onOpenLabs: () => void;
-  onOpenTestAll: () => void;
 }
 
-export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs, onOpenTestAll }: ToolbarProps) {
+export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs }: ToolbarProps) {
   const {
     nodes,
     edges,
@@ -272,18 +270,6 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs, onOpenTestAll }
 
       {/* Persistence & Tools */}
       <div className="flex items-center gap-2">
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button variant="outline" size="sm" onClick={onOpenTestAll} className="text-emerald-300">
-                <ListChecks data-icon="inline-start" />
-                <span className="hidden font-semibold lg:inline">Test All</span>
-              </Button>
-            }
-          />
-          <TooltipContent>Test All — uji otomatis seluruh konfigurasi</TooltipContent>
-        </Tooltip>
-
         <Tooltip>
           <TooltipTrigger
             render={

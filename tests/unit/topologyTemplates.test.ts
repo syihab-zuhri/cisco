@@ -70,7 +70,6 @@ describe('Integritas template topologi', () => {
 
   it('semua template dapat dimuat ke simulation engine dan diping tanpa error', async () => {
     const { HeadlessSimulationEngine } = await import('../../src/engine/simulationEngine');
-    const { runTestAll } = await import('../../src/utils/testAllRunner');
     expect(TOPOLOGY_TEMPLATES.length).toBeGreaterThanOrEqual(16);
 
     for (const tpl of TOPOLOGY_TEMPLATES) {
@@ -84,9 +83,6 @@ describe('Integritas template topologi', () => {
       }));
 
       expect(() => engine.setTopology(devices, links)).not.toThrow();
-
-      // Verify runTestAll runs cleanly across every template without crash
-      expect(() => runTestAll(devices, links, ['ping', 'gateway'])).not.toThrow();
 
       const hosts = devices.filter((d) => d.ports.some((p) => p.ipAddress && p.status === 'up'));
       if (hosts.length >= 2) {

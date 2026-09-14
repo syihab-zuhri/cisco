@@ -4,9 +4,8 @@ import { CliSession, type CliSessionDeps } from '../../src/engine/cli/cliEngine'
 import { useAppStore } from '../../src/store/useAppStore';
 import { TOPOLOGY_TEMPLATES } from '../../src/data/topologyTemplates';
 import { LAB_SCENARIOS } from '../../src/data/labs';
-import { runTestAll } from '../../src/utils/testAllRunner';
 import { isValidIp, isValidSubnetMask, networkAddress, ipToNumber } from '../../src/utils/ipUtils';
-import type { DeviceData, TopologyLink } from '../../src/types/network';
+import type { DeviceData } from '../../src/types/network';
 
 function makeRouter(id: string, label: string): DeviceData {
   return {
@@ -72,15 +71,6 @@ describe('BUG-CRASH-01: Ping router interface tidak crash', () => {
     const result = await engine.executePing('pc-a', '10.0.0.1');
     expect(result.success).toBe(true);
     expect(result.received).toBeGreaterThan(0);
-  });
-
-  it('runTestAll completes without throwing undefined fromPortId', () => {
-    const router = makeRouter('r-1', 'Router-1');
-    const pcA = makePc('pc-a', 'PC-A', '192.168.1.10', '192.168.1.1');
-    const links: TopologyLink[] = [
-      { sourceNodeId: 'pc-a', sourcePortId: 'fa0', targetNodeId: 'r-1', targetPortId: 'fa0/0' },
-    ];
-    expect(() => runTestAll([router, pcA], links, ['ping', 'gateway'])).not.toThrow();
   });
 
   it('ping loopback 127.0.0.1 succeeds immediately without error or timeout', async () => {
