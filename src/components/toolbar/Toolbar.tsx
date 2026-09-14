@@ -231,8 +231,16 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs, onOpenTestAll }
       <div className="flex items-center gap-2 rounded-lg bg-muted/50 px-3 py-1.5">
         <span className="text-xs font-medium text-foreground">Ping:</span>
         <Select value={pingSource || null} onValueChange={(value) => setPingSource(value ?? '')}>
-          <SelectTrigger className="w-40">
-            <SelectValue placeholder="-- Pilih Host --" />
+          <SelectTrigger className="w-48">
+            <SelectValue placeholder="-- Pilih Host --">
+              {(value: string | null) => {
+                if (!value) return '-- Pilih Host --';
+                const selected = pingableNodes.find((n) => n.id === value);
+                if (!selected) return value;
+                const ip = selected.data.ports.find((p) => p.ipAddress)?.ipAddress;
+                return ip ? `${selected.data.label} (${ip})` : selected.data.label;
+              }}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {pingableNodes.map((n) => (

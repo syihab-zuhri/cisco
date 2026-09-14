@@ -479,7 +479,9 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
                   <Label htmlFor="cfg-vlan-mode" className="text-[11px] text-muted-foreground">Mode Port</Label>
                   <Select value={portMode} onValueChange={(value) => setPortMode(value as 'access' | 'trunk')}>
                     <SelectTrigger id="cfg-vlan-mode" className="w-full font-mono text-xs">
-                      <SelectValue />
+                      <SelectValue>
+                        {(value: string | null) => (value === 'trunk' ? 'trunk (semua VLAN)' : value ?? 'access')}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="access">access</SelectItem>
