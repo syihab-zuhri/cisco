@@ -176,13 +176,15 @@ class ClassroomHub {
         break;
     }
 
-    // Panggil seluruh listener lokal
-    this.listeners.forEach((listener) => {
-      try {
-        listener(event);
-      } catch (e) {
-        console.error('[ClassroomHub] listener error:', e);
-      }
+    // Panggil seluruh listener lokal secara asinkron (microtask) agar React menyelesaikan siklus render saat ini
+    queueMicrotask(() => {
+      this.listeners.forEach((listener) => {
+        try {
+          listener(event);
+        } catch (e) {
+          console.error('[ClassroomHub] listener error:', e);
+        }
+      });
     });
   }
 
