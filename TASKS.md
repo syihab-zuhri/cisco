@@ -170,4 +170,29 @@ gantt
   - *Dependencies:* `TASK-P0-024`, `TASK-P0-025`
   - *Definition of Done:* Parser & validator JSON toleran alias (`exerciseParser.ts`), modal editor visual soal praktikum guru (`ExerciseEditorModal.tsx`) untuk menyunting teks instruksi & kriteria target, impor/ekspor file `.json`, dan persistensi penyimpanan lokal.
 
+---
+
+### Sprint 9: Multi-Exercise Exam, Frozen Snapshot & Student HUD (v1.8.0)
+- **`TASK-P0-027` [Effort: M] Frozen Immutable Exam Snapshot Engine (`src/features/classroom/classroomHub.ts`)**
+  - *Status:* Completed (2026-09-14)
+  - *Dependencies:* `TASK-P0-023`
+  - *Definition of Done:* Sesi kelas membekukan deep-clone snapshot (`session.activeExercises`) saat ujian dimulai atau disiarkan. Mutasi bank soal katalog oleh guru di tengah ujian tidak memutasi lembar kerja aktif siswa.
+- **`TASK-P0-028` [Effort: M] Fleksibilitas Seleksi Multi-Soal di Panel Guru (`ClassroomModal.tsx`)**
+  - *Status:* Completed (2026-09-14)
+  - *Dependencies:* `TASK-P0-025`, `TASK-P0-027`
+  - *Definition of Done:* Checkbox seleksi per-soal, aksi "Pilih Semua", aksi "Hanya Ini" (uji tunggal instan), dan aksi "Siarkan Paket Ujian (N Soal)" dengan counter jumlah soal terpilih.
+- **`TASK-P0-029` [Effort: L] Student Canvas HUD Multi-Exercise Switcher & Layout Alignment (`ClassroomStudentHUD.tsx`)**
+  - *Status:* Completed (2026-09-14)
+  - *Dependencies:* `TASK-P0-027`, `TASK-P0-028`
+  - *Definition of Done:* Segmented tab/pill switcher antar-soal pada floating Canvas HUD; checklist, checklist evaluation, dan muat starter topology dinamis per-soal; penyerahan semua jawaban dengan skor rata-rata; dan HUD otomatis bergeser ke kiri saat PDU Inspector Drawer aktif.
+- **`TASK-P0-030` [Effort: S] Anti-Cheat Template Lock pada Palet Perangkat (`DevicePalette.tsx`)**
+  - *Status:* Completed (2026-09-14)
+  - *Dependencies:* `TASK-P0-023`
+  - *Definition of Done:* Tab template topologi dinonaktifkan otomatis saat siswa tergabung dalam kelas aktif dengan pesan edukasi perakitan mandiri.
+- **`TASK-P0-031` [Effort: S] Pembersihan UI Guru & Asynchronous Event Dispatch**
+  - *Status:* Completed (2026-09-14)
+  - *Dependencies:* `TASK-P0-025`
+  - *Definition of Done:* Tombol dan generator simulasi bot dihapus dari antarmuka guru; sinkronisasi event bus lokal dideferensialkan menggunakan `queueMicrotask` guna mencegah benturan render React 19.
+
+
 

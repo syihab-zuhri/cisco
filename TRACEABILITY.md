@@ -13,9 +13,9 @@
 
 ## 1. Traceability Summary
 
-- **Total Functional Requirements (P0):** 16
-- **Total Requirements Covered:** 16
-- **Coverage Rate:** **100% (16/16)**
+- **Total Functional Requirements (P0):** 21
+- **Total Requirements Covered:** 21
+- **Coverage Rate:** **100% (21/21)**
 - **Traceability Loop:** Closed (Setiap `FR` P0 tertaut ke minimal satu `PRD`, `Component`, `Task`, dan `Test`).
 
 ---
@@ -40,3 +40,8 @@
 | `FR-014` | Ekspor Topologi ke File JSON | `FEAT-CANVAS` | `HeaderToolbar` | `TopologyJsonSchema` | `TASK-P0-017`, `018` | `AC-CANVAS-002` | Covered |
 | `FR-015` | Impor Topologi dari File JSON | `FEAT-CANVAS` | `HeaderToolbar` | `TopologyJsonSchema` | `TASK-P0-017`, `018` | `AC-CANVAS-002` | Covered |
 | `FR-016` | Standalone Desktop Windows Build | `FEAT-CANVAS` | `Tauri Rust Wrapper` | N/A | `TASK-P0-002`, `019` | `AC-016` | Covered |
+| `FR-017` | Frozen Immutable Exam Snapshot | `FEAT-CLASSROOM` | `ClassroomHub` | `ClassSession` | `TASK-P0-027` | `TEST-CLASS-007` | Covered |
+| `FR-018` | Seleksi Ujian Multi-Soal Guru | `FEAT-CLASSROOM` | `ClassroomModal` | `Exercise` | `TASK-P0-028` | `TEST-CLASS-008` | Covered |
+| `FR-019` | Student Canvas HUD Switcher | `FEAT-CLASSROOM` | `ClassroomStudentHUD` | `Submission` | `TASK-P0-029` | `TEST-CLASS-008` | Covered |
+| `FR-020` | Anti-Cheat Workspace Lock | `FEAT-CLASSROOM` | `DevicePalette` | `TopologyTemplate` | `TASK-P0-030` | `TEST-PALETTE-001` | Covered |
+| `FR-021` | Penyelarasan Layout Drawer & HUD | `FEAT-CANVAS` | `ClassroomStudentHUD` | N/A | `TASK-P0-029` | `AC-CANVAS-HUD` | Covered |
