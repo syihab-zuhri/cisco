@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   GraduationCap,
   Send,
@@ -43,6 +43,31 @@ export function ClassroomStudentHUD() {
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
 
+  // Handler Keluar Kelas
+  const handleLeaveClass = useCallback(
+    (confirm = true) => {
+      const doLeave = () => {
+        classroomHub.setCurrentParticipant(null);
+        setParticipant(null);
+        setEvaluation(null);
+        pushToast('info', 'Anda telah keluar dari ruang kelas.');
+      };
+
+      if (confirm) {
+        requestConfirm({
+          title: 'Keluar dari Kelas?',
+          message:
+            'Anda akan keluar dari sesi praktikum kelas ini. Anda dapat bergabung kembali kapan saja menggunakan kode kelas.',
+          confirmLabel: 'Keluar Kelas',
+          onConfirm: doLeave,
+        });
+      } else {
+        doLeave();
+      }
+    },
+    [pushToast, requestConfirm]
+  );
+
   // Sinkronisasi realtime event
   useEffect(() => {
     const unsub = classroomHub.subscribe((event) => {
@@ -77,7 +102,7 @@ export function ClassroomStudentHUD() {
     return () => {
       unsub();
     };
-  }, [session]);
+  }, [session, handleLeaveClass, pushToast]);
 
   // Pantau perubahan local participant
   useEffect(() => {
@@ -91,34 +116,9 @@ export function ClassroomStudentHUD() {
     return () => clearInterval(interval);
   }, [participant]);
 
-  // Jika siswa belum bergabung, jangan tampilkan HUD
-  if (!participant || !activeExercise) {
-    return null;
-  }
-
-  // Handler Keluar Kelas
-  const handleLeaveClass = (confirm = true) => {
-    const doLeave = () => {
-      classroomHub.setCurrentParticipant(null);
-      setParticipant(null);
-      setEvaluation(null);
-      pushToast('info', 'Anda telah keluar dari ruang kelas.');
-    };
-
-    if (confirm) {
-      requestConfirm({
-        title: 'Keluar dari Kelas?',
-        message: 'Anda akan keluar dari sesi praktikum kelas ini. Anda dapat bergabung kembali kapan saja menggunakan kode kelas.',
-        confirmLabel: 'Keluar Kelas',
-        onConfirm: doLeave,
-      });
-    } else {
-      doLeave();
-    }
-  };
-
   // Evaluasi topologi kanvas saat ini
-  const runEvaluation = async (): Promise<ExerciseEvaluation> => {
+  const runEvaluation = async (): Promise<ExerciseEvaluation | null> => {
+    if (!activeExercise) return null;
     const devices = nodes.map((n) => n.data);
     const links = edges.map((e) => ({
       sourceNodeId: e.source,
@@ -132,18 +132,26 @@ export function ClassroomStudentHUD() {
 
   // Handler Cek Mandiri (Self-Check tanpa submit resmi)
   const handleSelfCheck = async () => {
+    if (!activeExercise) return;
     setIsEvaluating(true);
     try {
       const evalResult = await runEvaluation();
+      if (!evalResult) return;
       setEvaluation(evalResult);
 
       if (evalResult.status === 'passed') {
-        pushToast('success', 'Hebat! Seluruh kriteria praktikum terpenuhi (Skor 100). Klik "Kirim Jawaban" untuk mengumpulkan ke guru.');
+        pushToast(
+          'success',
+          'Hebat! Seluruh kriteria praktikum terpenuhi (Skor 100). Klik "Kirim Jawaban" untuk mengumpulkan ke guru.'
+        );
       } else {
         pushToast('info', `Cek Mandiri: ${evalResult.feedback}`);
       }
     } catch (err) {
-      pushToast('error', `Gagal mengevaluasi: ${err instanceof Error ? err.message : String(err)}`);
+      pushToast(
+        'error',
+        `Gagal mengevaluasi: ${err instanceof Error ? err.message : String(err)}`
+      );
     } finally {
       setIsEvaluating(false);
     }
@@ -151,11 +159,12 @@ export function ClassroomStudentHUD() {
 
   // Handler Kirim Jawaban (Submit resmi ke Guru)
   const handleSubmitWork = async () => {
-    if (!session) return;
+    if (!session || !participant || !activeExercise) return;
     setIsEvaluating(true);
 
     try {
       const evalResult = await runEvaluation();
+      if (!evalResult) return;
       setEvaluation(evalResult);
 
       const submission: Submission = {
@@ -174,12 +183,18 @@ export function ClassroomStudentHUD() {
         if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
           confetti({ particleCount: 160, spread: 80, origin: { y: 0.5, x: 0.8 } });
         }
-        pushToast('success', 'Luar biasa! Lembar kerja dengan skor sempurna 100 berhasil dikirim ke guru.');
+        pushToast(
+          'success',
+          'Luar biasa! Lembar kerja dengan skor sempurna 100 berhasil dikirim ke guru.'
+        );
       } else {
         pushToast('info', `Lembar kerja dikirim ke guru dengan skor ${evalResult.score}/100.`);
       }
     } catch (err) {
-      pushToast('error', `Gagal mengirim jawaban: ${err instanceof Error ? err.message : String(err)}`);
+      pushToast(
+        'error',
+        `Gagal mengirim jawaban: ${err instanceof Error ? err.message : String(err)}`
+      );
     } finally {
       setIsEvaluating(false);
     }
@@ -187,13 +202,15 @@ export function ClassroomStudentHUD() {
 
   // Handler Ekspor Lembar Jawaban (.opsub)
   const handleExportSubmissionFile = async () => {
+    if (!participant || !activeExercise) return;
     setIsEvaluating(true);
     try {
       let currentEval = evaluation;
       if (!currentEval) {
         currentEval = await runEvaluation();
-        setEvaluation(currentEval);
+        if (currentEval) setEvaluation(currentEval);
       }
+      if (!currentEval) return;
 
       const sub: Submission = {
         participantId: participant.id,
@@ -208,9 +225,15 @@ export function ClassroomStudentHUD() {
       const topoDevices = nodes;
       const topoEdges = edges;
       exportSubmissionPackageFile(sub, { nodes: topoDevices, edges: topoEdges });
-      pushToast('success', 'Berkas lembar jawaban (.opsub) berhasil diunduh. Anda dapat menyerahkannya ke guru.');
+      pushToast(
+        'success',
+        'Berkas lembar jawaban (.opsub) berhasil diunduh. Anda dapat menyerahkannya ke guru.'
+      );
     } catch (err) {
-      pushToast('error', `Gagal mengekspor berkas: ${err instanceof Error ? err.message : String(err)}`);
+      pushToast(
+        'error',
+        `Gagal mengekspor berkas: ${err instanceof Error ? err.message : String(err)}`
+      );
     } finally {
       setIsEvaluating(false);
     }
@@ -218,6 +241,7 @@ export function ClassroomStudentHUD() {
 
   // Handler Muat Topologi Guru
   const handleLoadStarterTopology = () => {
+    if (!activeExercise) return;
     const doLoad = () => {
       if (activeExercise.starterTopology) {
         loadTopology({
@@ -243,7 +267,8 @@ export function ClassroomStudentHUD() {
     if (nodes.length > 0) {
       requestConfirm({
         title: 'Muat Topologi Guru?',
-        message: 'Memuat topologi ini akan menimpa seluruh perangkat dan koneksi kabel di kanvas Anda saat ini. Lanjutkan?',
+        message:
+          'Memuat topologi ini akan menimpa seluruh perangkat dan koneksi kabel di kanvas Anda saat ini. Lanjutkan?',
         confirmLabel: 'Muat Topologi',
         onConfirm: doLoad,
       });
@@ -251,6 +276,11 @@ export function ClassroomStudentHUD() {
       doLoad();
     }
   };
+
+  // Jika siswa belum bergabung, jangan tampilkan HUD
+  if (!participant || !activeExercise) {
+    return null;
+  }
 
   // Tampilan Minimized (Floating Pill)
   if (isMinimized) {
