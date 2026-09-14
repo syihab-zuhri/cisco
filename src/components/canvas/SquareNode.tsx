@@ -67,7 +67,7 @@ export function SquareNode({ id, data, selected }: NodeProps) {
       {/* Label kecil di pojok saat dipilih */}
       {selected && (
         <div className="absolute -top-7 left-0 flex items-center gap-1.5">
-          <span className="flex items-center gap-1 rounded bg-[#111827] border border-[#374151] px-1.5 py-0.5 text-[10px] text-gray-300 shadow-md">
+          <span className="flex items-center gap-1 rounded bg-popover border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground shadow-md">
             <Square className="h-3 w-3" style={{ color: stroke }} />
             Square
           </span>
@@ -76,7 +76,7 @@ export function SquareNode({ id, data, selected }: NodeProps) {
 
       {/* Panel kustomisasi saat dipilih: swatch warna + hapus */}
       {selected && (
-        <div className="absolute -top-7 right-0 flex items-center gap-1 rounded bg-[#111827] border border-[#374151] px-1.5 py-1 shadow-md">
+        <div className="absolute -top-7 right-0 flex items-center gap-1 rounded bg-popover border border-border px-1.5 py-1 shadow-md">
           {SQUARE_SWATCHES.map((s) => (
             <button
               key={s.name}
@@ -86,7 +86,7 @@ export function SquareNode({ id, data, selected }: NodeProps) {
                 updateAnnotation(id, { fill: s.fill, stroke: s.stroke });
               }}
               className={`h-3.5 w-3.5 rounded-full border ${
-                fill === s.fill ? 'ring-2 ring-white/80' : 'border-gray-600'
+                fill === s.fill ? 'ring-2 ring-primary/80' : 'border-border'
               }`}
               style={{ background: s.fill, borderColor: s.stroke }}
             />

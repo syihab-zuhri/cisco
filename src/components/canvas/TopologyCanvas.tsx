@@ -131,7 +131,7 @@ export function TopologyCanvas() {
   };
 
   return (
-    <div className="relative h-full w-full bg-[#0B0F19]">
+    <div className="relative h-full w-full bg-background">
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -154,7 +154,7 @@ export function TopologyCanvas() {
         }}
       >
         <Background
-          color="#374151"
+          color="var(--color-border)"
           gap={20}
           size={1.5}
           variant={BackgroundVariant.Dots}
@@ -176,18 +176,18 @@ export function TopologyCanvas() {
             if (n.data?.type === 'cloud') return '#60A5FA';
             return '#F59E0B';
           }}
-          className="!border-[#374151] !bg-[#111827]"
+          className="!border-border !bg-popover"
         />
       </ReactFlow>
 
       {/* Packet In-Flight Indicators / Notification banner */}
       {activePackets.length > 0 && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 rounded-full border border-emerald-500/50 bg-[#111827]/90 px-4 py-1.5 shadow-lg backdrop-blur-sm">
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 rounded-full border border-emerald-500/50 bg-popover/90 px-4 py-1.5 shadow-lg backdrop-blur-sm">
           <span className="relative flex h-3 w-3">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
             <span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-500"></span>
           </span>
-          <span className="text-xs font-medium text-gray-200">
+          <span className="text-xs font-medium text-foreground">
             {activePackets[0]?.summary || 'Paket sedang dikirim...'}
           </span>
         </div>

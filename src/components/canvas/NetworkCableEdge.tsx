@@ -165,10 +165,10 @@ export function NetworkCableEdge({
             pointerEvents: shouldShowBadge ? 'all' : 'none',
             transformOrigin: 'center center',
           }}
-          className={`nodrag nopan flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-mono text-gray-200 border-2 shadow-xl backdrop-blur-md transition-all duration-200 cursor-pointer ${
+          className={`nodrag nopan flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-mono text-foreground border-2 shadow-xl backdrop-blur-md transition-all duration-200 cursor-pointer ${
             activePacket
               ? 'bg-blue-950/95 border-cyan-400 scale-110 shadow-cyan-500/50'
-              : 'bg-[#111827]/95 border-emerald-500/80'
+              : 'bg-popover/95 border-emerald-500/80'
           }`}
         >
           <span

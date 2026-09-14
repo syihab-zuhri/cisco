@@ -1,22 +1,28 @@
 import { useState } from 'react';
-import { ClipboardCheck, X, Play, CheckCircle2, XCircle, MinusCircle } from 'lucide-react';
+import { ClipboardCheck, Play, CheckCircle2, XCircle, MinusCircle } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
-import { useModalA11y } from '../../hooks/useModalA11y';
 import {
   TEST_SUITES,
   runTestAll,
   type TestAllResult,
   type TestSuiteId,
 } from '../../utils/testAllRunner';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 
 export function TestAllModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
-  const { nodes, edges, addSimulationLog } = useAppStore();
-  const dialogRef = useModalA11y({ onClose, enabled: isOpen });
+  const nodes = useAppStore((s) => s.nodes);
+  const edges = useAppStore((s) => s.edges);
+  const addSimulationLog = useAppStore((s) => s.addSimulationLog);
   const [selected, setSelected] = useState<TestSuiteId[]>(['ping', 'gateway', 'dhcp', 'rip']);
   const [result, setResult] = useState<TestAllResult | null>(null);
   const [isRunning, setIsRunning] = useState(false);
-
-  if (!isOpen) return null;
 
   const toggle = (id: TestSuiteId) => {
     setSelected((prev) => (prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]));
@@ -53,41 +59,23 @@ export function TestAllModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="testall-modal-title"
-        className="flex max-h-[86vh] w-[760px] flex-col rounded-2xl border border-gray-700 bg-[#0F172A] shadow-2xl overflow-hidden"
-      >
-        {/* Header */}
-        <div className="flex h-12 items-center justify-between border-b border-gray-800 bg-[#1E293B] px-5">
-          <div className="flex items-center gap-2.5">
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="flex max-h-[86vh] w-[760px] flex-col gap-0 p-0 sm:max-w-[760px]">
+        <DialogHeader className="border-b px-5 py-3">
+          <DialogTitle className="flex items-center gap-2.5 text-sm font-bold">
             <ClipboardCheck className="h-5 w-5 text-emerald-400" />
-            <span id="testall-modal-title" className="text-sm font-bold text-white">
-              Test All — Uji Otomatis Seluruh Konfigurasi
-            </span>
-          </div>
-          <button
-            onClick={onClose}
-            aria-label="Tutup panel test all"
-            className="rounded p-1 text-gray-400 hover:bg-gray-800 hover:text-white"
-          >
-            <X className="h-4.5 w-4.5" />
-          </button>
-        </div>
+            Test All — Uji Otomatis Seluruh Konfigurasi
+          </DialogTitle>
+          <DialogDescription className="sr-only">
+            Uji ping, gateway, DHCP, dan RIP pada seluruh konfigurasi topologi.
+          </DialogDescription>
+        </DialogHeader>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+        <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-5">
           {/* Pilihan tes */}
           <section aria-label="Pilih tes yang dijalankan">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Tes yang dijalankan
             </p>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -101,36 +89,36 @@ export function TestAllModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
                     className={`rounded-xl border p-3 text-left transition-colors ${
                       active
                         ? 'border-emerald-500 bg-emerald-950/40'
-                        : 'border-gray-800 bg-[#1E293B]/70 hover:border-gray-600'
+                        : 'border-border bg-muted/40 hover:border-muted-foreground/40'
                     }`}
                   >
                     <div className="flex items-center gap-2">
                       {active ? (
                         <CheckCircle2 className="h-4 w-4 text-emerald-400" />
                       ) : (
-                        <MinusCircle className="h-4 w-4 text-gray-500" />
+                        <MinusCircle className="h-4 w-4 text-muted-foreground/60" />
                       )}
-                      <span className="text-sm font-bold text-gray-100">{suite.title}</span>
+                      <span className="text-sm font-bold">{suite.title}</span>
                     </div>
-                    <p className="mt-1 text-[11px] leading-relaxed text-gray-400">{suite.hint}</p>
+                    <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{suite.hint}</p>
                   </button>
                 );
               })}
             </div>
           </section>
 
-          <button
+          <Button
             onClick={handleRun}
             disabled={selected.length === 0 || isRunning}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-500 disabled:opacity-50"
+            className="w-full gap-2 py-2.5"
           >
             <Play className="h-4 w-4" />
             {isRunning ? 'Menguji…' : `Jalankan ${selected.length} Tes`}
-          </button>
+          </Button>
 
           {/* Hasil */}
           {result && (
-            <section aria-label="Hasil test all" className="space-y-3">
+            <section aria-label="Hasil test all" className="flex flex-col gap-3">
               {selected.includes('ping') && (
                 <ResultTable
                   title={`Ping Matrix — ${result.pingPass} lolos / ${result.pingFail} gagal`}
@@ -185,15 +173,15 @@ export function TestAllModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
                 />
               )}
               {selected.includes('rip') && (
-                <div className="rounded-xl border border-gray-800 bg-[#1E293B]/70 p-3">
-                  <p className="text-sm font-bold text-gray-100">
+                <div className="rounded-xl border bg-muted/40 p-3">
+                  <p className="text-sm font-bold">
                     RIP —{' '}
                     {result.ripRoutesAdded !== null
                       ? `+${result.ripRoutesAdded} rute dipelajari`
                       : 'dilewati'}
                   </p>
                   {result.ripOutput.map((line, i) => (
-                    <p key={i} className="mt-1 font-mono text-[11px] text-gray-400">
+                    <p key={i} className="mt-1 font-mono text-[11px] text-muted-foreground">
                       {line}
                     </p>
                   ))}
@@ -202,8 +190,8 @@ export function TestAllModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
             </section>
           )}
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -219,17 +207,17 @@ function ResultTable({
   emptyText: string;
 }) {
   return (
-    <div className="rounded-xl border border-gray-800 bg-[#1E293B]/70 p-3">
-      <p className="mb-2 text-sm font-bold text-gray-100">{title}</p>
+    <div className="rounded-xl border bg-muted/40 p-3">
+      <p className="mb-2 text-sm font-bold">{title}</p>
       {rows.length === 0 ? (
-        <p className="text-[11px] text-gray-500">{emptyText}</p>
+        <p className="text-[11px] text-muted-foreground/70">{emptyText}</p>
       ) : (
         <div className="max-h-56 overflow-y-auto">
           <table className="w-full text-left text-[11px]">
-            <thead className="sticky top-0 bg-[#1E293B]">
+            <thead className="sticky top-0 bg-popover">
               <tr>
                 {headers.map((h) => (
-                  <th key={h} className="px-2 py-1 font-semibold text-gray-400">
+                  <th key={h} className="px-2 py-1 font-semibold text-muted-foreground">
                     {h}
                   </th>
                 ))}
@@ -237,7 +225,7 @@ function ResultTable({
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.key} className="border-t border-gray-800">
+                <tr key={r.key} className="border-t border-border">
                   {r.cells.map((c, i) => (
                     <td
                       key={i}
@@ -246,7 +234,7 @@ function ResultTable({
                           ? r.pass
                             ? 'font-bold text-emerald-400'
                             : 'text-red-400'
-                          : 'text-gray-300'
+                          : 'text-foreground/90'
                       }`}
                     >
                       <span className="mr-1 inline-flex align-middle">

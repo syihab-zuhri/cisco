@@ -11,6 +11,23 @@
 
 ---
 
+## [2026-09-14] — Version 1.5.0 (Overhaul Komponen UI ke shadcn/ui Base-Lyra)
+
+### Changed
+- **Migrasi Penuh ke shadcn/ui (`base-lyra` + `@base-ui/react`)**: Menggantikan modal dan kontrol kustom HTML dengan komponen primitif standar shadcn/ui di `src/components/ui/` (`Dialog`, `AlertDialog`, `Sheet`, `Tabs`, `Table`, `Badge`, `Button`, `Input`, `Select`, `ToggleGroup`, `Tooltip`, `Toast`, `Separator`, `Field`, `InputGroup`, `Spinner`, dll).
+- **Penyesuaian Aturan Arsitektur UI Modern**:
+  - Eliminasi seluruh kelas layout warisan (`space-y-*` dan `space-x-*`) menjadi `flex flex-col gap-*`.
+  - Komposisi dialog deklaratif dengan focus-trap dan tombol dismiss native Base UI, menghapus hook kustom `useModalA11y.ts`.
+  - Integrasi tema token semantic Tailwind CSS v4 (`src/index.css`) dan optimasi path alias Vite (`import.meta.url`).
+- **Penyelarasan Runtime & Build**:
+  - Konfigurasi TypeScript ketat dan alias `@/*` tervalidasi 0 error (`tsc --noEmit`).
+  - Bundling produksi Vite 8 berhasil bersih (`npm run build`).
+
+### Status Gate
+- `Gate C` — 123 unit test di Vitest (13 test files) 100% lulus, 0 lint/type error, dev server aktif di port 5173.
+
+---
+
 ## [2026-09-07] — Version 1.4.3 (Perbaikan Temuan Audit Bug: BUG-1 s/d BUG-5 + Minor)
 
 ### Fixed

@@ -49,15 +49,15 @@ export function DeviceNode({ id, data, selected }: NodeProps) {
 
   return (
     <div
-      className={`group relative flex flex-col items-center rounded-xl border-2 bg-[#1F2937] p-3.5 shadow-xl transition-colors min-w-[150px] cursor-grab active:cursor-grabbing select-none ${
+      className={`group relative flex flex-col items-center rounded-xl border-2 bg-card p-3.5 shadow-xl transition-colors min-w-[150px] cursor-grab active:cursor-grabbing select-none ${
         selected
-          ? 'border-blue-500 shadow-blue-500/30 ring-2 ring-blue-500/20'
-          : 'border-[#374151] hover:border-gray-500'
+          ? 'border-primary shadow-primary/30 ring-2 ring-primary/20'
+          : 'border-border hover:border-muted-foreground/50'
       }`}
     >
       {/* Action floating buttons on hover / selected — tetap interaktif agar
           hover bisa "dijangkau" dari node, reveal hanya via opacity */}
-      <div className="nodrag nopan absolute -top-8 right-0 flex items-center gap-1 rounded bg-[#111827] p-1 border border-[#374151] shadow-md z-30 opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100">
+      <div className="nodrag nopan absolute -top-8 right-0 flex items-center gap-1 rounded bg-popover p-1 border border-border shadow-md z-30 opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100">
         <button
           onClick={(e) => {
             e.stopPropagation();
@@ -65,7 +65,7 @@ export function DeviceNode({ id, data, selected }: NodeProps) {
           }}
           title="Konfigurasi Perangkat (GUI)"
           aria-label={`Konfigurasi ${deviceData.label}`}
-          className="rounded p-1 text-gray-300 hover:bg-gray-700 hover:text-white"
+          className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
         >
           <Settings className="h-3.5 w-3.5" />
         </button>
@@ -76,7 +76,7 @@ export function DeviceNode({ id, data, selected }: NodeProps) {
           }}
           title="Terminal CLI Cisco"
           aria-label={`Buka terminal CLI ${deviceData.label}`}
-          className="rounded p-1 text-gray-300 hover:bg-gray-700 hover:text-green-400"
+          className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-green-400"
         >
           <Terminal className="h-3.5 w-3.5" />
         </button>
@@ -92,7 +92,7 @@ export function DeviceNode({ id, data, selected }: NodeProps) {
           }}
           title="Hapus Perangkat"
           aria-label={`Hapus ${deviceData.label}`}
-          className="rounded p-1 text-gray-300 hover:bg-red-950/60 hover:text-red-400"
+          className="rounded p-1 text-muted-foreground hover:bg-red-950/60 hover:text-red-400"
         >
           <Trash2 className="h-3.5 w-3.5" />
         </button>
@@ -100,12 +100,12 @@ export function DeviceNode({ id, data, selected }: NodeProps) {
 
       {/* Device Header - Drag target */}
       <div className="flex items-center gap-2.5 pointer-events-none">
-        <div className="rounded-lg bg-gray-800/90 p-2 border border-gray-700/80 shadow-inner">
+        <div className="rounded-lg bg-muted/80 p-2 border border-border/70 shadow-inner">
           {getDeviceIcon()}
         </div>
         <div>
-          <span className="block text-xs font-bold text-gray-100">{deviceData.label}</span>
-          <span className="block text-[11px] text-gray-400 uppercase tracking-wider font-mono">
+          <span className="block text-xs font-bold text-foreground">{deviceData.label}</span>
+          <span className="block text-[11px] text-muted-foreground uppercase tracking-wider font-mono">
             {deviceData.type}
           </span>
         </div>
@@ -119,7 +119,7 @@ export function DeviceNode({ id, data, selected }: NodeProps) {
       )}
 
       {/* Physical Ports Handles */}
-      <div className="mt-3 flex w-full flex-wrap justify-around gap-2 border-t border-gray-700/60 pt-2.5 nodrag">
+      <div className="mt-3 flex w-full flex-wrap justify-around gap-2 border-t border-border/60 pt-2.5 nodrag">
         {deviceData.ports.map((port, idx) => {
           const isUp = port.status === 'up';
           const isWireless = port.kind === 'wireless';
@@ -135,7 +135,7 @@ export function DeviceNode({ id, data, selected }: NodeProps) {
                 type="source"
                 position={Position.Bottom}
                 id={port.id}
-                className={`!h-3.5 !w-3.5 !rounded-full !border-2 !border-gray-900 transition-all shadow-md cursor-crosshair ${handleColor} ${
+                className={`!h-3.5 !w-3.5 !rounded-full !border-2 !border-background transition-all shadow-md cursor-crosshair ${handleColor} ${
                   isWireless && !isUp ? 'opacity-50' : ''
                 }`}
                 title={`${port.name}${port.ssid ? ` (SSID: ${port.ssid})` : ''} (${isUp ? 'Link UP' : 'Link DOWN'})`}
@@ -146,7 +146,7 @@ export function DeviceNode({ id, data, selected }: NodeProps) {
                 id={port.id}
                 className="!h-3.5 !w-3.5 !rounded-full !border-0 !opacity-0 !pointer-events-none"
               />
-              <span className="mt-1 text-[11px] font-mono font-medium text-gray-400 pointer-events-none">
+              <span className="mt-1 text-[11px] font-mono font-medium text-muted-foreground pointer-events-none">
                 {isWireless
                   ? 'wifi'
                   : deviceData.type === 'switch' || deviceData.type === 'hub'

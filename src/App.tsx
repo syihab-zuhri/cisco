@@ -1,18 +1,18 @@
 import { useState } from 'react';
 import { ReactFlowProvider } from '@xyflow/react';
-import { Toolbar } from './components/toolbar/Toolbar';
-import { DevicePalette } from './components/palette/DevicePalette';
-import { TopologyCanvas } from './components/canvas/TopologyCanvas';
-import { PduInspectorDrawer } from './components/canvas/PduInspectorDrawer';
-import { EventLogPanel } from './components/log/EventLogPanel';
-import { DeviceConfigModal } from './components/modal/DeviceConfigModal';
-import { DeviceCliModal } from './components/terminal/DeviceCliModal';
-import { DocumentationModal } from './components/modal/DocumentationModal';
-import { LabModal } from './components/modal/LabModal';
-import { TestAllModal } from './components/modal/TestAllModal';
-import { ToastHost } from './components/ui/ToastHost';
-import { ConfirmDialog } from './components/ui/ConfirmDialog';
-import { useSimulationEngine } from './hooks/useSimulationEngine';
+import { Toolbar } from '@/components/toolbar/Toolbar';
+import { DevicePalette } from '@/components/palette/DevicePalette';
+import { TopologyCanvas } from '@/components/canvas/TopologyCanvas';
+import { PduInspectorDrawer } from '@/components/canvas/PduInspectorDrawer';
+import { EventLogPanel } from '@/components/log/EventLogPanel';
+import { DeviceConfigModal } from '@/components/modal/DeviceConfigModal';
+import { DeviceCliModal } from '@/components/terminal/DeviceCliModal';
+import { DocumentationModal } from '@/components/modal/DocumentationModal';
+import { LabModal } from '@/components/modal/LabModal';
+import { TestAllModal } from '@/components/modal/TestAllModal';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { ToastHost } from '@/components/ui/ToastHost';
+import { useSimulationEngine } from '@/hooks/useSimulationEngine';
 
 export default function App() {
   const { triggerPing } = useSimulationEngine();
@@ -27,7 +27,7 @@ export default function App() {
 
   return (
     <ReactFlowProvider>
-      <div className="flex h-screen w-screen flex-col bg-[#0B0F19] text-[#F9FAFB]">
+      <div className="flex h-screen w-screen flex-col bg-background text-foreground">
         <Toolbar
           onTriggerPing={handleTriggerPing}
           onOpenDocs={() => setIsDocsOpen(true)}
@@ -40,7 +40,7 @@ export default function App() {
             onToggle={() => setIsSidebarOpen((prev) => !prev)}
           />
           <main className="flex flex-1 flex-col overflow-hidden">
-            <div className="flex-1 relative">
+            <div className="relative flex-1">
               <TopologyCanvas />
               <PduInspectorDrawer />
             </div>

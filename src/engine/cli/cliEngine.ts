@@ -1,5 +1,5 @@
-import { type DeviceData } from '../../types/network';
-import { isValidIp, isValidSubnetMask, networkAddress, prefixLength, ipToNumber } from '../../utils/ipUtils';
+import { type DeviceData, type PhysicalPort } from '../../types/network';
+import { isValidIp, isValidSubnetMask, networkAddress, prefixLength, ipToNumber, isSameSubnet } from '../../utils/ipUtils';
 
 export type CliMode = 'user' | 'priv' | 'config' | 'config-if';
 
@@ -76,17 +76,23 @@ export class CliSession {
     // Cek sub-interface (contoh: fa0/0.10)
     for (const p of device.ports) {
       for (const s of p.subInterfaces ?? []) {
-        const sId = s.id.toLowerCase().replace(/\s+/g, '');
-        if (sId === clean || sId.replace(/^fastethernet/, 'fa') === clean) {
+        const sId = `${p.id}.${s.vlanId}`.toLowerCase().replace(/\s+/g, '');
+        const sName = `${p.name}.${s.vlanId}`.toLowerCase().replace(/\s+/g, '');
+        if (
+          sId === clean ||
+          sName === clean ||
+          sId.replace(/^fastethernet/, 'fa') === clean ||
+          sName.replace(/^fastethernet/, 'fa') === clean
+        ) {
           return {
-            id: s.id,
-            name: s.id,
+            id: sId,
+            name: sName,
             status: p.status,
+            kind: p.kind,
             ipAddress: s.ipAddress,
             subnetMask: s.subnetMask,
             macAddress: p.macAddress,
             vlanId: s.vlanId,
-            type: p.type,
           } as PhysicalPort;
         }
       }
@@ -244,8 +250,9 @@ export class CliSession {
       );
       for (const s of p.subInterfaces ?? []) {
         const sIp = s.ipAddress || 'unassigned';
+        const sName = `${p.name}.${s.vlanId}`;
         lines.push(
-          `${s.id.padEnd(23)}${sIp.padEnd(16)}YES ${status.padEnd(22)}${p.status}`
+          `${sName.padEnd(23)}${sIp.padEnd(16)}YES ${status.padEnd(22)}${p.status}`
         );
       }
     }

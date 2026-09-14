@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
   BookOpen,
-  X,
   Layers,
   Terminal,
   Play,
@@ -25,8 +24,18 @@ import {
   ShieldCheck,
   Zap,
   Square,
+  X,
 } from 'lucide-react';
-import { useModalA11y } from '../../hooks/useModalA11y';
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 
 interface DocsModalProps {
   isOpen: boolean;
@@ -122,7 +131,7 @@ const PROTOCOL_ITEMS: Array<{ id: string; title: string; tag: string; body: Reac
     body: (
       <>
         Host memutuskan lokal vs luar subnet dengan operasi:
-        <code className="block my-2 bg-black/50 p-2 rounded text-amber-300 font-mono text-center">
+        <code className="my-2 block rounded bg-background/60 p-2 text-center font-mono text-amber-300">
           (IP_Dest &amp; Mask) === (IP_Src &amp; Mask)
         </code>
         Jika <b>false</b>, paket wajib diarahkan ke Default Gateway — tanpa gateway, ping gagal dengan pesan eksplisit.
@@ -213,7 +222,7 @@ const CLI_ROWS: Array<{ mode: string; modeColor: string; cmd: string; desc: stri
   { mode: 'Config (config)#', modeColor: 'text-purple-400', cmd: 'interface <id> (int)', desc: 'Masuk konfigurasi port, contoh: int fa0/0' },
   { mode: 'Config-if', modeColor: 'text-emerald-400', cmd: 'ip address <ip> <mask>', desc: 'IPv4 + mask (divalidasi ala IOS)' },
   { mode: 'Config-if', modeColor: 'text-emerald-400', cmd: 'no shutdown (no shut) · shutdown', desc: 'Naikkan / turunkan interface' },
-  { mode: 'Semua mode', modeColor: 'text-gray-400', cmd: 'exit / end', desc: 'Navigasi antar mode (end → langsung #)' },
+  { mode: 'Semua mode', modeColor: 'text-muted-foreground', cmd: 'exit / end', desc: 'Navigasi antar mode (end → langsung #)' },
 ];
 
 const TEMPLATE_NAMES = [
@@ -225,21 +234,21 @@ const TEMPLATE_NAMES = [
 
 function CodeBlock({ children, color = 'text-blue-300' }: { children: string; color?: string }) {
   return (
-    <pre className={`rounded-lg bg-black/60 p-3 text-xs font-mono ${color} border border-gray-800 overflow-x-auto leading-relaxed`}>
+    <pre className={`overflow-x-auto rounded-lg border bg-background/60 p-3 font-mono text-xs leading-relaxed ${color}`}>
       {children}
     </pre>
   );
 }
 
 function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
-  return <div className={`rounded-xl border border-gray-800 bg-[#1E293B]/70 p-4 ${className}`}>{children}</div>;
+  return <div className={`rounded-xl border bg-muted/40 p-4 ${className}`}>{children}</div>;
 }
 
 function SectionTitle({ icon, title, subtitle }: { icon: React.ReactNode; title: string; subtitle: string }) {
   return (
     <div className="mb-4">
-      <h3 className="text-lg font-bold text-white flex items-center gap-2">{icon}{title}</h3>
-      <p className="text-xs text-gray-400 mt-1">{subtitle}</p>
+      <h3 className="flex items-center gap-2 text-lg font-bold">{icon}{title}</h3>
+      <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>
     </div>
   );
 }
@@ -254,24 +263,24 @@ function Accordion({
   onToggle: (id: string) => void;
 }) {
   return (
-    <div className="space-y-2">
+    <div className="flex flex-col gap-2">
       {items.map((item) => {
         const open = openId === item.id;
         return (
           <div
             key={item.id}
-            className={`rounded-lg border bg-[#1E293B] transition-colors ${open ? 'border-blue-600/60' : 'border-gray-800'}`}
+            className={`rounded-lg border bg-muted/40 transition-colors ${open ? 'border-blue-600/60' : 'border-border'}`}
           >
-            <button onClick={() => onToggle(item.id)} className="w-full flex items-center justify-between gap-2 p-3.5 text-left">
-              <span className="text-xs font-bold text-gray-100">{item.title}</span>
-              <span className="flex items-center gap-2 shrink-0">
-                <span className="rounded bg-gray-800 px-1.5 py-0.5 text-[9px] font-mono text-gray-400 border border-gray-700">
+            <button onClick={() => onToggle(item.id)} className="flex w-full items-center justify-between gap-2 p-3.5 text-left">
+              <span className="text-xs font-bold">{item.title}</span>
+              <span className="flex shrink-0 items-center gap-2">
+                <span className="rounded border bg-background/60 px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground">
                   {item.tag}
                 </span>
-                <ChevronDown className={`h-3.5 w-3.5 text-gray-500 transition-transform ${open ? 'rotate-180' : ''}`} />
+                <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${open ? 'rotate-180' : ''}`} />
               </span>
             </button>
-            {open && <div className="px-3.5 pb-3.5 text-xs text-gray-300 leading-relaxed">{item.body}</div>}
+            {open && <div className="px-3.5 pb-3.5 text-xs leading-relaxed text-foreground/90">{item.body}</div>}
           </div>
         );
       })}
@@ -280,7 +289,6 @@ function Accordion({
 }
 
 export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
-  const dialogRef = useModalA11y({ onClose, enabled: isOpen });
   const [activeSection, setActiveSection] = useState<SectionId>('home');
   const [query, setQuery] = useState<string>('');
   const [openProto, setOpenProto] = useState<string | null>('arp');
@@ -299,66 +307,59 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
     setQuery('');
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs select-none" onClick={onClose}>
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Pusat Bantuan OpenPacket"
-        className="flex h-[88vh] w-[92vw] max-w-5xl flex-col rounded-2xl border border-gray-700 bg-[#0F172A] shadow-2xl overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent
+        showCloseButton={false}
+        className="flex h-[88vh] w-[92vw] max-w-5xl flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl"
       >
         {/* Header */}
-        <div className="flex h-14 items-center justify-between border-b border-gray-800 bg-[#1E293B] px-6">
+        <DialogHeader className="flex-row items-center justify-between border-b px-6 py-3">
           <div className="flex items-center gap-3">
-            <div className="rounded-lg bg-blue-600/20 p-2 border border-blue-500/40">
+            <div className="rounded-lg border border-blue-500/40 bg-blue-600/20 p-2">
               <BookOpen className="h-5 w-5 text-blue-400" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-white tracking-wide">Pusat Bantuan OpenPacket</h2>
-              <p className="text-xs text-gray-400">Referensi fitur, protokol, dan panduan build — v1.4.0</p>
+              <DialogTitle className="text-base font-bold tracking-wide">Pusat Bantuan OpenPacket</DialogTitle>
+              <DialogDescription className="text-xs">
+                Referensi fitur, protokol, dan panduan build — v1.4.0
+              </DialogDescription>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-800 hover:text-white transition-colors"
-          >
+          <DialogClose render={<Button variant="ghost" size="icon-sm" aria-label="Tutup pusat bantuan" />}>
             <X className="h-5 w-5" />
-          </button>
-        </div>
+          </DialogClose>
+        </DialogHeader>
 
-        <div className="flex flex-1 overflow-hidden">
+        <div className="flex min-h-0 flex-1">
           {/* Sidebar */}
-          <nav className="flex w-64 shrink-0 flex-col border-r border-gray-800 bg-[#0B132B]">
+          <nav className="flex w-64 shrink-0 flex-col border-r bg-background/40">
             <div className="p-3">
               <div className="relative">
-                <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-gray-500" />
-                <input
+                <Search className="absolute top-2.5 left-2.5 h-3.5 w-3.5 text-muted-foreground/60" />
+                <Input
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="Cari topik…"
-                  className="w-full rounded-lg bg-black/40 border border-gray-800 pl-8 pr-2 py-1.5 text-xs text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-600"
+                  className="h-8 pl-8 text-xs"
                 />
               </div>
             </div>
 
             {results ? (
-              <div className="flex-1 overflow-y-auto px-3 pb-3 space-y-1">
-                <div className="text-[10px] font-bold uppercase text-gray-500 px-1 mb-1">{results.length} hasil</div>
+              <div className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 pb-3">
+                <div className="mb-1 px-1 text-[10px] font-bold uppercase text-muted-foreground/70">{results.length} hasil</div>
                 {results.length === 0 && (
-                  <div className="text-xs text-gray-600 italic px-1">Tidak ada topik cocok.</div>
+                  <div className="px-1 text-xs italic text-muted-foreground/60">Tidak ada topik cocok.</div>
                 )}
                 {results.map((entry, i) => (
                   <button
                     key={i}
                     onClick={() => goTo(entry.section, entry.accordion)}
-                    className="w-full text-left rounded-lg px-3 py-2 text-xs text-gray-300 hover:bg-gray-800/60 hover:text-white"
+                    className="w-full rounded-lg px-3 py-2 text-left text-xs text-foreground/90 hover:bg-muted hover:text-foreground"
                   >
                     {entry.label}
-                    <span className="block text-[10px] text-gray-600">
+                    <span className="block text-[10px] text-muted-foreground/60">
                       {NAV_GROUPS.flatMap((g) => g.items).find((it) => it.id === entry.section)?.label}
                     </span>
                   </button>
@@ -368,18 +369,18 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
               <div className="flex-1 overflow-y-auto px-3 pb-3">
                 {NAV_GROUPS.map((group) => (
                   <div key={group.group} className="mb-3">
-                    <div className="text-[10px] font-bold uppercase tracking-widest text-gray-600 px-2 mb-1">
+                    <div className="mb-1 px-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">
                       {group.group}
                     </div>
-                    <div className="space-y-0.5">
+                    <div className="flex flex-col gap-0.5">
                       {group.items.map((item) => (
                         <button
                           key={item.id}
                           onClick={() => setActiveSection(item.id)}
-                          className={`w-full flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium text-left transition-all ${
+                          className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs font-medium transition-all ${
                             activeSection === item.id
-                              ? 'bg-blue-600 text-white font-bold shadow-md'
-                              : 'text-gray-400 hover:bg-gray-800/60 hover:text-gray-200'
+                              ? 'bg-primary font-bold text-primary-foreground shadow-md'
+                              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                           }`}
                         >
                           {item.icon}
@@ -392,10 +393,10 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
               </div>
             )}
 
-            <div className="border-t border-gray-800 p-3">
-              <div className="rounded-lg bg-blue-950/40 border border-blue-900/60 p-2.5">
-                <div className="text-[10px] font-bold text-blue-300 mb-0.5">Butuh tantangan?</div>
-                <div className="text-[10px] text-gray-400 leading-relaxed">
+            <div className="border-t p-3">
+              <div className="rounded-lg border border-blue-900/60 bg-blue-950/40 p-2.5">
+                <div className="mb-0.5 text-[10px] font-bold text-blue-300">Butuh tantangan?</div>
+                <div className="text-[10px] leading-relaxed text-muted-foreground">
                   Coba <b>Mode Lab</b> di toolbar — misi berpandu dengan verifikasi otomatis.
                 </div>
               </div>
@@ -403,10 +404,10 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
           </nav>
 
           {/* Content */}
-          <div className="flex-1 overflow-y-auto p-6 text-gray-200">
+          <div className="min-w-0 flex-1 overflow-y-auto p-6">
             {/* ============ BERANDA ============ */}
             {activeSection === 'home' && (
-              <div className="space-y-5">
+              <div className="flex flex-col gap-5">
                 <SectionTitle
                   icon={<Sparkles className="h-5 w-5 text-blue-400" />}
                   title="Mulai di Sini"
@@ -419,17 +420,17 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
                     { n: '3', title: 'Simulasikan', body: 'Kirim ping dari Toolbar, amati animasi paket, telusuri event di timeline, bongkar headernya di PDU Inspector.' },
                   ].map((s) => (
                     <Card key={s.n}>
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-[11px] font-bold text-white">{s.n}</span>
-                        <span className="text-xs font-bold text-gray-100">{s.title}</span>
+                      <div className="mb-2 flex items-center gap-2">
+                        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-primary-foreground">{s.n}</span>
+                        <span className="text-xs font-bold">{s.title}</span>
                       </div>
-                      <p className="text-xs text-gray-400 leading-relaxed">{s.body}</p>
+                      <p className="text-xs leading-relaxed text-muted-foreground">{s.body}</p>
                     </Card>
                   ))}
                 </div>
 
                 <div>
-                  <div className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-2">
+                  <div className="mb-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">
                     Yang bisa kamu lakukan
                   </div>
                   <div className="grid grid-cols-2 gap-2">
@@ -444,7 +445,7 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
                       { icon: <ScanLine className="h-3.5 w-3.5" />, text: 'Step Mode, timeline & PDU Inspector' },
                       { icon: <Square className="h-3.5 w-3.5" />, text: 'Anotasi: square & teks custom di belakang perangkat' },
                     ].map((f, i) => (
-                      <div key={i} className="flex items-center gap-2 rounded-lg border border-gray-800 bg-black/30 px-3 py-2 text-xs text-gray-300">
+                      <div key={i} className="flex items-center gap-2 rounded-lg border bg-background/60 px-3 py-2 text-xs text-foreground/90">
                         <span className="text-blue-400">{f.icon}</span>
                         {f.text}
                       </div>
@@ -453,11 +454,11 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
                 </div>
 
                 <Card className="border-amber-800/50 bg-amber-950/20">
-                  <div className="flex items-center gap-2 mb-1.5">
+                  <div className="mb-1.5 flex items-center gap-2">
                     <GraduationCap className="h-4 w-4 text-amber-400" />
                     <span className="text-xs font-bold text-amber-200">Cara tercepat belajar: Mode Lab</span>
                   </div>
-                  <p className="text-xs text-gray-400 leading-relaxed">
+                  <p className="text-xs leading-relaxed text-muted-foreground">
                     Klik tombol <b>Lab</b> di toolbar — misi berpandu dengan topologi terkunci,
                     petunjuk bertahap, dan verifikasi otomatis. Tiga lab tersedia: perbaiki gateway,
                     nyalakan internet dengan NAT, dan hubungkan dua VLAN.
@@ -468,33 +469,33 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
 
             {/* ============ PERANGKAT & KANVAS ============ */}
             {activeSection === 'devices' && (
-              <div className="space-y-4">
+              <div className="flex flex-col gap-4">
                 <SectionTitle
                   icon={<Layers className="h-5 w-5 text-sky-400" />}
                   title="Perangkat & Kanvas"
                   subtitle="Referensi 8 jenis perangkat dan aturan penyambungannya."
                 />
 
-                <div className="overflow-hidden rounded-xl border border-gray-800">
+                <div className="overflow-hidden rounded-xl border">
                   <table className="w-full text-left text-xs">
-                    <thead className="bg-[#1E293B] text-gray-300 border-b border-gray-800">
+                    <thead className="border-b bg-muted/60">
                       <tr>
                         <th className="p-2.5 font-bold">Perangkat</th>
                         <th className="p-2.5 font-bold">Port</th>
                         <th className="p-2.5 font-bold">Peran</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-800 bg-black/40">
+                    <tbody className="divide-y divide-border bg-background/60">
                       {DEVICE_ROWS.map((d) => (
-                        <tr key={d.name} className="hover:bg-gray-900/40">
+                        <tr key={d.name} className="hover:bg-muted/40">
                           <td className="p-2.5">
-                            <span className="flex items-center gap-2 font-semibold text-gray-100">
+                            <span className="flex items-center gap-2 font-semibold">
                               {d.icon}
                               {d.name}
                             </span>
                           </td>
-                          <td className="p-2.5 font-mono text-gray-400">{d.ports}</td>
-                          <td className="p-2.5 text-gray-300">{d.role}</td>
+                          <td className="p-2.5 font-mono text-muted-foreground">{d.ports}</td>
+                          <td className="p-2.5 text-foreground/90">{d.role}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -502,8 +503,8 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
                 </div>
 
                 <Card>
-                  <div className="text-xs font-bold text-gray-100 mb-2">Aturan penyambungan</div>
-                  <ul className="text-xs text-gray-400 space-y-1.5 list-disc list-inside leading-relaxed">
+                  <div className="mb-2 text-xs font-bold">Aturan penyambungan</div>
+                  <ul className="flex flex-col gap-1.5 list-inside list-disc text-xs leading-relaxed text-muted-foreground">
                     <li><b>Port Singularity</b>: satu port ethernet hanya satu kabel; melepas kabel menurunkan kedua port ke DOWN.</li>
                     <li><b>Radio WiFi 1-ke-N</b>: satu radio AP melayani banyak klien; tiap klien hanya satu AP (SSID harus sama persis).</li>
                     <li><b>Drag-to-connect</b>: tarik dari titik port ke port tujuan — kabel ethernet atau asosiasi WiFi terdeteksi otomatis.</li>
@@ -512,8 +513,8 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
                 </Card>
 
                 <Card>
-                  <div className="text-xs font-bold text-gray-100 mb-2">Anotasi kanvas (square & teks)</div>
-                  <ul className="text-xs text-gray-400 space-y-1.5 list-disc list-inside leading-relaxed">
+                  <div className="mb-2 text-xs font-bold">Anotasi kanvas (square & teks)</div>
+                  <ul className="flex flex-col gap-1.5 list-inside list-disc text-xs leading-relaxed text-muted-foreground">
                     <li>Tombol <b>Square</b> &amp; <b>Teks</b> di palet (bagian Anotasi) → muncul di tengah layar, digeser bebas.</li>
                     <li><b>Square</b> berada di belakang perangkat (untuk menandai area): klik → pilih warna, tarik handle kanan-bawah untuk resize.</li>
                     <li><b>Teks</b>: dobel-klik untuk mengedit isi; saat dipilih, atur ukuran font lewat tombol −/+.</li>
@@ -522,15 +523,15 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
                 </Card>
 
                 <Card>
-                  <div className="text-xs font-bold text-gray-100 mb-2">16 Template siap pakai (5 grup)</div>
+                  <div className="mb-2 text-xs font-bold">16 Template siap pakai (5 grup)</div>
                   <div className="flex flex-wrap gap-1.5">
                     {TEMPLATE_NAMES.map((t) => (
-                      <span key={t} className="rounded bg-gray-800 border border-gray-700 px-2 py-0.5 text-[10px] text-gray-300">
+                      <span key={t} className="rounded border bg-background/60 px-2 py-0.5 text-[10px] text-foreground/80">
                         {t}
                       </span>
                     ))}
                   </div>
-                  <p className="mt-2 text-[11px] text-gray-500">
+                  <p className="mt-2 text-[11px] text-muted-foreground/80">
                     Buka tab <b>Template</b> di palet kiri → tekan <b>Terapkan</b>. Beberapa template
                     sudah terkonfigurasi penuh (IP, route, SSID) dan bisa langsung di-ping.
                   </p>
@@ -540,7 +541,7 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
 
             {/* ============ MESIN PROTOKOL ============ */}
             {activeSection === 'protocols' && (
-              <div className="space-y-4">
+              <div className="flex flex-col gap-4">
                 <SectionTitle
                   icon={<Play className="h-5 w-5 text-cyan-400" />}
                   title="Mesin Protokol (RFC)"
@@ -556,19 +557,19 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
 
             {/* ============ SIMULATION MODE & PDU ============ */}
             {activeSection === 'simmode' && (
-              <div className="space-y-4">
+              <div className="flex flex-col gap-4">
                 <SectionTitle
                   icon={<ScanLine className="h-5 w-5 text-violet-400" />}
                   title="Simulation Mode & PDU Inspector"
                   subtitle="Alat inspeksi ala Packet Tracer — aliran simulasi direncanakan sebagai event deterministik."
                 />
-                <div className="space-y-3">
+                <div className="flex flex-col gap-3">
                   <Card>
-                    <div className="flex items-center gap-2 mb-1.5">
+                    <div className="mb-1.5 flex items-center gap-2">
                       <Play className="h-4 w-4 text-violet-400" />
-                      <span className="text-xs font-bold text-gray-100">Step Mode & Timeline</span>
+                      <span className="text-xs font-bold">Step Mode & Timeline</span>
                     </div>
-                    <p className="text-xs text-gray-400 leading-relaxed">
+                    <p className="text-xs leading-relaxed text-muted-foreground">
                       Tekan <b>Step</b> di toolbar lalu kirim ping: seluruh aliran direncanakan lebih
                       dulu dan tampil di tab <b>Simulasi</b> (panel bawah) — event mendatang tampil
                       redup. Tombol <b>Next</b> memutar tepat satu event per klik; kecepatan 0.5x–2x
@@ -576,13 +577,13 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
                     </p>
                   </Card>
                   <Card>
-                    <div className="flex items-center gap-2 mb-1.5">
+                    <div className="mb-1.5 flex items-center gap-2">
                       <ScanLine className="h-4 w-4 text-cyan-400" />
-                      <span className="text-xs font-bold text-gray-100">PDU Inspector (drawer kanan)</span>
+                      <span className="text-xs font-bold">PDU Inspector (drawer kanan)</span>
                     </div>
-                    <p className="text-xs text-gray-400 leading-relaxed">
+                    <p className="text-xs leading-relaxed text-muted-foreground">
                       Klik event mana pun di timeline untuk membongkar header berlapisnya:
-                      <span className="block mt-2 space-y-1">
+                      <span className="mt-2 flex flex-col gap-1">
                         <span className="flex items-center gap-2 text-emerald-300"><b className="w-8">L2</b> Ethernet Frame — src/dst MAC (ditulis ulang per hop!), ethertype</span>
                         <span className="flex items-center gap-2 text-violet-300"><b className="w-8">L3</b> IPv4 Packet — src/dst IP end-to-end, TTL menurun di router</span>
                         <span className="flex items-center gap-2 text-cyan-300"><b className="w-8">L4</b> ARP / ICMP / DHCP — opcode, type, sequence, yiaddr</span>
@@ -591,11 +592,11 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
                     </p>
                   </Card>
                   <Card>
-                    <div className="flex items-center gap-2 mb-1.5">
+                    <div className="mb-1.5 flex items-center gap-2">
                       <Layers className="h-4 w-4 text-sky-400" />
-                      <span className="text-xs font-bold text-gray-100">Table Viewer (tab Tabel)</span>
+                      <span className="text-xs font-bold">Table Viewer (tab Tabel)</span>
                     </div>
-                    <p className="text-xs text-gray-400 leading-relaxed">
+                    <p className="text-xs leading-relaxed text-muted-foreground">
                       Pilih perangkat di kanvas, buka tab <b>Tabel</b>: CAM Table (switch/AP),
                       ARP Cache (host), Routing (router, lengkap metric/sumber RIP), dan NAT
                       Translations — semuanya update live mengikuti playback simulasi.
@@ -607,35 +608,35 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
 
             {/* ============ TERMINAL IOS ============ */}
             {activeSection === 'cli' && (
-              <div className="space-y-4">
+              <div className="flex flex-col gap-4">
                 <SectionTitle
                   icon={<Terminal className="h-5 w-5 text-green-400" />}
                   title="Terminal Cisco IOS"
                   subtitle="Klik ikon terminal pada hover perangkat. Sepuluh perintah P0 kanonik + alias."
                 />
-                <div className="overflow-hidden rounded-xl border border-gray-800">
+                <div className="overflow-hidden rounded-xl border">
                   <table className="w-full text-left text-xs">
-                    <thead className="bg-[#1E293B] text-gray-300 border-b border-gray-800">
+                    <thead className="border-b bg-muted/60">
                       <tr>
-                        <th className="p-2.5 font-bold w-36">Mode</th>
+                        <th className="w-36 p-2.5 font-bold">Mode</th>
                         <th className="p-2.5 font-bold">Perintah (alias)</th>
                         <th className="p-2.5 font-bold">Fungsi</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-800 bg-black/40 font-mono">
+                    <tbody className="divide-y divide-border bg-background/60 font-mono">
                       {CLI_ROWS.map((row) => (
-                        <tr key={row.cmd} className="hover:bg-gray-900/40">
+                        <tr key={row.cmd} className="hover:bg-muted/40">
                           <td className={`p-2.5 ${row.modeColor}`}>{row.mode}</td>
                           <td className="p-2.5 text-green-400">{row.cmd}</td>
-                          <td className="p-2.5 text-gray-300 font-sans">{row.desc}</td>
+                          <td className="p-2.5 font-sans text-foreground/90">{row.desc}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
                 <Card className="border-green-800/50 bg-green-950/20">
-                  <span className="font-bold text-green-300 text-xs block mb-1">Format output ping</span>
-                  <p className="text-xs text-gray-300 leading-relaxed">
+                  <span className="mb-1 block text-xs font-bold text-green-300">Format output ping</span>
+                  <p className="text-xs leading-relaxed text-foreground/90">
                     Dari terminal IOS: gaya Cisco — <code>!!!!! Success rate is 100 percent (5/5)</code>.
                     Dari Toolbar (PC): gaya Windows — <code>Reply from x.x.x.x: bytes=32 time&lt;1ms TTL=128</code>.
                     Keduanya dijalankan engine penuh, bukan teks fiktif.
@@ -646,16 +647,16 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
 
             {/* ============ BUILD & PORTING ============ */}
             {activeSection === 'build' && (
-              <div className="space-y-4">
+              <div className="flex flex-col gap-4">
                 <SectionTitle
                   icon={<Download className="h-5 w-5 text-emerald-400" />}
                   title="Build & Porting"
                   subtitle="Dari mode development sampai installer Windows — semuanya client-side."
                 />
                 <Card>
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className="text-xs font-bold text-blue-300 uppercase tracking-wide">Menjalankan Lokal</h4>
-                    <span className="rounded bg-blue-950/70 px-2 py-0.5 text-[10px] text-blue-400 border border-blue-800">Node 20/22</span>
+                  <div className="mb-2 flex items-center justify-between">
+                    <h4 className="text-xs font-bold uppercase tracking-wide text-blue-300">Menjalankan Lokal</h4>
+                    <span className="rounded border border-blue-800 bg-blue-950/70 px-2 py-0.5 text-[10px] text-blue-400">Node 20/22</span>
                   </div>
                   <CodeBlock>{`git clone https://github.com/syihab-zuhri/cisco.git
 cd cisco && npm install
@@ -666,25 +667,25 @@ npm test             # unit test (70)
 npm run e2e          # E2E Playwright (Edge/Chromium)`}</CodeBlock>
                 </Card>
                 <Card>
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className="text-xs font-bold text-emerald-300 uppercase tracking-wide">Web Statis (Vercel / Pages)</h4>
-                    <span className="rounded bg-emerald-950/70 px-2 py-0.5 text-[10px] text-emerald-400 border border-emerald-800">~139 KB gzip</span>
+                  <div className="mb-2 flex items-center justify-between">
+                    <h4 className="text-xs font-bold uppercase tracking-wide text-emerald-300">Web Statis (Vercel / Pages)</h4>
+                    <span className="rounded border border-emerald-800 bg-emerald-950/70 px-2 py-0.5 text-[10px] text-emerald-400">~139 KB gzip</span>
                   </div>
                   <CodeBlock color="text-emerald-400">{`npm run build   # output: ./dist — unggah ke hosting statis apa pun`}</CodeBlock>
                 </Card>
                 <Card>
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className="text-xs font-bold text-sky-300 uppercase tracking-wide">Desktop Windows (.exe via Tauri v2)</h4>
-                    <span className="rounded bg-sky-950/70 px-2 py-0.5 text-[10px] text-sky-400 border border-sky-800">CI membangun otomatis</span>
+                  <div className="mb-2 flex items-center justify-between">
+                    <h4 className="text-xs font-bold uppercase tracking-wide text-sky-300">Desktop Windows (.exe via Tauri v2)</h4>
+                    <span className="rounded border border-sky-800 bg-sky-950/70 px-2 py-0.5 text-[10px] text-sky-400">CI membangun otomatis</span>
                   </div>
                   <CodeBlock color="text-sky-400">{`npm run tauri build
 # installer: src-tauri/target/release/bundle/nsis/*.exe
 # GitHub Actions job "desktop" membangun ini di setiap push`}</CodeBlock>
                 </Card>
                 <Card>
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className="text-xs font-bold text-amber-300 uppercase tracking-wide">Android (Capacitor)</h4>
-                    <span className="rounded bg-amber-950/70 px-2 py-0.5 text-[10px] text-amber-400 border border-amber-800">Opsional</span>
+                  <div className="mb-2 flex items-center justify-between">
+                    <h4 className="text-xs font-bold uppercase tracking-wide text-amber-300">Android (Capacitor)</h4>
+                    <span className="rounded border border-amber-800 bg-amber-950/70 px-2 py-0.5 text-[10px] text-amber-400">Opsional</span>
                   </div>
                   <CodeBlock color="text-amber-400">{`npm install @capacitor/core @capacitor/cli @capacitor/android
 npx cap init OpenPacket com.openpacket.app --web-dir dist
@@ -695,7 +696,7 @@ npm run build && npx cap add android`}</CodeBlock>
 
             {/* ============ ARSITEKTUR ============ */}
             {activeSection === 'architecture' && (
-              <div className="space-y-4">
+              <div className="flex flex-col gap-4">
                 <SectionTitle
                   icon={<Cpu className="h-5 w-5 text-purple-400" />}
                   title="Arsitektur & Keamanan"
@@ -712,16 +713,16 @@ npm run build && npx cap add android`}</CodeBlock>
                     { t: 'No Secrets (INV-007)', c: 'text-rose-400', b: 'Tanpa API key/credential — aman di-push publik.' },
                     { t: '100% Offline (INV-008)', c: 'text-orange-400', b: 'Nol request jaringan eksternal — internet disimulasikan oleh Cloud.' },
                   ].map((inv) => (
-                    <div key={inv.t} className="rounded-lg bg-[#1E293B] p-3 border border-gray-800">
-                      <span className={`font-bold block mb-1 ${inv.c}`}>{inv.t}</span>
-                      <span className="text-gray-400 leading-relaxed">{inv.b}</span>
+                    <div key={inv.t} className="rounded-lg border bg-muted/40 p-3">
+                      <span className={`mb-1 block font-bold ${inv.c}`}>{inv.t}</span>
+                      <span className="leading-relaxed text-muted-foreground">{inv.b}</span>
                     </div>
                   ))}
                 </div>
                 <Card className="border-emerald-800/50">
-                  <div className="flex items-center gap-2 mb-1.5">
+                  <div className="mb-1.5 flex items-center gap-2">
                     <ShieldCheck className="h-4 w-4 text-emerald-400" />
-                    <span className="text-xs font-bold text-gray-100">Quality Gates (terverifikasi CI)</span>
+                    <span className="text-xs font-bold">Quality Gates (terverifikasi CI)</span>
                   </div>
                   <div className="grid grid-cols-4 gap-2 text-center text-xs">
                     {[
@@ -730,9 +731,9 @@ npm run build && npx cap add android`}</CodeBlock>
                       { v: '6', l: 'E2E scenarios' },
                       { v: '2', l: 'CI jobs hijau' },
                     ].map((s) => (
-                      <div key={s.l} className="rounded bg-black/40 border border-gray-800 py-2">
-                        <div className="text-lg font-bold text-white font-mono">{s.v}</div>
-                        <div className="text-[10px] text-gray-500">{s.l}</div>
+                      <div key={s.l} className="rounded border bg-background/60 py-2">
+                        <div className="font-mono text-lg font-bold">{s.v}</div>
+                        <div className="text-[10px] text-muted-foreground">{s.l}</div>
                       </div>
                     ))}
                   </div>
@@ -741,7 +742,7 @@ npm run build && npx cap add android`}</CodeBlock>
             )}
           </div>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -14,6 +14,22 @@ import {
 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { pauseSimulation, resumeSimulation, simStepNext } from '../../hooks/useSimulationEngine';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Separator } from '@/components/ui/separator';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 interface ToolbarProps {
   onTriggerPing: (sourceNodeId: string, targetIp: string) => void;
@@ -105,7 +121,7 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs, onOpenTestAll }
           }
         }
         loadTopology(json);
-      } catch (err) {
+      } catch {
         pushToast('error', 'Gagal membaca file JSON! File tidak dapat di-parse.');
       }
     };
@@ -124,194 +140,227 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs, onOpenTestAll }
   };
 
   return (
-    <header className="flex min-h-14 flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-[#374151] bg-[#111827] px-4 py-1 select-none">
+    <header className="flex min-h-14 flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b bg-card px-4 py-1 select-none">
       {/* Brand & Status */}
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2">
-          <Activity className="h-6 w-6 text-blue-500" />
-          <span className="text-lg font-bold tracking-wider text-white">
+          <Activity className="h-6 w-6 text-primary" />
+          <span className="text-lg font-bold tracking-wider text-foreground">
             OpenPacket
           </span>
         </div>
 
-        <div className="h-4 w-px bg-gray-700 mx-1" />
+        <Separator orientation="vertical" className="mx-1 !h-4" />
 
         {/* Speed Controls */}
-        <div className="flex items-center gap-1 bg-[#1F2937] p-1 rounded border border-[#374151]">
-          <span className="text-[11px] text-gray-400 px-1 font-mono uppercase">Speed:</span>
-          {([0.5, 1, 2] as const).map((spd) => (
-            <button
-              key={spd}
-              onClick={() => setSimulationSpeed(spd)}
-              className={`px-1.5 py-0.5 text-xs font-mono rounded ${
-                simulationSpeed === spd
-                  ? 'bg-blue-600 text-white font-bold'
-                  : 'text-gray-400 hover:text-white'
-              }`}
-            >
-              {spd}x
-            </button>
-          ))}
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] text-muted-foreground font-mono uppercase">Speed:</span>
+          <ToggleGroup
+            value={[String(simulationSpeed)]}
+            onValueChange={(groupValue: string[]) => {
+              const next = groupValue[groupValue.length - 1];
+              if (next) setSimulationSpeed(Number(next) as 0.5 | 1 | 2);
+            }}
+            spacing={1}
+          >
+            {([0.5, 1, 2] as const).map((spd) => (
+              <ToggleGroupItem key={spd} value={String(spd)} size="sm">
+                {spd}x
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
         </div>
 
         {/* Pause / Resume */}
         {simulationStatus !== 'idle' && (
-          <button
-            onClick={simulationStatus === 'paused' ? resumeSimulation : pauseSimulation}
-            title={simulationStatus === 'paused' ? 'Lanjutkan Simulasi' : 'Jeda Simulasi'}
-            className={`flex items-center gap-1 rounded px-2 py-1 text-xs font-medium border ${
-              simulationStatus === 'paused'
-                ? 'bg-amber-600/80 text-white border-amber-500 hover:bg-amber-500'
-                : 'bg-[#1F2937] text-gray-300 border-[#374151] hover:bg-[#374151]'
-            }`}
-          >
-            {simulationStatus === 'paused' ? (
-              <>
-                <Play className="h-3 w-3" />
-                Resume
-              </>
-            ) : (
-              <>
-                <Pause className="h-3 w-3" />
-                Pause
-              </>
-            )}
-          </button>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant={simulationStatus === 'paused' ? 'secondary' : 'outline'}
+                  size="sm"
+                  onClick={simulationStatus === 'paused' ? resumeSimulation : pauseSimulation}
+                >
+                  {simulationStatus === 'paused' ? (
+                    <>
+                      <Play data-icon="inline-start" />
+                      Resume
+                    </>
+                  ) : (
+                    <>
+                      <Pause data-icon="inline-start" />
+                      Pause
+                    </>
+                  )}
+                </Button>
+              }
+            />
+            <TooltipContent>
+              {simulationStatus === 'paused' ? 'Lanjutkan Simulasi' : 'Jeda Simulasi'}
+            </TooltipContent>
+          </Tooltip>
         )}
 
         {/* Step Mode (v1.2.0): maju satu event per klik */}
-        <button
-          onClick={() => setStepMode(!stepMode)}
-          title="Step Mode: putar simulasi satu event per langkah"
-          className={`flex items-center gap-1 rounded px-2 py-1 text-xs font-medium border ${
-            stepMode
-              ? 'bg-violet-600 text-white border-violet-500'
-              : 'bg-[#1F2937] text-gray-300 border-[#374151] hover:bg-[#374151]'
-          }`}
-        >
-          <StepForward className="h-3 w-3" />
-          Step
-        </button>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant={stepMode ? 'secondary' : 'outline'}
+                size="sm"
+                onClick={() => setStepMode(!stepMode)}
+              >
+                <StepForward data-icon="inline-start" />
+                Step
+              </Button>
+            }
+          />
+          <TooltipContent>
+            Step Mode: putar simulasi satu event per langkah
+          </TooltipContent>
+        </Tooltip>
         {stepMode && simulationStatus === 'running' && (
-          <button
-            onClick={simStepNext}
-            title="Putar satu event berikutnya"
-            className="flex items-center gap-1 rounded bg-violet-600 px-2 py-1 text-xs font-medium text-white border border-violet-500 hover:bg-violet-500"
-          >
-            <ChevronLast className="h-3 w-3" />
+          <Button variant="secondary" size="sm" onClick={simStepNext}>
+            <ChevronLast data-icon="inline-start" />
             Next
-          </button>
+          </Button>
         )}
       </div>
 
       {/* Ping Quick Action */}
-      <div className="flex items-center gap-2 rounded-lg bg-[#1F2937] px-3 py-1.5 border border-[#374151]">
-        <span className="text-xs font-medium text-gray-300">Ping:</span>
-        <select
-          value={pingSource}
-          onChange={(e) => setPingSource(e.target.value)}
-          className="rounded bg-[#111827] px-2 py-1 text-xs text-gray-200 border border-[#374151] focus:outline-none focus:border-blue-500"
-        >
-          <option value="">-- Pilih Host --</option>
-          {pingableNodes.map((n) => (
-            <option key={n.id} value={n.id}>
-              {n.data.label} ({n.data.ports.find((p) => p.ipAddress)?.ipAddress})
-            </option>
-          ))}
-        </select>
+      <div className="flex items-center gap-2 rounded-lg bg-muted/50 px-3 py-1.5">
+        <span className="text-xs font-medium text-foreground">Ping:</span>
+        <Select value={pingSource || null} onValueChange={(value) => setPingSource(value ?? '')}>
+          <SelectTrigger className="w-40">
+            <SelectValue placeholder="-- Pilih Host --" />
+          </SelectTrigger>
+          <SelectContent>
+            {pingableNodes.map((n) => (
+              <SelectItem key={n.id} value={n.id}>
+                {n.data.label} ({n.data.ports.find((p) => p.ipAddress)?.ipAddress})
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
-        <span className="text-xs text-gray-500">→</span>
+        <span className="text-xs text-muted-foreground">→</span>
 
-        <input
+        <Input
           type="text"
           placeholder="Target IP (e.g. 192.168.1.20)"
           value={pingTargetIp}
           onChange={(e) => setPingTargetIp(e.target.value)}
-          className="w-32 lg:w-44 rounded bg-[#111827] px-2 py-1 text-xs font-mono text-gray-200 border border-[#374151] placeholder-gray-500 focus:outline-none focus:border-blue-500"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') handleExecutePing();
+          }}
+          className="w-32 font-mono text-xs lg:w-44"
         />
 
-        <button
-          onClick={handleExecutePing}
-          disabled={simulationStatus === 'running'}
-          className="flex items-center gap-1 rounded bg-emerald-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
-        >
-          <Send className="h-3 w-3" />
+        <Button size="sm" onClick={handleExecutePing} disabled={simulationStatus === 'running'}>
+          <Send data-icon="inline-start" />
           Send Ping
-        </button>
+        </Button>
       </div>
 
       {/* Persistence & Tools */}
       <div className="flex items-center gap-2">
-        <button
-          onClick={onOpenTestAll}
-          title="Test All — uji otomatis seluruh konfigurasi"
-          className="flex items-center gap-1.5 rounded bg-emerald-600/25 px-2.5 py-1.5 text-xs text-emerald-300 border border-emerald-500/50 hover:bg-emerald-600 hover:text-white transition-colors"
-        >
-          <ListChecks className="h-3.5 w-3.5" />
-          <span className="hidden font-semibold lg:inline">Test All</span>
-        </button>
-
-        <button
-          onClick={onOpenLabs}
-          title="Mode Lab Praktikum"
-          className={`flex items-center gap-1.5 rounded px-2.5 py-1.5 text-xs border transition-colors ${
-            activeLabId
-              ? 'bg-amber-600 text-white border-amber-500 font-bold'
-              : 'bg-amber-600/25 text-amber-300 border-amber-500/50 hover:bg-amber-600 hover:text-white'
-          }`}
-        >
-          <GraduationCap className="h-3.5 w-3.5" />
-          <span className="hidden font-semibold lg:inline">{activeLabId ? 'Lab Aktif' : 'Lab'}</span>
-        </button>
-
-        <button
-          onClick={onOpenDocs}
-          className="flex items-center gap-1.5 rounded bg-blue-600/30 px-2.5 py-1.5 text-xs text-blue-300 border border-blue-500/50 hover:bg-blue-600 hover:text-white transition-colors"
-          title="Panduan Lengkap & Porting"
-        >
-          <Activity className="h-3.5 w-3.5 text-blue-400" />
-          <span className="hidden font-semibold lg:inline">Docs & Porting</span>
-        </button>
-
-        <label
-          className="flex cursor-pointer items-center gap-1.5 rounded bg-[#1F2937] px-2.5 py-1.5 text-xs text-gray-300 border border-[#374151] hover:bg-[#374151]"
-          title="Muat Topologi dari file JSON"
-        >
-          <FolderOpen className="h-3.5 w-3.5 text-gray-400" />
-          <span className="hidden lg:inline">Load</span>
-          <input
-            type="file"
-            accept=".json"
-            onChange={handleImportJson}
-            className="hidden"
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button variant="outline" size="sm" onClick={onOpenTestAll} className="text-emerald-300">
+                <ListChecks data-icon="inline-start" />
+                <span className="hidden font-semibold lg:inline">Test All</span>
+              </Button>
+            }
           />
-        </label>
+          <TooltipContent>Test All — uji otomatis seluruh konfigurasi</TooltipContent>
+        </Tooltip>
 
-        <button
-          onClick={handleExportJson}
-          title="Simpan Topologi ke file JSON"
-          className="flex items-center gap-1.5 rounded bg-[#1F2937] px-2.5 py-1.5 text-xs text-gray-300 border border-[#374151] hover:bg-[#374151]"
-        >
-          <Save className="h-3.5 w-3.5 text-gray-400" />
-          <span className="hidden lg:inline">Save</span>
-        </button>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant={activeLabId ? 'secondary' : 'outline'}
+                size="sm"
+                onClick={onOpenLabs}
+                className={activeLabId ? 'text-amber-300' : 'text-amber-300/80'}
+              >
+                <GraduationCap data-icon="inline-start" />
+                <span className="hidden font-semibold lg:inline">
+                  {activeLabId ? 'Lab Aktif' : 'Lab'}
+                </span>
+              </Button>
+            }
+          />
+          <TooltipContent>Mode Lab Praktikum</TooltipContent>
+        </Tooltip>
 
-        <button
-          onClick={() =>
-            requestConfirm({
-              title: 'Reset Topologi',
-              message:
-                'Seluruh perangkat, kabel, tabel, dan log simulasi akan dihapus dari kanvas. Tindakan ini tidak bisa dibatalkan.',
-              confirmLabel: 'Reset',
-              onConfirm: resetTopology,
-            })
-          }
-          className="flex items-center gap-1.5 rounded bg-[#1F2937] px-2.5 py-1.5 text-xs text-red-400 border border-[#374151] hover:bg-red-950/40"
-          title="Reset Topologi"
-        >
-          <RotateCcw className="h-3.5 w-3.5" />
-          <span className="hidden lg:inline">Reset</span>
-        </button>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button variant="outline" size="sm" onClick={onOpenDocs} className="text-sky-300">
+                <Activity data-icon="inline-start" />
+                <span className="hidden font-semibold lg:inline">Docs & Porting</span>
+              </Button>
+            }
+          />
+          <TooltipContent>Panduan Lengkap & Porting</TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <label className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-[min(var(--radius-md),12px)] border border-input bg-input/30 px-2.5 text-[0.8rem] font-medium hover:bg-input/50">
+                <FolderOpen className="size-3.5 text-muted-foreground" data-icon="inline-start" />
+                <span className="hidden lg:inline">Load</span>
+                <input
+                  type="file"
+                  accept=".json"
+                  onChange={handleImportJson}
+                  className="hidden"
+                />
+              </label>
+            }
+          />
+          <TooltipContent>Muat Topologi dari file JSON</TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button variant="outline" size="sm" onClick={handleExportJson}>
+                <Save data-icon="inline-start" />
+                <span className="hidden lg:inline">Save</span>
+              </Button>
+            }
+          />
+          <TooltipContent>Simpan Topologi ke file JSON</TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() =>
+                  requestConfirm({
+                    title: 'Reset Topologi',
+                    message:
+                      'Seluruh perangkat, kabel, tabel, dan log simulasi akan dihapus dari kanvas. Tindakan ini tidak bisa dibatalkan.',
+                    confirmLabel: 'Reset',
+                    onConfirm: resetTopology,
+                  })
+                }
+                className="text-destructive"
+              >
+                <RotateCcw data-icon="inline-start" />
+                <span className="hidden lg:inline">Reset</span>
+              </Button>
+            }
+          />
+          <TooltipContent>Reset Topologi</TooltipContent>
+        </Tooltip>
       </div>
     </header>
   );

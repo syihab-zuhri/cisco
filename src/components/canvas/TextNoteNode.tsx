@@ -50,16 +50,16 @@ export function TextNoteNode({ id, data, selected }: NodeProps) {
             if (e.key === 'Escape') setEditing(false);
           }}
           style={{ fontSize }}
-          className="nodrag nopan min-w-[120px] rounded border-2 border-blue-500 bg-black/70 px-1.5 py-0.5 text-gray-100 outline-none"
+          className="nodrag nopan min-w-[120px] rounded border-2 border-primary bg-background/80 px-1.5 py-0.5 text-foreground outline-none"
         />
       ) : (
         <div
           style={{ fontSize }}
           className={`whitespace-pre-wrap px-1 py-0.5 font-semibold leading-snug ${
             selected
-              ? 'rounded border-2 border-dashed border-blue-500/70 bg-blue-500/5'
+              ? 'rounded border-2 border-dashed border-primary/70 bg-primary/5'
               : 'border-2 border-transparent'
-          } text-gray-100`}
+          } text-foreground`}
         >
           {text || 'Catatan'}
         </div>
@@ -67,30 +67,30 @@ export function TextNoteNode({ id, data, selected }: NodeProps) {
 
       {/* Panel kontrol saat dipilih */}
       {selected && !editing && (
-        <div className="absolute -top-7 left-0 flex items-center gap-1 rounded bg-[#111827] border border-[#374151] px-1.5 py-1 shadow-md">
-          <span className="flex items-center gap-1 text-[10px] text-gray-300 pr-0.5">
+        <div className="absolute -top-7 left-0 flex items-center gap-1 rounded bg-popover border border-border px-1.5 py-1 shadow-md">
+          <span className="flex items-center gap-1 text-[10px] text-foreground/80 pr-0.5">
             <Type className="h-3 w-3 text-blue-400" />
             {fontSize}px
           </span>
           <button
             onClick={(e) => { e.stopPropagation(); changeFont(-2); }}
             title="Perkecil font"
-            className="flex h-4 w-4 items-center justify-center rounded bg-gray-800 text-gray-300 hover:bg-gray-700"
+            className="flex h-4 w-4 items-center justify-center rounded bg-muted text-muted-foreground hover:bg-accent"
           >
             <Minus className="h-3 w-3" />
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); changeFont(2); }}
             title="Perbesar font"
-            className="flex h-4 w-4 items-center justify-center rounded bg-gray-800 text-gray-300 hover:bg-gray-700"
+            className="flex h-4 w-4 items-center justify-center rounded bg-muted text-muted-foreground hover:bg-accent"
           >
             <Plus className="h-3 w-3" />
           </button>
-          <span className="mx-0.5 h-3 w-px bg-gray-700" />
+          <span className="mx-0.5 h-3 w-px bg-border" />
           <button
             onClick={(e) => { e.stopPropagation(); setDraft(text); setEditing(true); }}
             title="Edit teks"
-            className="rounded px-1 text-[10px] text-blue-300 hover:bg-gray-700 hover:text-white"
+            className="rounded px-1 text-[10px] text-blue-300 hover:bg-accent hover:text-foreground"
           >
             Edit
           </button>

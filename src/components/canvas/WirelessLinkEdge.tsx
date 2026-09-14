@@ -138,10 +138,10 @@ export function WirelessLinkEdge({
             pointerEvents: shouldShowBadge ? 'all' : 'none',
             transformOrigin: 'center center',
           }}
-          className={`nodrag nopan flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-mono text-gray-100 border-2 shadow-xl backdrop-blur-md transition-all duration-200 cursor-pointer ${
+          className={`nodrag nopan flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-mono text-foreground border-2 shadow-xl backdrop-blur-md transition-all duration-200 cursor-pointer ${
             activePacket
               ? 'bg-violet-950/95 border-violet-400 scale-110 shadow-violet-500/50'
-              : 'bg-[#111827]/95 border-violet-500/80'
+              : 'bg-popover/95 border-violet-500/80'
           }`}
         >
           <span

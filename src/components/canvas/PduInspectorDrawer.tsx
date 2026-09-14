@@ -1,12 +1,14 @@
 import { X, Pin, ScanLine } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { type ArpPacket, type IcmpPacket } from '../../types/protocol';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 function HeaderRow({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="flex items-center justify-between gap-2 py-0.5">
-      <span className="text-gray-500">{label}</span>
-      <span className="font-semibold text-gray-200 break-all text-right">{value}</span>
+      <span className="text-muted-foreground">{label}</span>
+      <span className="font-semibold text-foreground break-all text-right">{value}</span>
     </div>
   );
 }
@@ -29,52 +31,57 @@ export function PduInspectorDrawer() {
   const pdu = inspectorEvent?.pdu;
 
   return (
-    <div className="absolute right-2 top-2 bottom-2 z-20 flex w-80 flex-col rounded-lg border border-violet-800/60 bg-[#0B0F19]/95 shadow-2xl backdrop-blur-sm">
+    <div className="absolute right-2 top-2 bottom-2 z-20 flex w-80 flex-col rounded-lg border border-violet-800/60 bg-popover/95 shadow-2xl backdrop-blur-sm">
       {/* Header */}
-      <div className="flex h-9 items-center justify-between border-b border-gray-800 px-3">
+      <div className="flex h-9 items-center justify-between border-b border-border px-3">
         <div className="flex items-center gap-2">
           <ScanLine className="h-3.5 w-3.5 text-violet-400" />
-          <span className="text-[11px] font-bold uppercase tracking-wider text-gray-200">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-foreground">
             PDU Inspector
           </span>
           {inspectorEvent && (
-            <span className="rounded bg-gray-800 px-1.5 py-0.2 text-[11px] font-mono text-gray-400">
+            <span className="rounded bg-muted px-1.5 py-0.2 text-[11px] font-mono text-muted-foreground">
               seq #{inspectorEvent.seq} · t={inspectorEvent.simTimeMs}ms
             </span>
           )}
         </div>
         <div className="flex items-center gap-1">
-          <button
+          <Button
+            variant="ghost"
+            size="icon-sm"
             onClick={() => setInspectorAutoFollow(!inspectorAutoFollow)}
             title={inspectorAutoFollow ? 'Auto-follow aktif (ikuti paket berjalan)' : 'Auto-follow mati — klik event untuk memilih manual'}
             aria-label="Auto-follow paket"
-            className={`rounded p-1 transition-colors ${
+            className={cn(
+              'h-6 w-6',
               inspectorAutoFollow
                 ? 'text-violet-300 bg-violet-950/60'
-                : 'text-gray-500 hover:text-gray-300'
-            }`}
+                : 'text-muted-foreground'
+            )}
           >
             <Pin className="h-3.5 w-3.5" />
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-sm"
             onClick={() => setInspectorOpen(false)}
             title="Tutup PDU Inspector"
             aria-label="Tutup PDU Inspector"
-            className="rounded p-1 text-gray-400 hover:bg-gray-800 hover:text-white"
+            className="h-6 w-6 text-muted-foreground"
           >
             <X className="h-3.5 w-3.5" />
-          </button>
+          </Button>
         </div>
       </div>
 
       {/* Body */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-3 font-mono text-[11px]">
+      <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-3 font-mono text-[11px]">
         {!inspectorEvent ? (
-          <div className="text-gray-500 italic text-center py-4">
+          <div className="text-muted-foreground italic text-center py-4">
             Klik event di tab Simulasi untuk menginspeksi PDU-nya.
           </div>
         ) : !pdu ? (
-          <div className="text-gray-500 italic text-center py-4">
+          <div className="text-muted-foreground italic text-center py-4">
             Event ini bukan paket (log internal). Pilih event ARP_REQ/ARP_REP/ICMP_REQ/ICMP_REP.
           </div>
         ) : (
@@ -86,7 +93,7 @@ export function PduInspectorDrawer() {
             )}
 
             {/* L2 — Ethernet Frame */}
-            <div className="rounded border border-emerald-800/60 bg-black/40 p-2.5">
+            <div className="rounded border border-emerald-800/60 bg-background/40 p-2.5">
               <div className="text-[11px] font-bold uppercase text-emerald-400 mb-1.5">
                 L2 · Ethernet Frame
               </div>
@@ -104,7 +111,7 @@ export function PduInspectorDrawer() {
 
             {/* L3 — IPv4 Packet */}
             {pdu.packet && (
-              <div className="rounded border border-violet-800/60 bg-black/40 p-2.5">
+              <div className="rounded border border-violet-800/60 bg-background/40 p-2.5">
                 <div className="text-[11px] font-bold uppercase text-violet-400 mb-1.5">
                   L3 · IPv4 Packet
                 </div>
@@ -127,7 +134,7 @@ export function PduInspectorDrawer() {
 
             {/* L4 — ARP / ICMP */}
             {pdu.segment && isArp(pdu.segment) ? (
-              <div className="rounded border border-cyan-800/60 bg-black/40 p-2.5">
+              <div className="rounded border border-cyan-800/60 bg-background/40 p-2.5">
                 <div className="text-[11px] font-bold uppercase text-cyan-400 mb-1.5">
                   L4 payload · ARP (RFC 826)
                 </div>
@@ -142,7 +149,7 @@ export function PduInspectorDrawer() {
                 />
               </div>
             ) : pdu.segment ? (
-              <div className="rounded border border-cyan-800/60 bg-black/40 p-2.5">
+              <div className="rounded border border-cyan-800/60 bg-background/40 p-2.5">
                 <div className="text-[11px] font-bold uppercase text-cyan-400 mb-1.5">
                   L4 payload · ICMP (RFC 792)
                 </div>
@@ -159,7 +166,7 @@ export function PduInspectorDrawer() {
 
             {/* DHCP (UDP 67/68) */}
             {pdu.dhcp && (
-              <div className="rounded border border-amber-800/60 bg-black/40 p-2.5">
+              <div className="rounded border border-amber-800/60 bg-background/40 p-2.5">
                 <div className="text-[11px] font-bold uppercase text-amber-400 mb-1.5">
                   L4 payload · DHCP (UDP 67/68)
                 </div>
@@ -179,7 +186,7 @@ export function PduInspectorDrawer() {
 
             {/* RIP (UDP 520) */}
             {pdu.packet?.protocol === 'RIP' && (
-              <div className="rounded border border-indigo-800/60 bg-black/40 p-2.5">
+              <div className="rounded border border-indigo-800/60 bg-background/40 p-2.5">
                 <div className="text-[11px] font-bold uppercase text-indigo-400 mb-1.5">
                   L4 payload · RIPv2 (UDP 520)
                 </div>

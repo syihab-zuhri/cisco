@@ -1,9 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Terminal as TermIcon, X } from 'lucide-react';
+import { Terminal as TermIcon } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { CliSession } from '../../engine/cli/cliEngine';
 import { requestPing } from '../../hooks/useSimulationEngine';
-import { useModalA11y } from '../../hooks/useModalA11y';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 export function DeviceCliModal() {
   const activeCliModalNodeId = useAppStore((s) => s.activeCliModalNodeId);
@@ -32,10 +38,6 @@ export function DeviceCliModal() {
   // Riwayat perintah untuk navigasi ArrowUp/ArrowDown
   const [cmdHistory, setCmdHistory] = useState<string[]>([]);
   const [histIdx, setHistIdx] = useState<number | null>(null);
-  const dialogRef = useModalA11y({
-    onClose: () => setActiveCliModalNodeId(null),
-    enabled: Boolean(activeCliModalNodeId),
-  });
 
   // Sesi CLI baru setiap kali modal dibuka untuk perangkat tertentu
   useEffect(() => {
@@ -76,7 +78,7 @@ export function DeviceCliModal() {
     terminalBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [history]);
 
-  if (!activeCliModalNodeId || !node || !session) return null;
+  if (!node || !session) return null;
   const device = node.data;
 
   const handleCommand = async (cmd: string) => {
@@ -130,40 +132,30 @@ export function DeviceCliModal() {
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) setActiveCliModalNodeId(null);
-      }}
+    <Dialog
+      open={Boolean(activeCliModalNodeId)}
+      onOpenChange={(open) => { if (!open) setActiveCliModalNodeId(null); }}
     >
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="cli-terminal-title"
-        className="flex h-[520px] w-[640px] flex-col rounded-xl border border-gray-700 bg-[#050505] shadow-2xl overflow-hidden font-mono"
+      <DialogContent
+        showCloseButton
+        className="flex h-[520px] w-[640px] flex-col gap-0 overflow-hidden border p-0 font-mono sm:max-w-[640px]"
+        style={{ backgroundColor: 'var(--term-bg)' }}
       >
-        {/* Terminal Header */}
-        <div className="flex h-10 items-center justify-between border-b border-gray-800 bg-[#111827] px-4">
-          <div className="flex items-center gap-2">
+        <DialogHeader className="flex-row items-center justify-between border-b bg-muted/60 px-4 py-0">
+          <DialogTitle className="flex items-center gap-2 py-2.5 text-xs font-semibold">
             <TermIcon className="h-4 w-4 text-emerald-400" />
-            <span id="cli-terminal-title" className="text-xs font-semibold text-gray-200">
-              Cisco IOS Terminal — {device.label}
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setActiveCliModalNodeId(null)}
-              aria-label="Tutup terminal"
-              className="rounded p-1 text-gray-400 hover:bg-gray-800 hover:text-white"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
+            Cisco IOS Terminal — {device.label}
+          </DialogTitle>
+          <DialogDescription className="sr-only">
+            Terminal emulasi Cisco IOS untuk {device.label}
+          </DialogDescription>
+        </DialogHeader>
 
         {/* Terminal Body */}
-        <div className="flex-1 overflow-y-auto p-4 text-xs text-[#00FF66] space-y-1">
+        <div
+          className="flex flex-1 flex-col gap-1 overflow-y-auto p-4 text-xs"
+          style={{ color: 'var(--term-text)' }}
+        >
           {history.map((line, idx) => (
             <div key={idx} className="whitespace-pre-wrap leading-relaxed">
               {line}
@@ -172,7 +164,9 @@ export function DeviceCliModal() {
 
           {/* Active Prompt Line */}
           <div className="flex items-center gap-2 pt-1">
-            <span className="text-sky-400 font-bold select-none">{session.prompt()}</span>
+            <span className="font-bold select-none" style={{ color: 'var(--term-prompt)' }}>
+              {session.prompt()}
+            </span>
             <input
               type="text"
               autoFocus
@@ -180,12 +174,13 @@ export function DeviceCliModal() {
               value={inputVal}
               onChange={(e) => setInputVal(e.target.value)}
               onKeyDown={handleKeyDown}
-              className="flex-1 bg-transparent text-[#00FF66] outline-none font-mono text-xs disabled:opacity-50"
+              className="flex-1 bg-transparent font-mono text-xs outline-none disabled:opacity-50"
+              style={{ color: 'var(--term-text)' }}
             />
           </div>
           <div ref={terminalBottomRef} />
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
