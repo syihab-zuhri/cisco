@@ -35,6 +35,10 @@ export interface Exercise {
   difficulty: 'Dasar' | 'Menengah' | 'Lanjutan';
   targets: ExerciseTarget[];
   starterTemplateId?: string;
+  starterTopology?: {
+    nodes: any[];
+    edges: any[];
+  };
 }
 
 export interface ExerciseCheck {

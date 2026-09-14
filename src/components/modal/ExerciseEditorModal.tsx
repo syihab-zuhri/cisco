@@ -46,6 +46,7 @@ export function ExerciseEditorModal({
   const [instructions, setInstructions] = useState('');
   const [difficulty, setDifficulty] = useState<'Dasar' | 'Menengah' | 'Lanjutan'>('Menengah');
   const [starterTemplateId, setStarterTemplateId] = useState<string>('');
+  const [includeStarterTopology, setIncludeStarterTopology] = useState(true);
   const [targets, setTargets] = useState<ExerciseTarget[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -57,6 +58,7 @@ export function ExerciseEditorModal({
       setDifficulty(initialExercise.difficulty);
       setStarterTemplateId(initialExercise.starterTemplateId || '');
       setTargets(JSON.parse(JSON.stringify(initialExercise.targets)));
+      setIncludeStarterTopology(Boolean(initialExercise.starterTopology));
       setErrorMsg(null);
     } else {
       // Buat soal baru kosongan
@@ -156,6 +158,10 @@ export function ExerciseEditorModal({
       instructions: instructions.trim(),
       difficulty,
       starterTemplateId: starterTemplateId.trim() || undefined,
+      starterTopology:
+        includeStarterTopology && initialExercise?.starterTopology
+          ? initialExercise.starterTopology
+          : undefined,
       targets,
     };
 
@@ -178,6 +184,10 @@ export function ExerciseEditorModal({
       instructions: instructions.trim(),
       difficulty,
       starterTemplateId: starterTemplateId.trim() || undefined,
+      starterTopology:
+        includeStarterTopology && initialExercise?.starterTopology
+          ? initialExercise.starterTopology
+          : undefined,
       targets,
     };
     exportExercisesToJsonFile(candidate);
@@ -287,6 +297,26 @@ export function ExerciseEditorModal({
                 <span className="text-[10px] text-muted-foreground">
                   Jika dipilih, siswa dapat memuat template ini dengan satu klik.
                 </span>
+
+                {initialExercise?.starterTopology && (
+                  <div className="mt-2 flex flex-col gap-1.5 rounded-lg border border-primary/40 bg-primary/10 p-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-primary">Topologi File JSON Guru</span>
+                      <Badge variant="outline" className="text-[9px]">
+                        {initialExercise.starterTopology.nodes.length} Node, {initialExercise.starterTopology.edges.length} Kabel
+                      </Badge>
+                    </div>
+                    <label className="flex items-center gap-2 text-[11px] text-foreground cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={includeStarterTopology}
+                        onChange={(e) => setIncludeStarterTopology(e.target.checked)}
+                        className="rounded border-input text-primary focus:ring-primary h-3.5 w-3.5"
+                      />
+                      <span>Sertakan topologi ini agar siswa dapat memuatnya ke kanvas</span>
+                    </label>
+                  </div>
+                )}
               </div>
             </div>
           </div>

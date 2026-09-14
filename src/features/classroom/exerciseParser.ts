@@ -1,6 +1,7 @@
 import type { Exercise, ExerciseTarget } from './types';
 import { DEFAULT_EXERCISES } from './defaultExercises';
 import type { DeviceType } from '../../types/network';
+import { isTopologyJson, convertTopologyToExercise } from './topologyExerciseConverter';
 
 const STORAGE_KEY_EXERCISES = 'openpacket_classroom_exercises';
 
@@ -205,6 +206,24 @@ export function parseExerciseJson(rawJson: string): ParseExerciseResult {
       exercises: [],
       errors: [`Format JSON tidak valid: ${err instanceof Error ? err.message : String(err)}`],
     };
+  }
+
+  // 1. Deteksi Cerdas: Jika file berupa topologi OpenPacket (memiliki "nodes" dan "edges")
+  if (isTopologyJson(parsed)) {
+    try {
+      const converted = convertTopologyToExercise(parsed);
+      return {
+        success: true,
+        exercises: [converted],
+        errors: [],
+      };
+    } catch (err) {
+      return {
+        success: false,
+        exercises: [],
+        errors: [`Gagal mengonversi file topologi: ${err instanceof Error ? err.message : String(err)}`],
+      };
+    }
   }
 
   const listToValidate = Array.isArray(parsed) ? parsed : [parsed];

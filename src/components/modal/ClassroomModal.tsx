@@ -39,6 +39,7 @@ import {
   parseExerciseJson,
   exportExercisesToJsonFile,
 } from '../../features/classroom/exerciseParser';
+import { convertTopologyToExercise } from '../../features/classroom/topologyExerciseConverter';
 import { ExerciseEditorModal } from './ExerciseEditorModal';
 import type {
   ClassSession,
@@ -230,11 +231,14 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
         if (session) {
           classroomHub.startExercise(session.classCode, newItems[0]);
         }
+        // Buka editor agar guru dapat langsung mereview atau menyesuaikan teks instruksi
+        setEditingExercise(newItems[0]);
+        setIsEditorOpen(true);
       }
 
       pushToast(
         'success',
-        `Sukses mengimpor: ${added} soal baru ditambahkan${updated > 0 ? `, ${updated} soal diperbarui` : ''}.`
+        `Sukses mengimpor: ${added} soal baru ditambahkan${updated > 0 ? `, ${updated} soal diperbarui` : ''}. Silakan sesuaikan teks panduan.`
       );
     };
 
@@ -244,6 +248,21 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
 
     reader.readAsText(file);
     e.target.value = '';
+  };
+
+  // Handler Guru: Buat Soal Langsung dari Topologi Kanvas Aktif
+  const handleCreateFromCanvas = () => {
+    if (nodes.length === 0) {
+      pushToast('warning', 'Kanvas masih kosong! Tambahkan perangkat ke kanvas terlebih dahulu.');
+      return;
+    }
+    const converted = convertTopologyToExercise({
+      nodes,
+      edges,
+    });
+    setEditingExercise(converted);
+    setIsEditorOpen(true);
+    pushToast('info', 'Topologi kanvas aktif berhasil dikonversi menjadi soal praktikum!');
   };
 
   // Handler Simpan Soal dari Editor
@@ -368,18 +387,29 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
 
   // Handler Siswa: Muat Starter Template ke Kanvas
   const handleLoadStarterTemplate = () => {
-    if (!activeExercise?.starterTemplateId) {
-      pushToast('info', 'Soal ini tidak memiliki topologi awal. Mulai dari kanvas kosong.');
+    if (activeExercise?.starterTopology) {
+      loadTopology({
+        nodes: activeExercise.starterTopology.nodes,
+        edges: activeExercise.starterTopology.edges,
+      });
+      pushToast('success', 'Topologi soal dari guru berhasil dimuat ke kanvas Anda.');
+      onClose(); // Tutup modal agar siswa langsung melihat kanvas
       return;
     }
-    const tpl = TOPOLOGY_TEMPLATES.find(
-      (t) => t.id === activeExercise.starterTemplateId
-    );
-    if (tpl) {
-      loadTopology({ nodes: tpl.nodes, edges: tpl.edges });
-      pushToast('success', `Template "${tpl.name}" diterapkan ke kanvas.`);
-      onClose(); // Tutup modal agar siswa langsung melihat kanvas
+
+    if (activeExercise?.starterTemplateId) {
+      const tpl = TOPOLOGY_TEMPLATES.find(
+        (t) => t.id === activeExercise.starterTemplateId
+      );
+      if (tpl) {
+        loadTopology({ nodes: tpl.nodes, edges: tpl.edges });
+        pushToast('success', `Template "${tpl.name}" diterapkan ke kanvas.`);
+        onClose(); // Tutup modal agar siswa langsung melihat kanvas
+        return;
+      }
     }
+
+    pushToast('info', 'Soal ini dirancang untuk dirakit dari awal pada kanvas kosong.');
   };
 
   // Handler Siswa: Submit Jawaban & Evaluasi Otomatis
@@ -452,9 +482,21 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
             variant="outline"
             onClick={() => fileInputRef.current?.click()}
             className="h-7 gap-1 text-[11px] text-sky-400 hover:text-sky-300"
+            title="Pilih file JSON topologi (mis. openpacket-topology-*.json)"
           >
             <Upload className="h-3 w-3" />
-            Impor JSON
+            Impor Topologi (.json)
+          </Button>
+
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleCreateFromCanvas}
+            className="h-7 gap-1 text-[11px] text-indigo-400 hover:text-indigo-300"
+            title="Ubah topologi yang sedang aktif di kanvas menjadi soal praktikum"
+          >
+            <Sparkles className="h-3 w-3" />
+            Dari Kanvas
           </Button>
 
           <Button
@@ -1013,15 +1055,17 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
                           </p>
                         </div>
 
-                        {activeExercise.starterTemplateId && (
+                        {(activeExercise.starterTopology || activeExercise.starterTemplateId) && (
                           <Button
                             size="sm"
                             variant="secondary"
                             onClick={handleLoadStarterTemplate}
-                            className="shrink-0 gap-1.5 text-xs"
+                            className="shrink-0 gap-1.5 text-xs border border-primary/40 bg-primary/10 text-primary hover:bg-primary/20"
                           >
                             <Play className="h-3.5 w-3.5" />
-                            Muat Topologi Awal
+                            {activeExercise.starterTopology
+                              ? 'Muat Topologi Guru ke Kanvas'
+                              : 'Muat Topologi Awal'}
                           </Button>
                         )}
                       </div>

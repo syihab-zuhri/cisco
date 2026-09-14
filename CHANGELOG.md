@@ -11,9 +11,14 @@
 
 ---
 
-## [2026-09-14] — Version 1.6.0 (Fitur Kelas, JSON Exercise Loader & In-App Editor)
+## [2026-09-14] — Version 1.6.0 (Fitur Kelas, Impor Topologi Guru & In-App Editor)
 
 ### Added
+- **Konversi Otomatis Topologi OpenPacket Guru ke Soal Latihan (`src/features/classroom/topologyExerciseConverter.ts`)**:
+  - Deteksi dan konversi otomatis file ekspor topologi simulator (`openpacket-topology-*.json`) menjadi objek soal latihan lengkap dengan ekstraksi cerdas target IP, sambungan kabel fisik, dan kuota perangkat.
+  - Tombol **"Dari Kanvas"** di Mode Guru: guru dapat mengubah rancangan topologi kanvas aktif saat itu juga menjadi soal latihan baru tanpa harus mengunduh file terlebih dahulu.
+  - Properti `starterTopology` pada kontrak `Exercise`: memungkinkan topologi kustom dari guru langsung disimpan di dalam soal latihan.
+  - **Di sisi Siswa**: Siswa yang bergabung ke kelas langsung melihat soal aktif guru dan memiliki tombol **"Muat Topologi Guru ke Kanvas"** untuk merender topologi dari guru secara instan.
 - **Manajemen Soal Berbasis File JSON & Editor Interaktif Guru (`src/features/classroom/exerciseParser.ts`, `src/components/modal/ExerciseEditorModal.tsx`)**:
   - Dukungan penuh import/export file `.json` soal praktikum guru (single exercise `{ ... }` maupun array bank soal `[ ... ]`) dengan validasi skema komprehensif dan error message deskriptif.
   - Editor visual soal praktikum: guru dapat mengubah judul latihan, materi & instruksi pengerjaan, tingkat kesulitan, template topologi awal, serta menambah/mengedit/menghapus kriteria target penilaian (IP interface, sambungan kabel, ICMP ping reachability, kuota perangkat, dan port VLAN).
