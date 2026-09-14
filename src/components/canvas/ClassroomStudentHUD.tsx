@@ -291,7 +291,7 @@ export function ClassroomStudentHUD() {
           <span className="font-mono font-bold text-foreground">
             {session?.classCode || 'KELAS'}
           </span>
-          <span className="text-muted-foreground">• {participant.nickname}</span>
+          <span className="text-muted-foreground">• {participant?.nickname || 'Siswa'}</span>
         </div>
 
         {evaluation && (
@@ -335,11 +335,11 @@ export function ClassroomStudentHUD() {
                 {session?.classCode || 'KELAS'}
               </span>
               <Badge variant="outline" className="text-[10px] text-primary py-0 px-1">
-                {activeExercise.difficulty}
+                {activeExercise?.difficulty || 'Menengah'}
               </Badge>
             </div>
             <span className="text-[11px] text-muted-foreground">
-              Peserta: <b className="text-foreground">{participant.nickname}</b>
+              Peserta: <b className="text-foreground">{participant?.nickname || 'Siswa'}</b>
             </span>
           </div>
         </div>
@@ -370,12 +370,12 @@ export function ClassroomStudentHUD() {
       <div className="flex flex-1 flex-col gap-3.5 overflow-y-auto p-4 text-xs">
         {/* Detail Soal Aktif */}
         <div className="flex flex-col gap-1.5">
-          <h3 className="font-bold text-foreground">{activeExercise.title}</h3>
+          <h3 className="font-bold text-foreground">{activeExercise?.title}</h3>
           <p className="text-[11px] leading-relaxed text-muted-foreground">
-            {activeExercise.instructions}
+            {activeExercise?.instructions}
           </p>
 
-          {(activeExercise.starterTopology || activeExercise.starterTemplateId) && (
+          {(activeExercise?.starterTopology || activeExercise?.starterTemplateId) && (
             <Button
               size="sm"
               variant="outline"
@@ -383,7 +383,7 @@ export function ClassroomStudentHUD() {
               className="mt-1 h-7 self-start gap-1.5 border-primary/40 bg-primary/10 text-[11px] text-primary hover:bg-primary/20"
             >
               <Play className="h-3 w-3" />
-              {activeExercise.starterTopology
+              {activeExercise?.starterTopology
                 ? 'Muat Topologi Guru ke Kanvas'
                 : 'Muat Topologi Awal'}
             </Button>
@@ -394,7 +394,7 @@ export function ClassroomStudentHUD() {
         <div className="flex flex-col gap-2 rounded-lg border bg-muted/20 p-3">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-              Target Praktikum ({activeExercise.targets.length})
+              Target Praktikum ({activeExercise?.targets?.length ?? 0})
             </span>
             {evaluation && (
               <span
@@ -412,7 +412,7 @@ export function ClassroomStudentHUD() {
           </div>
 
           <div className="flex flex-col gap-2">
-            {activeExercise.targets.map((tgt, idx) => {
+            {(activeExercise?.targets ?? []).map((tgt, idx) => {
               const check = evaluation?.checks.find((c) => c.targetId === tgt.id);
               return (
                 <div
