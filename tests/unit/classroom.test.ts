@@ -3,6 +3,7 @@ import { classroomHub } from '../../src/features/classroom/classroomHub';
 import { evaluateExercise } from '../../src/features/classroom/exerciseEvaluator';
 import { DEFAULT_EXERCISES } from '../../src/features/classroom/defaultExercises';
 import type { DeviceData, TopologyLink } from '../../src/types/network';
+import type { Exercise } from '../../src/features/classroom/types';
 
 describe('Classroom Feature Suite', () => {
   beforeEach(() => {
@@ -278,6 +279,79 @@ describe('Classroom Feature Suite', () => {
       const res = await evaluateExercise(testExercise, [pcDown, pc2], []);
       expect(res.checks[0].passed).toBe(false);
       expect(res.checks[0].reason).toContain('DOWN (belum diaktifkan)');
+    });
+
+    it('membekukan snapshot ujian (immutable exam snapshot) sehingga perubahan katalog bank soal tidak mengubah soal siswa', () => {
+      const initialExercises: Exercise[] = [
+        {
+          id: 'ex-snapshot-1',
+          title: 'Soal A Awal',
+          instructions: 'Kerjakan A',
+          difficulty: 'Dasar' as const,
+          targets: [],
+        },
+        {
+          id: 'ex-snapshot-2',
+          title: 'Soal B Awal',
+          instructions: 'Kerjakan B',
+          difficulty: 'Menengah' as const,
+          targets: [],
+        },
+      ];
+
+      // Buat kelas dengan 2 soal awal
+      const session = classroomHub.createClass('Kelas Snapshot', 'NET-7777', undefined, initialExercises);
+      expect(session.activeExercises?.length).toBe(2);
+      expect(classroomHub.getActiveExercises().length).toBe(2);
+
+      // Mutasi array sumber (misalnya guru mengedit soal di katalog bank soal)
+      initialExercises[0].title = 'Soal A BERUBAH TOTAL';
+      initialExercises.push({
+        id: 'ex-snapshot-3',
+        title: 'Soal C Tambahan',
+        instructions: 'Kerjakan C',
+        difficulty: 'Lanjutan' as const,
+        targets: [],
+      });
+
+      // Soal ujian yang sedang aktif di kelas TIDAK BOLEH terpengaruh (tetap immutable snapshot)
+      const activeList = classroomHub.getActiveExercises();
+      expect(activeList.length).toBe(2);
+      expect(activeList[0].title).toBe('Soal A Awal');
+      expect(activeList.find((x) => x.id === 'ex-snapshot-3')).toBeUndefined();
+    });
+
+    it('mendukung pengerjaan multi-soal dengan navigasi dan skor per-soal pada submission', () => {
+      classroomHub.createClass('Kelas Multi Soal', 'NET-8888');
+      const student = classroomHub.joinClass('NET-8888', 'Budi Multi');
+      expect(student).toBeDefined();
+
+      const multiSub = {
+        participantId: student!.id,
+        nickname: student!.nickname,
+        exerciseId: 'ex-01-lan-basic',
+        score: 85,
+        status: 'partial' as const,
+        submittedAt: Date.now(),
+        evaluation: {
+          status: 'partial' as const,
+          score: 85,
+          checks: [],
+          feedback: 'Rata-rata skor 85/100',
+          evaluatedAt: new Date().toLocaleTimeString(),
+        },
+        exerciseScores: {
+          'ex-01-lan-basic': 100,
+          'ex-02-router-gateway': 70,
+        },
+      };
+
+      classroomHub.submitWork('NET-8888', multiSub);
+      const savedSubs = classroomHub.getSubmissions();
+      expect(savedSubs[student!.id]).toBeDefined();
+      expect(savedSubs[student!.id].exerciseScores?.['ex-01-lan-basic']).toBe(100);
+      expect(savedSubs[student!.id].exerciseScores?.['ex-02-router-gateway']).toBe(70);
+      expect(savedSubs[student!.id].score).toBe(85);
     });
   });
 });

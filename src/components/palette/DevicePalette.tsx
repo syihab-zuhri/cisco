@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useReactFlow } from '@xyflow/react';
 import {
   Cable,
@@ -17,6 +17,7 @@ import {
   Wifi,
   Square,
   Type,
+  Lock,
 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { type DeviceType } from '../../types/network';
@@ -31,6 +32,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { classroomHub } from '@/features/classroom/classroomHub';
 
 /** Urutan grup template: dari topologi kecil (klasik) sampai enterprise. */
 const TEMPLATE_GROUPS: Array<{ category: TopologyTemplate['category']; title: string; blurb: string }> = [
@@ -51,6 +53,20 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
   const labLocked = useAppStore((s) => s.activeLabId !== null);
   const reactFlow = useReactFlow();
   const [activeTab, setActiveTab] = useState<'devices' | 'templates'>('devices');
+  const [isStudentInClass, setIsStudentInClass] = useState<boolean>(() => {
+    return classroomHub.getCurrentParticipant() !== null;
+  });
+
+  useEffect(() => {
+    const unsub = classroomHub.subscribe(() => {
+      const inClass = classroomHub.getCurrentParticipant() !== null;
+      setIsStudentInClass(inClass);
+      if (inClass && activeTab === 'templates') {
+        setActiveTab('devices');
+      }
+    });
+    return unsub;
+  }, [activeTab]);
 
   // Titik tengah viewport kanvas + offset kaskade 28px per node yang menumpuk,
   // sehingga perangkat/anotasi sebelumnya tetap terlihat sebagian.
@@ -150,8 +166,23 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
             <Layers className="size-3.5" />
             <span>Komponen</span>
           </TabsTrigger>
-          <TabsTrigger value="templates" className="h-full flex-1 gap-1.5 text-xs font-semibold tracking-wide">
-            <Sparkles className="size-3.5 text-amber-400" />
+          <TabsTrigger
+            value="templates"
+            disabled={labLocked || isStudentInClass}
+            title={
+              isStudentInClass
+                ? 'Template dinonaktifkan selama Anda mengikuti kelas aktif'
+                : labLocked
+                ? 'Template dinonaktifkan selama mode lab aktif'
+                : undefined
+            }
+            className="h-full flex-1 gap-1.5 text-xs font-semibold tracking-wide disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isStudentInClass ? (
+              <Lock className="size-3.5 text-amber-400" />
+            ) : (
+              <Sparkles className="size-3.5 text-amber-400" />
+            )}
             <span>Template</span>
           </TabsTrigger>
         </TabsList>
@@ -268,17 +299,28 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
 
         {/* Tab 2: Template Siap Pakai */}
         <TabsContent value="templates" className="min-h-0 flex-1 overflow-hidden">
-          <ScrollArea className="h-full">
-            <div className="flex flex-col p-3">
-              <div className="mb-3">
-                <h2 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-amber-400">
-                  <LayoutTemplate className="h-3.5 w-3.5" />
-                  Template Topologi
-                </h2>
-                <p className="text-[11px] text-muted-foreground/80">
-                  Dikelompokkan dari topologi kecil sampai enterprise
-                </p>
+          {isStudentInClass ? (
+            <div className="flex h-full flex-col items-center justify-center p-6 text-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-500/10 text-amber-400 mb-3">
+                <Lock className="h-6 w-6" />
               </div>
+              <h3 className="text-xs font-bold text-foreground">Template Dinonaktifkan</h3>
+              <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                Selama sesi kelas atau praktikum berlangsung, Anda diminta merakit topologi secara mandiri pada kanvas.
+              </p>
+            </div>
+          ) : (
+            <ScrollArea className="h-full">
+              <div className="flex flex-col p-3">
+                <div className="mb-3">
+                  <h2 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-amber-400">
+                    <LayoutTemplate className="h-3.5 w-3.5" />
+                    Template Topologi
+                  </h2>
+                  <p className="text-[11px] text-muted-foreground/80">
+                    Dikelompokkan dari topologi kecil sampai enterprise
+                  </p>
+                </div>
 
               {TEMPLATE_GROUPS.map((group) => {
                 const items = TOPOLOGY_TEMPLATES.filter((t) => t.category === group.category);
@@ -329,6 +371,7 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
               })}
             </div>
           </ScrollArea>
+          )}
         </TabsContent>
       </Tabs>
     </aside>

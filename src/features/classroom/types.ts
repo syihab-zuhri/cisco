@@ -9,6 +9,7 @@ export interface ClassSession {
   status: SessionStatus;
   hostToken: string;
   activeExerciseId: string | null;
+  activeExercises?: Exercise[];
   createdAt: number;
 }
 
@@ -63,13 +64,15 @@ export interface Submission {
   score: number;
   status: 'passed' | 'partial' | 'failed';
   evaluation: ExerciseEvaluation;
+  evaluations?: Record<string, ExerciseEvaluation>;
+  exerciseScores?: Record<string, number>;
   submittedAt: number;
 }
 
 export type ClassroomEvent =
   | { type: 'CLASS_CREATED'; session: ClassSession }
   | { type: 'PARTICIPANT_JOINED'; classCode: string; participant: Participant }
-  | { type: 'EXERCISE_STARTED'; classCode: string; exercise: Exercise }
+  | { type: 'EXERCISE_STARTED'; classCode: string; exercise: Exercise; exercises?: Exercise[] }
   | { type: 'SUBMISSION_RECEIVED'; classCode: string; submission: Submission }
   | { type: 'CLASS_STATUS_CHANGED'; classCode: string; status: SessionStatus }
   | { type: 'CLASS_CLOSED'; classCode: string }
@@ -81,4 +84,5 @@ export type ClassroomEvent =
       participants: Participant[];
       submissions: Record<string, Submission>;
       activeExercise: Exercise | null;
+      activeExercises?: Exercise[];
     };

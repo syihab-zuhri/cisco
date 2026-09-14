@@ -11,7 +11,6 @@ import {
   Check,
   Send,
   Sparkles,
-  UserPlus,
   Eye,
   LogOut,
   HelpCircle,
@@ -103,6 +102,16 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
   const [myEvaluation, setMyEvaluation] = useState<ExerciseEvaluation | null>(null);
   const [isEvaluating, setIsEvaluating] = useState(false);
 
+  // Seleksi Multi-Soal untuk Paket Ujian
+  const [selectedExamExerciseIds, setSelectedExamExerciseIds] = useState<string[]>(() => {
+    const sess = classroomHub.getSession();
+    if (sess?.activeExercises && sess.activeExercises.length > 0) {
+      return sess.activeExercises.map((x) => x.id);
+    }
+    const exList = loadExercises();
+    return exList.length > 0 ? [exList[0].id] : [];
+  });
+
   // Inisialisasi state dari storage
   useEffect(() => {
     const existingSession = classroomHub.getSession();
@@ -115,6 +124,10 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
         setSelectedExercise(activeEx);
         setActiveExercise(activeEx);
       }
+      const activeList = classroomHub.getActiveExercises();
+      if (activeList && activeList.length > 0) {
+        setSelectedExamExerciseIds(activeList.map((x) => x.id));
+      }
     }
   }, []);
 
@@ -126,6 +139,9 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
           setSession(event.session);
           setParticipants([]);
           setSubmissions({});
+          if (event.session.activeExercises && event.session.activeExercises.length > 0) {
+            setSelectedExamExerciseIds(event.session.activeExercises.map((x) => x.id));
+          }
           break;
 
         case 'PARTICIPANT_JOINED':
@@ -139,6 +155,9 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
           setSelectedExercise(event.exercise);
           setActiveExercise(event.exercise);
           setMyEvaluation(null);
+          if (event.exercises && event.exercises.length > 0) {
+            setSelectedExamExerciseIds(event.exercises.map((x) => x.id));
+          }
           break;
 
         case 'SUBMISSION_RECEIVED':
@@ -171,6 +190,9 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
             setSelectedExercise(event.activeExercise);
             setActiveExercise(event.activeExercise);
           }
+          if (event.activeExercises && event.activeExercises.length > 0) {
+            setSelectedExamExerciseIds(event.activeExercises.map((x) => x.id));
+          }
           break;
       }
     });
@@ -180,18 +202,75 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
     };
   }, []);
 
+  // Handler Guru: Toggle Soal Masuk ke Paket Ujian
+  const handleToggleSelectExerciseForExam = (id: string) => {
+    setSelectedExamExerciseIds((prev) => {
+      if (prev.includes(id)) {
+        if (prev.length <= 1) {
+          pushToast('warning', 'Minimal harus ada 1 soal terpilih untuk ujian.');
+          return prev;
+        }
+        return prev.filter((x) => x !== id);
+      } else {
+        return [...prev, id];
+      }
+    });
+  };
+
+  // Handler Guru: Pilih Semua Soal untuk Ujian
+  const handleSelectAllForExam = () => {
+    setSelectedExamExerciseIds(exercises.map((e) => e.id));
+    pushToast('info', `Seluruh (${exercises.length}) soal ditandai untuk paket ujian.`);
+  };
+
+  // Handler Guru: Uji Soal Ini Saja (Single Exercise)
+  const handleSelectOnlyThisForExam = (ex: Exercise, autoBroadcast = false) => {
+    setSelectedExercise(ex);
+    setSelectedExamExerciseIds([ex.id]);
+    if (autoBroadcast && session) {
+      classroomHub.startExercises(session.classCode, [ex]);
+      pushToast('success', `Tantangan "${ex.title}" disiarkan sebagai satu-satunya soal ujian.`);
+    } else {
+      pushToast('info', `Soal "${ex.title}" dipilih untuk ujian.`);
+    }
+  };
+
+  // Handler Guru: Siarkan Paket Ujian Terpilih (Multi atau Single)
+  const handleBroadcastExamPacket = () => {
+    if (!session) return;
+    const chosen = exercises.filter((e) => selectedExamExerciseIds.includes(e.id));
+    if (chosen.length === 0) {
+      pushToast('warning', 'Pilih minimal 1 soal untuk diujikan.');
+      return;
+    }
+    classroomHub.startExercises(session.classCode, chosen);
+    setSelectedExercise(chosen[0]);
+    pushToast(
+      'success',
+      `Paket ujian dengan ${chosen.length} soal berhasil disiarkan ke seluruh siswa!`
+    );
+  };
+
   // Handler Guru: Buat Kelas Baru
   const handleCreateClass = () => {
-    const newSession = classroomHub.createClass(classTitle, customCode);
+    const chosen = exercises.filter((e) => selectedExamExerciseIds.includes(e.id));
+    const toUse =
+      chosen.length > 0
+        ? chosen
+        : [selectedExercise || exercises[0] || DEFAULT_EXERCISES[0]];
+    const newSession = classroomHub.createClass(
+      classTitle,
+      customCode,
+      undefined,
+      toUse
+    );
     setSession(newSession);
     setParticipants([]);
     setSubmissions({});
-    const activeToUse = selectedExercise || exercises[0] || DEFAULT_EXERCISES[0];
-    setSelectedExercise(activeToUse);
-    classroomHub.startExercise(newSession.classCode, activeToUse);
+    setSelectedExercise(toUse[0]);
     pushToast(
       'success',
-      `Kelas dibuat! Kode Kelas: ${newSession.classCode}. Bagikan kode ini ke siswa.`
+      `Kelas dibuka dengan ${toUse.length} soal ujian! Kode Kelas: ${newSession.classCode}.`
     );
   };
 
@@ -232,10 +311,7 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
 
       if (newItems.length > 0) {
         setSelectedExercise(newItems[0]);
-        if (session) {
-          classroomHub.startExercise(session.classCode, newItems[0]);
-        }
-        // Buka editor agar guru dapat langsung mereview atau menyesuaikan teks instruksi
+        // Jangan otomatis ubah ujian yang sedang berlangsung siswa
         setEditingExercise(newItems[0]);
         setIsEditorOpen(true);
       }
@@ -282,15 +358,9 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
 
     setExercises(updatedList);
     saveExercises(updatedList);
-
-    if (selectedExercise.id === savedExercise.id || idx < 0) {
-      setSelectedExercise(savedExercise);
-      if (session) {
-        classroomHub.startExercise(session.classCode, savedExercise);
-      }
-    }
-
-    pushToast('success', `Soal "${savedExercise.title}" berhasil disimpan.`);
+    setSelectedExercise(savedExercise);
+    // CATATAN: Menyimpan ke katalog bank soal tidak otomatis mengubah sesi ujian aktif siswa!
+    pushToast('success', `Soal "${savedExercise.title}" berhasil disimpan di bank soal.`);
   };
 
   // Handler Hapus Soal
@@ -303,13 +373,11 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
     const updated = exercises.filter((x) => x.id !== exId);
     setExercises(updated);
     saveExercises(updated);
+    setSelectedExamExerciseIds((prev) => prev.filter((id) => id !== exId));
     if (selectedExercise.id === exId) {
       setSelectedExercise(updated[0]);
-      if (session) {
-        classroomHub.startExercise(session.classCode, updated[0]);
-      }
     }
-    pushToast('info', 'Soal telah dihapus.');
+    pushToast('info', 'Soal telah dihapus dari bank soal.');
   };
 
   // Handler Buka Editor untuk Edit Soal
@@ -354,21 +422,6 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
     setSubmissions({});
     classroomHub.clearAll();
     pushToast('info', 'Sesi kelas telah diakhiri.');
-  };
-
-  // Handler Guru: Siarkan Soal Baru
-  const handleStartExercise = (exercise: Exercise) => {
-    if (!session) return;
-    classroomHub.startExercise(session.classCode, exercise);
-    setSelectedExercise(exercise);
-    pushToast('success', `Tantangan "${exercise.title}" disiarkan ke siswa.`);
-  };
-
-  // Handler Guru: Simulasikan Siswa Join & Submit
-  const handleSimulateStudent = () => {
-    if (!session) return;
-    classroomHub.simulateSyntheticStudent(session.classCode);
-    pushToast('info', 'Siswa simulasi bergabung dan sedang mengerjakan soal...');
   };
 
   // Handler Siswa: Gabung Kelas
@@ -610,174 +663,232 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
     setTimeout(() => setIsCopiedCode(false), 2000);
   };
 
-  const renderExerciseCatalog = (isActiveSession: boolean) => (
-    <Card className="flex flex-col gap-3.5 p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-3">
-        <div className="flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-primary" />
-          <div className="flex flex-col">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-foreground">
-              {isActiveSession ? 'Materi / Soal Latihan Aktif di Kelas' : 'Katalog Bank Soal Praktikum'}
-            </h4>
-            <span className="text-[11px] text-muted-foreground">
-              {isActiveSession
-                ? 'Guru dapat memilih soal aktif untuk disiarkan atau menyunting instruksi & target secara langsung.'
-                : 'Pilih dan persiapkan soal latihan sebelum membuka kelas. Anda dapat mengimpor file JSON guru.'}
-            </span>
+  const renderExerciseCatalog = (isActiveSession: boolean) => {
+    const activeExamIds =
+      session?.activeExercises?.map((x) => x.id) ||
+      (session?.activeExerciseId ? [session.activeExerciseId] : []);
+
+    return (
+      <Card className="flex flex-col gap-3.5 p-4 border bg-card shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-3">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-primary" />
+            <div className="flex flex-col">
+              <div className="flex items-center gap-2">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-foreground">
+                  {isActiveSession
+                    ? 'Katalog & Kontrol Paket Ujian Kelas'
+                    : 'Katalog Bank Soal Praktikum'}
+                </h4>
+                <Badge variant="outline" className="text-[10px] text-primary border-primary/40 font-mono">
+                  {selectedExamExerciseIds.length} dari {exercises.length} Soal Terpilih
+                </Badge>
+              </div>
+              <span className="text-[11px] text-muted-foreground">
+                {isActiveSession
+                  ? 'Centang soal yang ingin diujikan ke siswa. Anda dapat mengujikan 1 soal saja atau banyak soal sekaligus.'
+                  : 'Pilih dan persiapkan soal latihan sebelum membuka kelas. Perubahan di bank soal tidak akan mengganggu ujian yang sedang berjalan.'}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleSelectAllForExam}
+              className="h-7 gap-1 text-[11px]"
+            >
+              <Check className="h-3 w-3" />
+              Pilih Semua
+            </Button>
+
+            {isActiveSession && (
+              <Button
+                size="sm"
+                onClick={handleBroadcastExamPacket}
+                className="h-7 gap-1.5 text-xs bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
+              >
+                <Sparkles className="h-3.5 w-3.5 text-amber-300" />
+                Siarkan Paket Ujian ({selectedExamExerciseIds.length} Soal)
+              </Button>
+            )}
+
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => fileInputRef.current?.click()}
+              className="h-7 gap-1 text-[11px] text-sky-400 hover:text-sky-300"
+              title="Pilih file JSON topologi (mis. openpacket-topology-*.json)"
+            >
+              <Upload className="h-3 w-3" />
+              Impor Topologi
+            </Button>
+
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleCreateFromCanvas}
+              className="h-7 gap-1 text-[11px] text-indigo-400 hover:text-indigo-300"
+              title="Ubah topologi yang sedang aktif di kanvas menjadi soal praktikum"
+            >
+              <Sparkles className="h-3 w-3" />
+              Dari Kanvas
+            </Button>
+
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleCreateNewExercise}
+              className="h-7 gap-1 text-[11px] text-emerald-400 hover:text-emerald-300"
+            >
+              <Plus className="h-3 w-3" />
+              Buat Soal
+            </Button>
+
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => exportLabPackageFile(selectedExercise)}
+              className="h-7 gap-1 text-[11px] text-amber-400 hover:text-amber-300"
+              title="Ekspor soal yang dipilih sebagai paket praktikum mandiri (.oplab) untuk dibagikan ke siswa"
+            >
+              <Download className="h-3 w-3" />
+              Paket (.oplab)
+            </Button>
+
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={handleExportAllExercises}
+              title="Unduh seluruh bank soal dalam file JSON"
+              className="h-7 gap-1 text-[11px] text-muted-foreground hover:text-foreground"
+            >
+              <Download className="h-3 w-3" />
+              Ekspor Semua
+            </Button>
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => fileInputRef.current?.click()}
-            className="h-7 gap-1 text-[11px] text-sky-400 hover:text-sky-300"
-            title="Pilih file JSON topologi (mis. openpacket-topology-*.json)"
-          >
-            <Upload className="h-3 w-3" />
-            Impor Topologi (.json)
-          </Button>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {exercises.map((ex, idx) => {
+            const isSelectedForExam = selectedExamExerciseIds.includes(ex.id);
+            const isCurrentlyRunning = isActiveSession && activeExamIds.includes(ex.id);
 
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={handleCreateFromCanvas}
-            className="h-7 gap-1 text-[11px] text-indigo-400 hover:text-indigo-300"
-            title="Ubah topologi yang sedang aktif di kanvas menjadi soal praktikum"
-          >
-            <Sparkles className="h-3 w-3" />
-            Dari Kanvas
-          </Button>
-
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={handleCreateNewExercise}
-            className="h-7 gap-1 text-[11px] text-emerald-400 hover:text-emerald-300"
-          >
-            <Plus className="h-3 w-3" />
-            Buat Soal
-          </Button>
-
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => exportLabPackageFile(selectedExercise)}
-            className="h-7 gap-1 text-[11px] text-amber-400 hover:text-amber-300"
-            title="Ekspor soal yang dipilih sebagai paket praktikum mandiri (.oplab) untuk dibagikan ke siswa"
-          >
-            <Download className="h-3 w-3" />
-            Paket (.oplab)
-          </Button>
-
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={handleExportAllExercises}
-            title="Unduh seluruh bank soal dalam file JSON"
-            className="h-7 gap-1 text-[11px] text-muted-foreground hover:text-foreground"
-          >
-            <Download className="h-3 w-3" />
-            Ekspor Semua
-          </Button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {exercises.map((ex) => {
-          const isCurrent = ex.id === selectedExercise.id;
-          return (
-            <div
-              key={ex.id}
-              className={`flex flex-col justify-between rounded-lg border p-3 transition-all ${
-                isCurrent
-                  ? 'border-primary bg-primary/10 shadow-xs'
-                  : 'border-border bg-background/50 hover:border-muted-foreground/40'
-              }`}
-            >
-              <div className="flex flex-col gap-1.5">
-                <div className="flex items-center justify-between gap-1">
-                  <span className="text-xs font-bold line-clamp-1 text-foreground" title={ex.title}>
-                    {ex.title.split(':')[0]}
-                  </span>
-                  <div className="flex items-center gap-1">
-                    <Badge variant="outline" className="text-[9px] px-1 py-0 text-muted-foreground">
-                      {ex.difficulty}
-                    </Badge>
-                    {isCurrent && (
-                      <span className="rounded-full bg-primary/20 px-1.5 py-0.5 text-[9px] font-semibold text-primary">
-                        Aktif
+            return (
+              <div
+                key={ex.id}
+                className={`flex flex-col justify-between rounded-lg border p-3 transition-all ${
+                  isCurrentlyRunning
+                    ? 'border-emerald-500/70 bg-emerald-500/5 shadow-xs'
+                    : isSelectedForExam
+                    ? 'border-primary bg-primary/5 shadow-xs'
+                    : 'border-border bg-background/50 hover:border-muted-foreground/40'
+                }`}
+              >
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-start justify-between gap-1">
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={isSelectedForExam}
+                        onChange={() => handleToggleSelectExerciseForExam(ex.id)}
+                        className="h-4 w-4 rounded border-border text-primary focus:ring-primary cursor-pointer"
+                      />
+                      <span className="text-xs font-bold text-foreground line-clamp-1" title={ex.title}>
+                        {idx + 1}. {ex.title.split(':')[0]}
                       </span>
-                    )}
+                    </label>
+
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Badge variant="outline" className="text-[9px] px-1 py-0 text-muted-foreground">
+                        {ex.difficulty}
+                      </Badge>
+                      {isCurrentlyRunning ? (
+                        <span className="rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-400">
+                          Sedang Diuji
+                        </span>
+                      ) : isSelectedForExam ? (
+                        <span className="rounded-full bg-primary/20 px-1.5 py-0.5 text-[9px] font-semibold text-primary">
+                          Masuk Paket
+                        </span>
+                      ) : null}
+                    </div>
                   </div>
+
+                  <p className="line-clamp-2 text-[11px] leading-relaxed text-muted-foreground">
+                    {ex.instructions}
+                  </p>
+
+                  <span className="text-[10px] text-muted-foreground/70">
+                    {ex.targets.length} Kriteria Evaluasi
+                  </span>
                 </div>
 
-                <p className="line-clamp-2 text-[11px] leading-relaxed text-muted-foreground">
-                  {ex.instructions}
-                </p>
+                <div className="mt-3 flex items-center justify-between border-t border-border/50 pt-2">
+                  <div className="flex items-center gap-1.5">
+                    <Button
+                      size="sm"
+                      variant={isSelectedForExam ? 'default' : 'outline'}
+                      onClick={() => handleToggleSelectExerciseForExam(ex.id)}
+                      className="h-6 text-[10px] px-2"
+                    >
+                      {isSelectedForExam ? 'Terpilih (✓)' : '+ Pilih'}
+                    </Button>
 
-                <span className="text-[10px] text-muted-foreground/70">
-                  {ex.targets.length} Kriteria Evaluasi
-                </span>
-              </div>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => handleSelectOnlyThisForExam(ex, isActiveSession)}
+                      className="h-6 text-[10px] px-2"
+                      title="Uji hanya soal ini saja"
+                    >
+                      Hanya Ini
+                    </Button>
+                  </div>
 
-              <div className="mt-3 flex items-center justify-between border-t border-border/50 pt-2">
-                <Button
-                  size="sm"
-                  variant={isCurrent ? 'default' : 'secondary'}
-                  onClick={() => {
-                    setSelectedExercise(ex);
-                    if (isActiveSession) {
-                      handleStartExercise(ex);
-                    }
-                  }}
-                  className="h-6 text-[10px] px-2"
-                >
-                  {isCurrent ? (isActiveSession ? 'Sedang Diuji' : 'Dipilih') : 'Pilih Soal'}
-                </Button>
-
-                <div className="flex items-center gap-0.5">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={(e) => handleEditExercise(e, ex)}
-                    title="Sunting Teks & Target Soal"
-                    className="h-6 w-6 p-0 text-muted-foreground hover:text-sky-400"
-                  >
-                    <Pencil className="h-3 w-3" />
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      exportExercisesToJsonFile(ex);
-                    }}
-                    title="Unduh Soal (.json)"
-                    className="h-6 w-6 p-0 text-muted-foreground hover:text-emerald-400"
-                  >
-                    <Download className="h-3 w-3" />
-                  </Button>
-                  {exercises.length > 1 && (
+                  <div className="flex items-center gap-0.5">
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={(e) => handleDeleteExercise(e, ex.id)}
-                      title="Hapus Soal"
-                      className="h-6 w-6 p-0 text-muted-foreground hover:text-rose-400"
+                      onClick={(e) => handleEditExercise(e, ex)}
+                      title="Sunting Teks & Target Soal"
+                      className="h-6 w-6 p-0 text-muted-foreground hover:text-sky-400"
                     >
-                      <Trash2 className="h-3 w-3" />
+                      <Pencil className="h-3 w-3" />
                     </Button>
-                  )}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        exportExercisesToJsonFile(ex);
+                      }}
+                      title="Unduh Soal (.json)"
+                      className="h-6 w-6 p-0 text-muted-foreground hover:text-emerald-400"
+                    >
+                      <Download className="h-3 w-3" />
+                    </Button>
+                    {exercises.length > 1 && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={(e) => handleDeleteExercise(e, ex.id)}
+                        title="Hapus Soal"
+                        className="h-6 w-6 p-0 text-muted-foreground hover:text-rose-400"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
-    </Card>
-  );
+            );
+          })}
+        </div>
+      </Card>
+    );
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
@@ -923,16 +1034,6 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
 
                     {/* Kontrol Guru */}
                     <div className="flex items-center gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={handleSimulateStudent}
-                        className="gap-1.5 text-xs text-sky-400"
-                      >
-                        <UserPlus className="h-3.5 w-3.5" />
-                        Simulasikan Siswa
-                      </Button>
-
                       <Button
                         size="sm"
                         variant="outline"

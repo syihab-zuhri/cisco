@@ -13,6 +13,7 @@ const STORAGE_KEY_SESSION = 'openpacket_class_session';
 const STORAGE_KEY_PARTICIPANTS = 'openpacket_class_participants';
 const STORAGE_KEY_SUBMISSIONS = 'openpacket_class_submissions';
 const STORAGE_KEY_ACTIVE_EXERCISE = 'openpacket_class_active_exercise';
+const STORAGE_KEY_ACTIVE_EXERCISES = 'openpacket_class_active_exercises';
 const STORAGE_KEY_CURRENT_PARTICIPANT = 'openpacket_current_participant';
 
 class InMemoryStorage {
@@ -105,6 +106,11 @@ class ClassroomHub {
 
       case 'EXERCISE_STARTED':
         this.saveActiveExercise(event.exercise);
+        if (event.exercises && Array.isArray(event.exercises) && event.exercises.length > 0) {
+          this.saveActiveExercises(event.exercises);
+        } else {
+          this.saveActiveExercises([event.exercise]);
+        }
         break;
 
       case 'SUBMISSION_RECEIVED': {
@@ -151,6 +157,7 @@ class ClassroomHub {
             participants: this.getParticipants(),
             submissions: this.getSubmissions(),
             activeExercise: this.getActiveExercise(),
+            activeExercises: this.getActiveExercises(),
           });
         }
         break;
@@ -162,6 +169,9 @@ class ClassroomHub {
         this.saveSubmissions(event.submissions);
         if (event.activeExercise) {
           this.saveActiveExercise(event.activeExercise);
+        }
+        if (event.activeExercises && event.activeExercises.length > 0) {
+          this.saveActiveExercises(event.activeExercises);
         }
         break;
     }
@@ -181,31 +191,40 @@ class ClassroomHub {
   public createClass(
     title: string,
     customCode?: string,
-    hostToken?: string
+    hostToken?: string,
+    initialExercises?: Exercise[]
   ): ClassSession {
     const code =
       customCode?.trim().toUpperCase() ||
       `NET-${Math.floor(1000 + Math.random() * 9000)}`;
+    const exercisesList: Exercise[] =
+      initialExercises && initialExercises.length > 0
+        ? JSON.parse(JSON.stringify(initialExercises))
+        : [DEFAULT_EXERCISES[0]];
+
     const session: ClassSession = {
       id: `cls-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       classCode: code,
       title: title.trim() || 'Kelas Jaringan Komputer',
       status: 'open',
       hostToken: hostToken || `token-${Math.random().toString(36).slice(2, 10)}`,
-      activeExerciseId: DEFAULT_EXERCISES[0].id,
+      activeExerciseId: exercisesList[0].id,
+      activeExercises: exercisesList,
       createdAt: Date.now(),
     };
 
     this.saveSession(session);
     this.saveParticipants([]);
     this.saveSubmissions({});
-    this.saveActiveExercise(DEFAULT_EXERCISES[0]);
+    this.saveActiveExercise(exercisesList[0]);
+    this.saveActiveExercises(exercisesList);
 
     this.broadcast({ type: 'CLASS_CREATED', session });
     this.broadcast({
       type: 'EXERCISE_STARTED',
       classCode: code,
-      exercise: DEFAULT_EXERCISES[0],
+      exercise: exercisesList[0],
+      exercises: exercisesList,
     });
 
     return session;
@@ -241,13 +260,17 @@ class ClassroomHub {
     return participant;
   }
 
-  public startExercise(classCode: string, exercise: Exercise): void {
+  public startExercises(classCode: string, exercises: Exercise[]): void {
+    if (!exercises || exercises.length === 0) return;
+    const frozenList: Exercise[] = JSON.parse(JSON.stringify(exercises));
     const session = this.getSession();
     if (session) {
-      session.activeExerciseId = exercise.id;
+      session.activeExerciseId = frozenList[0].id;
+      session.activeExercises = frozenList;
       this.saveSession(session);
     }
-    this.saveActiveExercise(exercise);
+    this.saveActiveExercise(frozenList[0]);
+    this.saveActiveExercises(frozenList);
 
     // Reset status pengerjaan peserta untuk soal baru
     const participants = this.getParticipants().map((p) => ({
@@ -259,8 +282,13 @@ class ClassroomHub {
     this.broadcast({
       type: 'EXERCISE_STARTED',
       classCode: classCode.trim().toUpperCase(),
-      exercise,
+      exercise: frozenList[0],
+      exercises: frozenList,
     });
+  }
+
+  public startExercise(classCode: string, exercise: Exercise): void {
+    this.startExercises(classCode, [exercise]);
   }
 
   public submitWork(classCode: string, submission: Submission): void {
@@ -294,49 +322,6 @@ class ClassroomHub {
       type: 'CLASS_CLOSED',
       classCode: classCode.trim().toUpperCase(),
     });
-  }
-
-  // --- Demo Simulation ---
-  public simulateSyntheticStudent(classCode: string): void {
-    const names = ['Andi Pratama', 'Budi Santoso', 'Citra Dewi', 'Dian Nugraha', 'Eka Putra', 'Fani Rahma'];
-    const randomName = names[Math.floor(Math.random() * names.length)];
-    const participant = this.joinClass(classCode, randomName);
-    if (!participant) return;
-
-    // Simulasikan pengerjaan dan submit otomatis setelah 1.5 detik
-    setTimeout(() => {
-      const activeEx = this.getActiveExercise() || DEFAULT_EXERCISES[0];
-      const isPerfect = Math.random() > 0.3;
-      const score = isPerfect ? 100 : Math.floor(60 + Math.random() * 30);
-      const passedCount = isPerfect
-        ? activeEx.targets.length
-        : Math.max(1, activeEx.targets.length - 1);
-
-      const submission: Submission = {
-        participantId: participant.id,
-        nickname: participant.nickname,
-        exerciseId: activeEx.id,
-        score,
-        status: isPerfect ? 'passed' : 'partial',
-        submittedAt: Date.now(),
-        evaluation: {
-          status: isPerfect ? 'passed' : 'partial',
-          score,
-          feedback: isPerfect
-            ? `Pekerjaan dievaluasi sempurna! Skor 100.`
-            : `Sebagian target tercapai (${score}%).`,
-          evaluatedAt: new Date().toLocaleTimeString(),
-          checks: activeEx.targets.map((t, idx) => ({
-            targetId: t.id,
-            title: t.title,
-            passed: idx < passedCount,
-            reason: idx < passedCount ? 'Target tercapai.' : 'Periksa kembali konfigurasi.',
-          })),
-        },
-      };
-
-      this.submitWork(classCode, submission);
-    }, 1500);
   }
 
   // --- Storage Helpers ---
@@ -400,6 +385,28 @@ class ClassroomHub {
     getStorage().setItem(STORAGE_KEY_ACTIVE_EXERCISE, JSON.stringify(exercise));
   }
 
+  public getActiveExercises(): Exercise[] {
+    try {
+      const raw = getStorage().getItem(STORAGE_KEY_ACTIVE_EXERCISES);
+      if (raw) {
+        const list = JSON.parse(raw);
+        if (Array.isArray(list) && list.length > 0) return list as Exercise[];
+      }
+    } catch {
+      // Fallback
+    }
+    const single = this.getActiveExercise();
+    return single ? [single] : [DEFAULT_EXERCISES[0]];
+  }
+
+  public saveActiveExercises(exercises: Exercise[]): void {
+    if (!exercises || exercises.length === 0) {
+      getStorage().removeItem(STORAGE_KEY_ACTIVE_EXERCISES);
+      return;
+    }
+    getStorage().setItem(STORAGE_KEY_ACTIVE_EXERCISES, JSON.stringify(exercises));
+  }
+
   public getCurrentParticipant(): Participant | null {
     try {
       if (typeof window !== 'undefined' && window.sessionStorage) {
@@ -444,6 +451,7 @@ class ClassroomHub {
     storage.removeItem(STORAGE_KEY_PARTICIPANTS);
     storage.removeItem(STORAGE_KEY_SUBMISSIONS);
     storage.removeItem(STORAGE_KEY_ACTIVE_EXERCISE);
+    storage.removeItem(STORAGE_KEY_ACTIVE_EXERCISES);
     this.setCurrentParticipant(null);
   }
 }

@@ -28,20 +28,35 @@ import type {
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 export function ClassroomStudentHUD() {
   const { nodes, edges, loadTopology, pushToast, requestConfirm } = useAppStore();
+  const inspectorOpen = useAppStore((s) => s.inspectorOpen);
 
   const [session, setSession] = useState<ClassSession | null>(() => classroomHub.getSession());
   const [participant, setParticipant] = useState<Participant | null>(() =>
     classroomHub.getCurrentParticipant()
   );
-  const [activeExercise, setActiveExercise] = useState<Exercise | null>(() =>
-    classroomHub.getActiveExercise()
+  const [activeExercises, setActiveExercises] = useState<Exercise[]>(() =>
+    classroomHub.getActiveExercises()
   );
-  const [evaluation, setEvaluation] = useState<ExerciseEvaluation | null>(null);
+  const [selectedExerciseIndex, setSelectedExerciseIndex] = useState<number>(0);
+  const [evaluationsByExerciseId, setEvaluationsByExerciseId] = useState<
+    Record<string, ExerciseEvaluation>
+  >({});
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
+
+  // Soal yang sedang dipilih oleh siswa
+  const activeExercise: Exercise | null =
+    activeExercises[selectedExerciseIndex] || activeExercises[0] || null;
+
+  // Evaluasi soal aktif saat ini
+  const evaluation: ExerciseEvaluation | null =
+    activeExercise && evaluationsByExerciseId[activeExercise.id]
+      ? evaluationsByExerciseId[activeExercise.id]
+      : null;
 
   // Handler Keluar Kelas
   const handleLeaveClass = useCallback(
@@ -49,7 +64,7 @@ export function ClassroomStudentHUD() {
       const doLeave = () => {
         classroomHub.setCurrentParticipant(null);
         setParticipant(null);
-        setEvaluation(null);
+        setEvaluationsByExerciseId({});
         pushToast('info', 'Anda telah keluar dari ruang kelas.');
       };
 
@@ -75,13 +90,24 @@ export function ClassroomStudentHUD() {
         case 'CLASS_CREATED':
         case 'SYNC_RESPONSE':
           setSession(classroomHub.getSession());
-          setActiveExercise(classroomHub.getActiveExercise());
+          setActiveExercises(classroomHub.getActiveExercises());
           break;
 
         case 'EXERCISE_STARTED':
-          setActiveExercise(event.exercise);
-          setEvaluation(null);
-          pushToast('info', `Materi baru dimulai: "${event.exercise.title}"`);
+          if (event.exercises && event.exercises.length > 0) {
+            setActiveExercises(event.exercises);
+            setSelectedExerciseIndex(0);
+          } else if (event.exercise) {
+            setActiveExercises([event.exercise]);
+            setSelectedExerciseIndex(0);
+          }
+          setEvaluationsByExerciseId({});
+          pushToast(
+            'info',
+            event.exercises && event.exercises.length > 1
+              ? `Paket ujian baru dimulai (${event.exercises.length} soal).`
+              : `Materi baru dimulai: "${event.exercise.title}"`
+          );
           break;
 
         case 'CLASS_STATUS_CHANGED':
@@ -116,9 +142,10 @@ export function ClassroomStudentHUD() {
     return () => clearInterval(interval);
   }, [participant]);
 
-  // Evaluasi topologi kanvas saat ini
-  const runEvaluation = async (): Promise<ExerciseEvaluation | null> => {
-    if (!activeExercise) return null;
+  // Evaluasi topologi kanvas untuk satu soal
+  const runEvaluationForExercise = async (
+    ex: Exercise
+  ): Promise<ExerciseEvaluation | null> => {
     const devices = nodes.map((n) => n.data);
     const links = edges.map((e) => ({
       sourceNodeId: e.source,
@@ -127,25 +154,32 @@ export function ClassroomStudentHUD() {
       targetPortId: e.targetHandle!,
     }));
 
-    return await evaluateExercise(activeExercise, devices, links);
+    return await evaluateExercise(ex, devices, links);
   };
 
-  // Handler Cek Mandiri (Self-Check tanpa submit resmi)
+  // Handler Cek Mandiri (Self-Check untuk soal aktif saat ini)
   const handleSelfCheck = async () => {
     if (!activeExercise) return;
     setIsEvaluating(true);
     try {
-      const evalResult = await runEvaluation();
+      const evalResult = await runEvaluationForExercise(activeExercise);
       if (!evalResult) return;
-      setEvaluation(evalResult);
+
+      setEvaluationsByExerciseId((prev) => ({
+        ...prev,
+        [activeExercise.id]: evalResult,
+      }));
 
       if (evalResult.status === 'passed') {
         pushToast(
           'success',
-          'Hebat! Seluruh kriteria praktikum terpenuhi (Skor 100). Klik "Kirim Jawaban" untuk mengumpulkan ke guru.'
+          `Hebat! Kriteria "${activeExercise.title.split(':')[0]}" terpenuhi (Skor 100).`
         );
       } else {
-        pushToast('info', `Cek Mandiri: ${evalResult.feedback}`);
+        pushToast(
+          'info',
+          `Cek Mandiri (${activeExercise.title.split(':')[0]}): ${evalResult.feedback}`
+        );
       }
     } catch (err) {
       pushToast(
@@ -157,38 +191,75 @@ export function ClassroomStudentHUD() {
     }
   };
 
-  // Handler Kirim Jawaban (Submit resmi ke Guru)
+  // Handler Kirim Jawaban (Submit resmi seluruh soal ke Guru)
   const handleSubmitWork = async () => {
-    if (!session || !participant || !activeExercise) return;
+    if (!session || !participant || activeExercises.length === 0) return;
     setIsEvaluating(true);
 
     try {
-      const evalResult = await runEvaluation();
-      if (!evalResult) return;
-      setEvaluation(evalResult);
+      const updatedEvals: Record<string, ExerciseEvaluation> = {
+        ...evaluationsByExerciseId,
+      };
+      const exerciseScores: Record<string, number> = {};
+
+      // Evaluasi otomatis seluruh soal dalam paket ujian
+      for (const ex of activeExercises) {
+        const res = await runEvaluationForExercise(ex);
+        if (res) {
+          updatedEvals[ex.id] = res;
+          exerciseScores[ex.id] = res.score;
+        } else {
+          exerciseScores[ex.id] = 0;
+        }
+      }
+
+      setEvaluationsByExerciseId(updatedEvals);
+
+      // Hitung skor rata-rata paket ujian
+      const scores = Object.values(exerciseScores);
+      const totalScore = scores.reduce((a, b) => a + b, 0);
+      const avgScore =
+        scores.length > 0 ? Math.round(totalScore / scores.length) : 0;
+      const overallStatus =
+        avgScore === 100 ? 'passed' : avgScore > 0 ? 'partial' : 'failed';
+
+      const currentEval = activeExercise
+        ? updatedEvals[activeExercise.id]
+        : Object.values(updatedEvals)[0];
 
       const submission: Submission = {
         participantId: participant.id,
         nickname: participant.nickname,
-        exerciseId: activeExercise.id,
-        score: evalResult.score,
-        status: evalResult.status,
-        evaluation: evalResult,
+        exerciseId: activeExercise?.id || activeExercises[0].id,
+        score: avgScore,
+        status: overallStatus,
+        evaluation: currentEval || {
+          status: overallStatus,
+          score: avgScore,
+          feedback: `Pengerjaan selesai dengan skor rata-rata ${avgScore}/100.`,
+          evaluatedAt: new Date().toLocaleTimeString(),
+          checks: [],
+        },
+        evaluations: updatedEvals,
+        exerciseScores,
         submittedAt: Date.now(),
       };
 
       classroomHub.submitWork(session.classCode, submission);
 
-      if (evalResult.score === 100) {
+      if (avgScore === 100) {
         if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
           confetti({ particleCount: 160, spread: 80, origin: { y: 0.5, x: 0.8 } });
         }
         pushToast(
           'success',
-          'Luar biasa! Lembar kerja dengan skor sempurna 100 berhasil dikirim ke guru.'
+          'Luar biasa! Seluruh soal ujian terselesaikan dengan skor sempurna 100 dan terkirim ke guru.'
         );
       } else {
-        pushToast('info', `Lembar kerja dikirim ke guru dengan skor ${evalResult.score}/100.`);
+        pushToast(
+          'info',
+          `Lembar kerja dikirim ke guru dengan skor rata-rata ${avgScore}/100 (${activeExercises.length} soal).`
+        );
       }
     } catch (err) {
       pushToast(
@@ -207,8 +278,13 @@ export function ClassroomStudentHUD() {
     try {
       let currentEval = evaluation;
       if (!currentEval) {
-        currentEval = await runEvaluation();
-        if (currentEval) setEvaluation(currentEval);
+        currentEval = await runEvaluationForExercise(activeExercise);
+        if (currentEval) {
+          setEvaluationsByExerciseId((prev) => ({
+            ...prev,
+            [activeExercise.id]: currentEval!,
+          }));
+        }
       }
       if (!currentEval) return;
 
@@ -219,6 +295,7 @@ export function ClassroomStudentHUD() {
         score: currentEval.score,
         status: currentEval.status,
         evaluation: currentEval,
+        evaluations: evaluationsByExerciseId,
         submittedAt: Date.now(),
       };
 
@@ -282,16 +359,29 @@ export function ClassroomStudentHUD() {
     return null;
   }
 
+  // Posisi dinamis: jika PDU Inspector terbuka di kanan, geser HUD ke kirinya agar tidak bertumpukan
+  const positionClass = inspectorOpen ? 'right-[336px]' : 'right-4';
+
   // Tampilan Minimized (Floating Pill)
   if (isMinimized) {
     return (
-      <div className="absolute right-4 top-4 z-30 flex items-center gap-2 rounded-full border border-primary/40 bg-background/90 px-3.5 py-1.5 shadow-2xl backdrop-blur">
+      <div
+        className={cn(
+          'absolute top-4 z-30 flex items-center gap-2 rounded-full border border-primary/40 bg-background/90 px-3.5 py-1.5 shadow-2xl backdrop-blur transition-all duration-200',
+          positionClass
+        )}
+      >
         <div className="flex items-center gap-1.5 text-xs">
           <GraduationCap className="h-4 w-4 text-primary" />
           <span className="font-mono font-bold text-foreground">
             {session?.classCode || 'KELAS'}
           </span>
           <span className="text-muted-foreground">• {participant?.nickname || 'Siswa'}</span>
+          {activeExercises.length > 1 && (
+            <span className="text-[10px] text-primary font-mono">
+              (Soal {selectedExerciseIndex + 1}/{activeExercises.length})
+            </span>
+          )}
         </div>
 
         {evaluation && (
@@ -322,7 +412,12 @@ export function ClassroomStudentHUD() {
 
   // Tampilan Expanded (HUD Floating Card)
   return (
-    <Card className="absolute right-4 top-4 z-30 flex max-h-[82vh] w-[390px] flex-col overflow-hidden border-border/80 bg-background/95 shadow-2xl backdrop-blur">
+    <Card
+      className={cn(
+        'absolute top-4 z-30 flex max-h-[82vh] w-[390px] flex-col overflow-hidden border-border/80 bg-background/95 shadow-2xl backdrop-blur transition-all duration-200',
+        positionClass
+      )}
+    >
       {/* Header HUD */}
       <div className="flex items-center justify-between border-b bg-muted/40 px-4 py-2.5">
         <div className="flex items-center gap-2">
@@ -366,11 +461,64 @@ export function ClassroomStudentHUD() {
         </div>
       </div>
 
+      {/* Navigasi Multi-Soal (Bebas Pilih Mana Dulu yang Ingin Dikerjakan) */}
+      {activeExercises.length > 1 && (
+        <div className="flex items-center gap-1.5 overflow-x-auto border-b bg-muted/25 px-3 py-2 scrollbar-none">
+          <span className="text-[10px] font-bold uppercase text-muted-foreground shrink-0 mr-1">
+            Pilih Soal:
+          </span>
+          {activeExercises.map((ex, idx) => {
+            const isSelected = idx === selectedExerciseIndex;
+            const exEval = evaluationsByExerciseId[ex.id];
+            return (
+              <button
+                key={ex.id}
+                type="button"
+                onClick={() => setSelectedExerciseIndex(idx)}
+                className={cn(
+                  'flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-all shrink-0 cursor-pointer select-none border',
+                  isSelected
+                    ? 'border-primary bg-primary text-primary-foreground shadow-xs font-semibold'
+                    : 'border-border/60 bg-background/80 text-muted-foreground hover:bg-muted hover:text-foreground'
+                )}
+              >
+                <span>Soal {idx + 1}</span>
+                {exEval ? (
+                  <span
+                    className={cn(
+                      'rounded px-1 text-[9px] font-bold',
+                      exEval.score === 100
+                        ? isSelected
+                          ? 'bg-emerald-300 text-black'
+                          : 'bg-emerald-500/15 text-emerald-400'
+                        : isSelected
+                        ? 'bg-amber-300 text-black'
+                        : 'bg-amber-500/15 text-amber-400'
+                    )}
+                  >
+                    {exEval.score}%
+                  </span>
+                ) : (
+                  <span className="text-[9px] opacity-60">-</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {/* Konten Scrollable */}
       <div className="flex flex-1 flex-col gap-3.5 overflow-y-auto p-4 text-xs">
         {/* Detail Soal Aktif */}
         <div className="flex flex-col gap-1.5">
-          <h3 className="font-bold text-foreground">{activeExercise?.title}</h3>
+          <div className="flex items-center justify-between gap-1">
+            <h3 className="font-bold text-foreground line-clamp-1">{activeExercise?.title}</h3>
+            {activeExercises.length > 1 && (
+              <Badge variant="secondary" className="text-[10px] font-mono shrink-0">
+                {selectedExerciseIndex + 1}/{activeExercises.length}
+              </Badge>
+            )}
+          </div>
           <p className="text-[11px] leading-relaxed text-muted-foreground">
             {activeExercise?.instructions}
           </p>
@@ -504,7 +652,11 @@ export function ClassroomStudentHUD() {
             className="h-8 gap-1.5 text-xs bg-primary hover:bg-primary/90"
           >
             <Send className="h-3.5 w-3.5" />
-            {isEvaluating ? 'Mengevaluasi…' : 'Kirim Jawaban'}
+            {isEvaluating
+              ? 'Mengevaluasi…'
+              : activeExercises.length > 1
+              ? 'Kirim Semua Jawaban'
+              : 'Kirim Jawaban'}
           </Button>
         </div>
 

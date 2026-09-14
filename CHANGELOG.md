@@ -11,6 +11,28 @@
 
 ---
 
+## [2026-09-14] — Version 1.8.0 (Multi-Exercise Exam, Frozen Snapshot, Student HUD Switcher, Template Lock & Clean UI)
+
+### Added
+- **Paket Ujian Multi-Soal Guru (`src/components/modal/ClassroomModal.tsx`)**:
+  - Guru dapat memilih mengujikan hanya 1 soal atau mencentang banyak soal sekaligus dari bank soal untuk disiarkan sebagai satu kesatuan ujian kelas.
+  - Penambahan kontrol cepat seleksi paket ujian: Checkbox per-soal, tombol "Pilih Semua", tombol "Hanya Ini" (uji tunggal seketika), dan tombol aksi "Siarkan Paket Ujian (N Soal)".
+- **Frozen Immutable Exam Snapshot (`src/features/classroom/classroomHub.ts`)**:
+  - Saat ujian kelas dibuka atau paket ujian disiarkan, sistem membekukan salinan mendalam (*immutable deep-clone snapshot*) dari soal-soal terpilih ke dalam sesi (`session.activeExercises`).
+  - Guru dapat membuat, menyunting, atau menghapus soal di katalog bank soal saat ujian berlangsung tanpa memutasi atau mengganggu lembar kerja yang sedang dikerjakan siswa.
+- **Navigasi Bebas Multi-Soal di Canvas Student HUD (`src/components/canvas/ClassroomStudentHUD.tsx`)**:
+  - Siswa memiliki kebebasan penuh memilih urutan pengerjaan (*Exercise Switcher*) menggunakan tab/pill interaktif di Canvas HUD.
+  - Setiap soal memiliki target checklist, status skor independen, dan tombol muat topologi guru tersendiri.
+  - Tombol submit mengumpulkan seluruh lembar kerja dengan perhitungan skor rata-rata paket ujian serta rekap per-soal.
+- **Anti-Cheat Template Lock (`src/components/palette/DevicePalette.tsx`)**:
+  - Tab "Template" pada Palet Perangkat otomatis terkunci saat siswa bergabung dalam sesi kelas aktif, mendorong pengerjaan topologi secara mandiri pada kanvas.
+- **Penyelarasan Layout Panel Kanvas (`src/components/canvas/ClassroomStudentHUD.tsx`)**:
+  - Penyelarasan posisi mengambang: Student HUD (baik mode kartu maupun minimized pill) otomatis bergeser ke kiri secara halus saat PDU Inspector Drawer dibuka agar kedua panel tidak bertumpukan.
+- **Pembersihan Antarmuka Guru**:
+  - Menghapus tombol dan generator simulasi bot siswa di panel guru, menghasilkan kontrol operasional ujian yang rapi dan bersih.
+
+---
+
 ## [2026-09-14] — Version 1.7.0 (Redesain UX Kelas: Canvas Student HUD, Diagnostik Gateway & Paket Mandiri .oplab)
 
 ### Added
