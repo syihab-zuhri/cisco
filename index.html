@@ -5,6 +5,23 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>OpenPacket - Educational Network Simulator</title>
+    <script>
+      // Filter out benign ResizeObserver loop errors before Vite client attaches listeners
+      window.addEventListener(
+        'error',
+        function (e) {
+          if (
+            e.message &&
+            (e.message.includes('ResizeObserver loop completed with undelivered notifications') ||
+              e.message.includes('ResizeObserver loop limit exceeded'))
+          ) {
+            e.stopImmediatePropagation();
+            e.preventDefault();
+          }
+        },
+        true
+      );
+    </script>
   </head>
   <body class="bg-background text-foreground overflow-hidden">
     <div id="root"></div>
