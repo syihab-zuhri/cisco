@@ -165,4 +165,9 @@ gantt
   - *Status:* Completed (2026-09-14)
   - *Dependencies:* `TASK-P0-023`, `TASK-P0-024`
   - *Definition of Done:* Komponen `ClassroomModal.tsx` dengan Base UI Lyra, kontrol guru (buka/kunci/tutup kelas, siarkan materi, live monitoring skor), dan antarmuka pengerjaan siswa (gabung, muat template, submit otomatis).
+- **`TASK-P0-026` [Effort: M] Manajemen Soal Berbasis File JSON & Editor Interaktif Guru**
+  - *Status:* Completed (2026-09-14)
+  - *Dependencies:* `TASK-P0-024`, `TASK-P0-025`
+  - *Definition of Done:* Parser & validator JSON toleran alias (`exerciseParser.ts`), modal editor visual soal praktikum guru (`ExerciseEditorModal.tsx`) untuk menyunting teks instruksi & kriteria target, impor/ekspor file `.json`, dan persistensi penyimpanan lokal.
+
 

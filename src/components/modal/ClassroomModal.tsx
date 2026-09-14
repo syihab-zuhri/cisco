@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Users,
   GraduationCap,
@@ -16,6 +16,11 @@ import {
   LogOut,
   HelpCircle,
   FileCheck2,
+  Upload,
+  Download,
+  Plus,
+  Pencil,
+  Trash2,
 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { TOPOLOGY_TEMPLATES } from '../../data/topologyTemplates';
@@ -28,6 +33,13 @@ import {
 import {
   evaluateExercise,
 } from '../../features/classroom/exerciseEvaluator';
+import {
+  loadExercises,
+  saveExercises,
+  parseExerciseJson,
+  exportExercisesToJsonFile,
+} from '../../features/classroom/exerciseParser';
+import { ExerciseEditorModal } from './ExerciseEditorModal';
 import type {
   ClassSession,
   Participant,
@@ -65,9 +77,18 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
   const [customCode, setCustomCode] = useState('');
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [submissions, setSubmissions] = useState<Record<string, Submission>>({});
-  const [selectedExercise, setSelectedExercise] = useState<Exercise>(DEFAULT_EXERCISES[0]);
+  const [exercises, setExercises] = useState<Exercise[]>(() => loadExercises());
+  const [selectedExercise, setSelectedExercise] = useState<Exercise>(() => {
+    const list = loadExercises();
+    return list[0] || DEFAULT_EXERCISES[0];
+  });
   const [reviewedSubmission, setReviewedSubmission] = useState<Submission | null>(null);
   const [isCopiedCode, setIsCopiedCode] = useState(false);
+
+  // Editor Soal State
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [editingExercise, setEditingExercise] = useState<Exercise | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Student State
   const [studentClassCode, setStudentClassCode] = useState('');
@@ -160,11 +181,131 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
     setSession(newSession);
     setParticipants([]);
     setSubmissions({});
-    setSelectedExercise(DEFAULT_EXERCISES[0]);
+    const activeToUse = selectedExercise || exercises[0] || DEFAULT_EXERCISES[0];
+    setSelectedExercise(activeToUse);
+    classroomHub.startExercise(newSession.classCode, activeToUse);
     pushToast(
       'success',
       `Kelas dibuat! Kode Kelas: ${newSession.classCode}. Bagikan kode ini ke siswa.`
     );
+  };
+
+  // Handler Import File JSON Soal
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      if (!content) return;
+
+      const parseResult = parseExerciseJson(content);
+      if (!parseResult.success) {
+        pushToast('error', `Gagal mengimpor JSON: ${parseResult.errors.join('; ')}`);
+        return;
+      }
+
+      const newItems = parseResult.exercises;
+      const merged = [...exercises];
+      let added = 0;
+      let updated = 0;
+
+      for (const item of newItems) {
+        const existingIdx = merged.findIndex((x) => x.id === item.id);
+        if (existingIdx >= 0) {
+          merged[existingIdx] = item;
+          updated++;
+        } else {
+          merged.push(item);
+          added++;
+        }
+      }
+
+      setExercises(merged);
+      saveExercises(merged);
+
+      if (newItems.length > 0) {
+        setSelectedExercise(newItems[0]);
+        if (session) {
+          classroomHub.startExercise(session.classCode, newItems[0]);
+        }
+      }
+
+      pushToast(
+        'success',
+        `Sukses mengimpor: ${added} soal baru ditambahkan${updated > 0 ? `, ${updated} soal diperbarui` : ''}.`
+      );
+    };
+
+    reader.onerror = () => {
+      pushToast('error', 'Gagal membaca file dari sistem.');
+    };
+
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  // Handler Simpan Soal dari Editor
+  const handleSaveExercise = (savedExercise: Exercise) => {
+    const idx = exercises.findIndex((x) => x.id === savedExercise.id);
+    let updatedList: Exercise[];
+    if (idx >= 0) {
+      updatedList = [...exercises];
+      updatedList[idx] = savedExercise;
+    } else {
+      updatedList = [...exercises, savedExercise];
+    }
+
+    setExercises(updatedList);
+    saveExercises(updatedList);
+
+    if (selectedExercise.id === savedExercise.id || idx < 0) {
+      setSelectedExercise(savedExercise);
+      if (session) {
+        classroomHub.startExercise(session.classCode, savedExercise);
+      }
+    }
+
+    pushToast('success', `Soal "${savedExercise.title}" berhasil disimpan.`);
+  };
+
+  // Handler Hapus Soal
+  const handleDeleteExercise = (e: React.MouseEvent, exId: string) => {
+    e.stopPropagation();
+    if (exercises.length <= 1) {
+      pushToast('warning', 'Minimal harus ada 1 soal latihan pada daftar.');
+      return;
+    }
+    const updated = exercises.filter((x) => x.id !== exId);
+    setExercises(updated);
+    saveExercises(updated);
+    if (selectedExercise.id === exId) {
+      setSelectedExercise(updated[0]);
+      if (session) {
+        classroomHub.startExercise(session.classCode, updated[0]);
+      }
+    }
+    pushToast('info', 'Soal telah dihapus.');
+  };
+
+  // Handler Buka Editor untuk Edit Soal
+  const handleEditExercise = (e: React.MouseEvent, ex: Exercise) => {
+    e.stopPropagation();
+    setEditingExercise(ex);
+    setIsEditorOpen(true);
+  };
+
+  // Handler Buka Editor untuk Buat Soal Baru
+  const handleCreateNewExercise = () => {
+    setEditingExercise(null);
+    setIsEditorOpen(true);
+  };
+
+  // Handler Ekspor Semua Soal ke JSON
+  const handleExportAllExercises = () => {
+    exportExercisesToJsonFile(exercises, `bank-soal-${session ? session.classCode : 'praktikum'}.json`);
+    pushToast('success', 'File bank soal (.json) berhasil diunduh.');
   };
 
   // Handler Guru: Toggle Kunci Kelas
@@ -288,6 +429,152 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
     setTimeout(() => setIsCopiedCode(false), 2000);
   };
 
+  const renderExerciseCatalog = (isActiveSession: boolean) => (
+    <Card className="flex flex-col gap-3.5 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-3">
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-4 w-4 text-primary" />
+          <div className="flex flex-col">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-foreground">
+              {isActiveSession ? 'Materi / Soal Latihan Aktif di Kelas' : 'Katalog Bank Soal Praktikum'}
+            </h4>
+            <span className="text-[11px] text-muted-foreground">
+              {isActiveSession
+                ? 'Guru dapat memilih soal aktif untuk disiarkan atau menyunting instruksi & target secara langsung.'
+                : 'Pilih dan persiapkan soal latihan sebelum membuka kelas. Anda dapat mengimpor file JSON guru.'}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => fileInputRef.current?.click()}
+            className="h-7 gap-1 text-[11px] text-sky-400 hover:text-sky-300"
+          >
+            <Upload className="h-3 w-3" />
+            Impor JSON
+          </Button>
+
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleCreateNewExercise}
+            className="h-7 gap-1 text-[11px] text-emerald-400 hover:text-emerald-300"
+          >
+            <Plus className="h-3 w-3" />
+            Buat Soal
+          </Button>
+
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={handleExportAllExercises}
+            title="Unduh seluruh bank soal dalam file JSON"
+            className="h-7 gap-1 text-[11px] text-muted-foreground hover:text-foreground"
+          >
+            <Download className="h-3 w-3" />
+            Ekspor Semua
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {exercises.map((ex) => {
+          const isCurrent = ex.id === selectedExercise.id;
+          return (
+            <div
+              key={ex.id}
+              className={`flex flex-col justify-between rounded-lg border p-3 transition-all ${
+                isCurrent
+                  ? 'border-primary bg-primary/10 shadow-xs'
+                  : 'border-border bg-background/50 hover:border-muted-foreground/40'
+              }`}
+            >
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between gap-1">
+                  <span className="text-xs font-bold line-clamp-1 text-foreground" title={ex.title}>
+                    {ex.title.split(':')[0]}
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <Badge variant="outline" className="text-[9px] px-1 py-0 text-muted-foreground">
+                      {ex.difficulty}
+                    </Badge>
+                    {isCurrent && (
+                      <span className="rounded-full bg-primary/20 px-1.5 py-0.5 text-[9px] font-semibold text-primary">
+                        Aktif
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <p className="line-clamp-2 text-[11px] leading-relaxed text-muted-foreground">
+                  {ex.instructions}
+                </p>
+
+                <span className="text-[10px] text-muted-foreground/70">
+                  {ex.targets.length} Kriteria Evaluasi
+                </span>
+              </div>
+
+              <div className="mt-3 flex items-center justify-between border-t border-border/50 pt-2">
+                <Button
+                  size="sm"
+                  variant={isCurrent ? 'default' : 'secondary'}
+                  onClick={() => {
+                    setSelectedExercise(ex);
+                    if (isActiveSession) {
+                      handleStartExercise(ex);
+                    }
+                  }}
+                  className="h-6 text-[10px] px-2"
+                >
+                  {isCurrent ? (isActiveSession ? 'Sedang Diuji' : 'Dipilih') : 'Pilih Soal'}
+                </Button>
+
+                <div className="flex items-center gap-0.5">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={(e) => handleEditExercise(e, ex)}
+                    title="Sunting Teks & Target Soal"
+                    className="h-6 w-6 p-0 text-muted-foreground hover:text-sky-400"
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      exportExercisesToJsonFile(ex);
+                    }}
+                    title="Unduh Soal (.json)"
+                    className="h-6 w-6 p-0 text-muted-foreground hover:text-emerald-400"
+                  >
+                    <Download className="h-3 w-3" />
+                  </Button>
+                  {exercises.length > 1 && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={(e) => handleDeleteExercise(e, ex.id)}
+                      title="Hapus Soal"
+                      className="h-6 w-6 p-0 text-muted-foreground hover:text-rose-400"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent className="flex max-h-[88vh] w-[95vw] max-w-4xl flex-col gap-0 p-0 sm:max-w-4xl">
@@ -329,47 +616,52 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
           {activeTab === 'teacher' && (
             <div className="flex flex-col gap-5">
               {!session ? (
-                /* Form Buat Kelas Baru */
-                <Card className="p-5">
-                  <div className="mb-4 flex flex-col gap-1">
-                    <h3 className="text-sm font-bold">Buat Sesi Kelas Baru</h3>
-                    <p className="text-xs text-muted-foreground">
-                      Kelas berjalan langsung secara lokal/jaringan. Siswa cukup memasukkan kode kelas untuk terhubung.
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <div className="flex flex-col gap-1.5">
-                      <Label htmlFor="cls-title" className="text-xs">Judul Kelas</Label>
-                      <Input
-                        id="cls-title"
-                        value={classTitle}
-                        onChange={(e) => setClassTitle(e.target.value)}
-                        placeholder="e.g. Praktikum Jaringan TKJ 1"
-                        className="text-xs"
-                      />
+                <div className="flex flex-col gap-5">
+                  {/* Form Buat Kelas Baru */}
+                  <Card className="p-5">
+                    <div className="mb-4 flex flex-col gap-1">
+                      <h3 className="text-sm font-bold">Buat Sesi Kelas Baru</h3>
+                      <p className="text-xs text-muted-foreground">
+                        Kelas berjalan langsung secara lokal/jaringan. Siswa cukup memasukkan kode kelas untuk terhubung.
+                      </p>
                     </div>
-                    <div className="flex flex-col gap-1.5">
-                      <Label htmlFor="cls-code" className="text-xs">
-                        Kode Kelas Kustom <span className="text-muted-foreground font-normal">(opsional)</span>
-                      </Label>
-                      <Input
-                        id="cls-code"
-                        value={customCode}
-                        onChange={(e) => setCustomCode(e.target.value.toUpperCase())}
-                        placeholder="Otomatis jika kosong (e.g. NET-5021)"
-                        className="font-mono text-xs uppercase"
-                      />
-                    </div>
-                  </div>
 
-                  <div className="mt-5 flex justify-end">
-                    <Button onClick={handleCreateClass} className="gap-2">
-                      <Play className="h-4 w-4" />
-                      Mulai Buka Kelas
-                    </Button>
-                  </div>
-                </Card>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="cls-title" className="text-xs">Judul Kelas</Label>
+                        <Input
+                          id="cls-title"
+                          value={classTitle}
+                          onChange={(e) => setClassTitle(e.target.value)}
+                          placeholder="e.g. Praktikum Jaringan TKJ 1"
+                          className="text-xs"
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="cls-code" className="text-xs">
+                          Kode Kelas Kustom <span className="text-muted-foreground font-normal">(opsional)</span>
+                        </Label>
+                        <Input
+                          id="cls-code"
+                          value={customCode}
+                          onChange={(e) => setCustomCode(e.target.value.toUpperCase())}
+                          placeholder="Otomatis jika kosong (e.g. NET-5021)"
+                          className="font-mono text-xs uppercase"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="mt-5 flex justify-end">
+                      <Button onClick={handleCreateClass} className="gap-2">
+                        <Play className="h-4 w-4" />
+                        Mulai Buka Kelas
+                      </Button>
+                    </div>
+                  </Card>
+
+                  {/* Bank Soal Praktikum Siap Pakai */}
+                  {renderExerciseCatalog(false)}
+                </div>
               ) : (
                 /* Kelas Sedang Aktif (Dashboard Guru) */
                 <div className="flex flex-col gap-5">
@@ -468,49 +760,8 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
                     </div>
                   </div>
 
-                  {/* Pemilihan & Penyiaran Soal */}
-                  <Card className="p-4">
-                    <div className="mb-3 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Sparkles className="h-4 w-4 text-primary" />
-                        <h4 className="text-xs font-bold uppercase tracking-wider text-foreground">
-                          Materi / Soal Latihan Aktif
-                        </h4>
-                      </div>
-                      <Badge variant="outline" className="text-[10px] text-primary">
-                        {selectedExercise.difficulty}
-                      </Badge>
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                      {DEFAULT_EXERCISES.map((ex) => {
-                        const isCurrent = ex.id === selectedExercise.id;
-                        return (
-                          <button
-                            key={ex.id}
-                            onClick={() => handleStartExercise(ex)}
-                            className={`flex flex-col gap-1 rounded-lg border p-3 text-left transition-all ${
-                              isCurrent
-                                ? 'border-primary bg-primary/10 shadow-sm'
-                                : 'border-border bg-background/50 hover:border-muted-foreground/40'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs font-bold">{ex.title.split(':')[0]}</span>
-                              {isCurrent && (
-                                <span className="rounded-full bg-primary/20 px-1.5 py-0.5 text-[9px] font-semibold text-primary">
-                                  Aktif
-                                </span>
-                              )}
-                            </div>
-                            <p className="line-clamp-2 text-[11px] leading-relaxed text-muted-foreground">
-                              {ex.instructions}
-                            </p>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </Card>
+                  {/* Pemilihan & Penyiaran Soal Aktif */}
+                  {renderExerciseCatalog(true)}
 
                   {/* Tabel Monitoring Nilai Siswa */}
                   <Card className="flex flex-col gap-3 p-4">
@@ -878,6 +1129,23 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
             </div>
           )}
         </div>
+
+        {/* Hidden File Input for JSON import */}
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleFileUpload}
+          accept=".json,application/json"
+          className="hidden"
+        />
+
+        {/* Editor Soal Guru */}
+        <ExerciseEditorModal
+          isOpen={isEditorOpen}
+          onClose={() => setIsEditorOpen(false)}
+          initialExercise={editingExercise}
+          onSave={handleSaveExercise}
+        />
       </DialogContent>
     </Dialog>
   );

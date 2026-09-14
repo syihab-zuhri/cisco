@@ -11,9 +11,16 @@
 
 ---
 
-## [2026-09-14] — Version 1.6.0 (Fitur Kelas & Evaluasi Latihan Otomatis)
+## [2026-09-14] — Version 1.6.0 (Fitur Kelas, JSON Exercise Loader & In-App Editor)
 
 ### Added
+- **Manajemen Soal Berbasis File JSON & Editor Interaktif Guru (`src/features/classroom/exerciseParser.ts`, `src/components/modal/ExerciseEditorModal.tsx`)**:
+  - Dukungan penuh import/export file `.json` soal praktikum guru (single exercise `{ ... }` maupun array bank soal `[ ... ]`) dengan validasi skema komprehensif dan error message deskriptif.
+  - Editor visual soal praktikum: guru dapat mengubah judul latihan, materi & instruksi pengerjaan, tingkat kesulitan, template topologi awal, serta menambah/mengedit/menghapus kriteria target penilaian (IP interface, sambungan kabel, ICMP ping reachability, kuota perangkat, dan port VLAN).
+  - Integrasi katalog bank soal di `ClassroomModal.tsx` baik pada mode persiapan kelas maupun saat sesi kelas sedang aktif berjalan.
+  - Penyimpanan persisten lokal untuk bank soal editan guru dengan fallback storage yang aman di browser maupun test runner.
+- **Pengujian Otomatis (`tests/unit/exerciseParser.test.ts`)**:
+  - 11 skenario unit test tambahan untuk validasi target, alias properti, validasi struktur soal, parsing JSON single/batch, dan persistensi penyimpanan.
 - **Modul Domain Sesi Kelas (`src/features/classroom/`)**:
   - `types.ts`: Kontrak data `ClassSession`, `Participant`, `Exercise`, `ExerciseTarget`, `Submission`, dan `ClassroomEvent`.
   - `classroomHub.ts`: Hub komunikasi berbasis `BroadcastChannel` browser (`openpacket_classroom_bus`) dengan fallback storage in-memory/local storage, memungkinkan komunikasi multi-tab secara langsung tanpa backend server eksternal, plus generator simulasi peserta (*synthetic bot*).
