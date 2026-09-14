@@ -22,7 +22,7 @@ export interface Participant {
 }
 
 export type ExerciseTarget =
-  | { id: string; title: string; type: 'device_config'; deviceId: string; address: string; prefix?: number; subnetMask?: string }
+  | { id: string; title: string; type: 'device_config'; deviceId: string; address: string; prefix?: number; subnetMask?: string; gateway?: string }
   | { id: string; title: string; type: 'link_exists'; fromDeviceId: string; toDeviceId: string }
   | { id: string; title: string; type: 'reachability'; sourceDeviceId: string; destinationDeviceId: string }
   | { id: string; title: string; type: 'required_device_count'; deviceType: DeviceType; count: number }

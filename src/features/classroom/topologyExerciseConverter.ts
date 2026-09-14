@@ -67,6 +67,10 @@ export function convertTopologyToExercise(
   nodes.forEach((n) => {
     const label = n.data?.label || n.id || 'Perangkat';
     const ports = Array.isArray(n.data?.ports) ? n.data.ports : [];
+    const defaultGw =
+      typeof n.data?.defaultGateway === 'string' && n.data.defaultGateway.trim()
+        ? n.data.defaultGateway.trim()
+        : undefined;
 
     ports.forEach((p: any) => {
       if (p.ipAddress && typeof p.ipAddress === 'string' && p.ipAddress.trim()) {
@@ -78,11 +82,32 @@ export function convertTopologyToExercise(
           deviceId: label,
           address: p.ipAddress.trim(),
           subnetMask: mask,
+          gateway: defaultGw,
         });
 
         instructionsList.push(
-          `${step++}. Atur IP Address pada ${label} (${p.name || p.id}) menjadi ${p.ipAddress} dengan subnet mask ${mask}.`
+          `${step++}. Atur IP Address pada ${label} (${p.name || p.id}) menjadi ${p.ipAddress} (mask: ${mask})${defaultGw ? ` dan Default Gateway: ${defaultGw}` : ''}.`
         );
+      }
+
+      // Sub-interfaces (Router-on-a-Stick)
+      if (Array.isArray(p.subInterfaces)) {
+        p.subInterfaces.forEach((sub: any) => {
+          if (sub.ipAddress && typeof sub.ipAddress === 'string' && sub.ipAddress.trim()) {
+            const subMask = sub.subnetMask || '255.255.255.0';
+            targets.push({
+              id: `tgt-ip-${n.id}-${p.id || 'port'}-vlan-${sub.vlanId}`,
+              title: `Konfigurasi IP Sub-Interface ${label} (${p.name || p.id}.${sub.vlanId}): ${sub.ipAddress}`,
+              type: 'device_config',
+              deviceId: label,
+              address: sub.ipAddress.trim(),
+              subnetMask: subMask,
+            });
+            instructionsList.push(
+              `${step++}. Atur IP Sub-Interface VLAN ${sub.vlanId} pada ${label} (${p.name || p.id}.${sub.vlanId}) menjadi ${sub.ipAddress} (mask: ${subMask}).`
+            );
+          }
+        });
       }
     });
   });

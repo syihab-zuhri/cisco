@@ -416,7 +416,7 @@ export function ExerciseEditorModal({
 
                     {/* Field Detail Per Tipe Target */}
                     {tgt.type === 'device_config' && (
-                      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+                      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
                         <div className="flex flex-col gap-1">
                           <Label className="text-[10px] text-muted-foreground">Label Perangkat</Label>
                           <Input
@@ -441,6 +441,15 @@ export function ExerciseEditorModal({
                             value={tgt.subnetMask || ''}
                             onChange={(e) => handleUpdateTarget(idx, { subnetMask: e.target.value })}
                             placeholder="255.255.255.0"
+                            className="h-7 text-xs font-mono"
+                          />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <Label className="text-[10px] text-muted-foreground">Gateway (opsional)</Label>
+                          <Input
+                            value={tgt.gateway || ''}
+                            onChange={(e) => handleUpdateTarget(idx, { gateway: e.target.value })}
+                            placeholder="192.168.1.1"
                             className="h-7 text-xs font-mono"
                           />
                         </div>

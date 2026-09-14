@@ -38,6 +38,8 @@ import {
   saveExercises,
   parseExerciseJson,
   exportExercisesToJsonFile,
+  exportLabPackageFile,
+  parseSubmissionJson,
 } from '../../features/classroom/exerciseParser';
 import { convertTopologyToExercise } from '../../features/classroom/topologyExerciseConverter';
 import { ExerciseEditorModal } from './ExerciseEditorModal';
@@ -68,7 +70,7 @@ interface ClassroomModalProps {
 }
 
 export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
-  const { nodes, edges, loadTopology, pushToast } = useAppStore();
+  const { nodes, edges, loadTopology, pushToast, requestConfirm } = useAppStore();
 
   const [activeTab, setActiveTab] = useState<'teacher' | 'student'>('teacher');
 
@@ -90,6 +92,8 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [editingExercise, setEditingExercise] = useState<Exercise | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const oplabInputRef = useRef<HTMLInputElement>(null);
+  const opsubInputRef = useRef<HTMLInputElement>(null);
 
   // Student State
   const [studentClassCode, setStudentClassCode] = useState('');
@@ -381,35 +385,182 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
       setJoinedParticipant(participant);
       const activeEx = classroomHub.getActiveExercise();
       setActiveExercise(activeEx);
-      pushToast('success', `Selamat datang, ${participant.nickname}!`);
+      pushToast('success', `Selamat datang, ${participant.nickname}! Lembar kerja interaktif disematkan di pojok kanan kanvas.`);
+      onClose(); // Tutup modal agar siswa langsung melihat kanvas dan HUD
     }
+  };
+
+  // Handler Siswa: Buka Paket Tugas Mandiri (.oplab)
+  const handleImportOplab = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const content = ev.target?.result as string;
+      const res = parseExerciseJson(content);
+      if (!res.success || res.exercises.length === 0) {
+        pushToast('error', res.errors[0] || 'Gagal membaca berkas tugas .oplab');
+        return;
+      }
+
+      const exercise = res.exercises[0];
+      const nickname = studentNickname.trim() || 'Siswa Mandiri';
+      const code = 'MANDIRI';
+
+      // Pastikan ada sesi lokal
+      let sess = classroomHub.getSession();
+      if (!sess) {
+        sess = classroomHub.createClass('Praktikum Mandiri', code);
+      }
+      setSession(sess);
+
+      // Mulai soal dan join sebagai peserta
+      classroomHub.startExercise(code, exercise);
+      const participant = classroomHub.joinClass(code, nickname);
+      if (participant) {
+        setJoinedParticipant(participant);
+        setActiveExercise(exercise);
+        pushToast('success', `Paket tugas "${exercise.title}" berhasil dimuat! Lembar kerja aktif di kanvas.`);
+        onClose();
+      }
+    };
+    reader.readAsText(file);
+    if (e.target) e.target.value = '';
+  };
+
+  // Handler Guru: Impor Massal Berkas Jawaban Siswa (.opsub)
+  const handleImportOpsub = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    let successCount = 0;
+    const newParticipants = [...participants];
+    const newSubmissions = { ...submissions };
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      try {
+        const text = await file.text();
+        const res = parseSubmissionJson(text);
+        if (res.success && res.submission) {
+          const sub = res.submission;
+          let p = newParticipants.find(
+            (item) => item.id === sub.participantId || item.nickname === sub.nickname
+          );
+          if (!p) {
+            p = {
+              id: sub.participantId || `stu-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+              nickname: sub.nickname,
+              joinedAt: sub.submittedAt || Date.now(),
+              status: 'submitted',
+            };
+            newParticipants.push(p);
+          } else {
+            p.status = 'submitted';
+          }
+          newSubmissions[p.id] = { ...sub, participantId: p.id };
+          successCount++;
+        }
+      } catch (err) {
+        console.warn('Gagal membaca file submission:', err);
+      }
+    }
+
+    if (successCount > 0) {
+      setParticipants(newParticipants);
+      setSubmissions(newSubmissions);
+      classroomHub.saveParticipants(newParticipants);
+      classroomHub.saveSubmissions(newSubmissions);
+      pushToast('success', `${successCount} berkas lembar jawaban siswa (.opsub) berhasil diimpor dan dinilai!`);
+    } else {
+      pushToast('error', 'Tidak ada berkas lembar jawaban .opsub yang valid.');
+    }
+
+    if (e.target) e.target.value = '';
+  };
+
+  // Handler Guru: Ekspor Nilai Peserta ke CSV
+  const handleExportGradesCsv = () => {
+    if (participants.length === 0) {
+      pushToast('info', 'Belum ada data peserta untuk diekspor.');
+      return;
+    }
+
+    const headers = ['No', 'Nama Siswa', 'Status', 'Skor', 'Target Tercapai', 'Feedback Evaluasi', 'Waktu Submit'];
+    const rows = participants.map((p, idx) => {
+      const sub = submissions[p.id];
+      const score = sub ? sub.score : 0;
+      const status = sub ? sub.status : p.status;
+      const passedTargets = sub
+        ? `${sub.evaluation.checks.filter((c) => c.passed).length}/${sub.evaluation.checks.length}`
+        : '0';
+      const feedback = sub ? sub.evaluation.feedback.replace(/"/g, '""') : '-';
+      const time = sub ? new Date(sub.submittedAt).toLocaleTimeString() : '-';
+
+      return [
+        idx + 1,
+        `"${p.nickname.replace(/"/g, '""')}"`,
+        `"${status}"`,
+        score,
+        `"${passedTargets}"`,
+        `"${feedback}"`,
+        `"${time}"`,
+      ].join(',');
+    });
+
+    const csvContent = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `rekap-nilai-${session?.classCode || 'kelas'}-${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    pushToast('success', 'Rekap nilai kelas berhasil diunduh dalam format CSV.');
   };
 
   // Handler Siswa: Muat Starter Template ke Kanvas
   const handleLoadStarterTemplate = () => {
-    if (activeExercise?.starterTopology) {
-      loadTopology({
-        nodes: activeExercise.starterTopology.nodes,
-        edges: activeExercise.starterTopology.edges,
-      });
-      pushToast('success', 'Topologi soal dari guru berhasil dimuat ke kanvas Anda.');
-      onClose(); // Tutup modal agar siswa langsung melihat kanvas
-      return;
-    }
-
-    if (activeExercise?.starterTemplateId) {
-      const tpl = TOPOLOGY_TEMPLATES.find(
-        (t) => t.id === activeExercise.starterTemplateId
-      );
-      if (tpl) {
-        loadTopology({ nodes: tpl.nodes, edges: tpl.edges });
-        pushToast('success', `Template "${tpl.name}" diterapkan ke kanvas.`);
+    const doLoad = () => {
+      if (activeExercise?.starterTopology) {
+        loadTopology({
+          nodes: activeExercise.starterTopology.nodes,
+          edges: activeExercise.starterTopology.edges,
+        });
+        pushToast('success', 'Topologi soal dari guru berhasil dimuat ke kanvas Anda.');
         onClose(); // Tutup modal agar siswa langsung melihat kanvas
         return;
       }
-    }
 
-    pushToast('info', 'Soal ini dirancang untuk dirakit dari awal pada kanvas kosong.');
+      if (activeExercise?.starterTemplateId) {
+        const tpl = TOPOLOGY_TEMPLATES.find(
+          (t) => t.id === activeExercise.starterTemplateId
+        );
+        if (tpl) {
+          loadTopology({ nodes: tpl.nodes, edges: tpl.edges });
+          pushToast('success', `Template "${tpl.name}" diterapkan ke kanvas.`);
+          onClose(); // Tutup modal agar siswa langsung melihat kanvas
+          return;
+        }
+      }
+
+      pushToast('info', 'Soal ini dirancang untuk dirakit dari awal pada kanvas kosong.');
+    };
+
+    if (nodes.length > 0) {
+      requestConfirm({
+        title: 'Muat Topologi Soal?',
+        message: 'Memuat topologi ini akan menimpa seluruh node dan koneksi yang ada di kanvas Anda saat ini. Lanjutkan?',
+        confirmLabel: 'Muat Topologi',
+        onConfirm: doLoad,
+      });
+    } else {
+      doLoad();
+    }
   };
 
   // Handler Siswa: Submit Jawaban & Evaluasi Otomatis
@@ -507,6 +658,17 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
           >
             <Plus className="h-3 w-3" />
             Buat Soal
+          </Button>
+
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => exportLabPackageFile(selectedExercise)}
+            className="h-7 gap-1 text-[11px] text-amber-400 hover:text-amber-300"
+            title="Ekspor soal yang dipilih sebagai paket praktikum mandiri (.oplab) untuk dibagikan ke siswa"
+          >
+            <Download className="h-3 w-3" />
+            Paket (.oplab)
           </Button>
 
           <Button
@@ -814,9 +976,31 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
                           Daftar Peserta &amp; Penilaian Langsung ({participants.length})
                         </h4>
                       </div>
-                      <span className="text-[11px] text-muted-foreground">
-                        Terhubung via Realtime Channel
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => opsubInputRef.current?.click()}
+                          className="h-7 gap-1.5 text-xs text-sky-400 hover:text-sky-300"
+                          title="Impor berkas lembar jawaban siswa (.opsub) secara massal"
+                        >
+                          <Upload className="h-3.5 w-3.5" />
+                          Impor Jawaban (.opsub)
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={handleExportGradesCsv}
+                          disabled={participants.length === 0}
+                          className="h-7 gap-1.5 text-xs"
+                        >
+                          <Download className="h-3.5 w-3.5" />
+                          Ekspor Nilai (CSV)
+                        </Button>
+                        <span className="hidden text-[11px] text-muted-foreground sm:inline">
+                          Terhubung via Realtime Channel
+                        </span>
+                      </div>
                     </div>
 
                     {participants.length === 0 ? (
@@ -1000,7 +1184,18 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
                     </div>
                   </div>
 
-                  <div className="mt-5 flex justify-end">
+                  <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => oplabInputRef.current?.click()}
+                      className="gap-2 text-xs text-amber-400 hover:text-amber-300"
+                      title="Buka file paket praktikum tugas mandiri (.oplab atau .json)"
+                    >
+                      <Upload className="h-4 w-4" />
+                      Buka Tugas Mandiri (.oplab)
+                    </Button>
+
                     <Button onClick={handleJoinClass} className="gap-2">
                       <Users className="h-4 w-4" />
                       Masuk ke Ruang Kelas
@@ -1180,6 +1375,25 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
           ref={fileInputRef}
           onChange={handleFileUpload}
           accept=".json,application/json"
+          className="hidden"
+        />
+
+        {/* Hidden File Input for OPLAB import (Siswa) */}
+        <input
+          type="file"
+          ref={oplabInputRef}
+          onChange={handleImportOplab}
+          accept=".oplab,.json,application/json"
+          className="hidden"
+        />
+
+        {/* Hidden File Input for OPSUB import (Guru - multiple) */}
+        <input
+          type="file"
+          ref={opsubInputRef}
+          onChange={handleImportOpsub}
+          accept=".opsub,.json,application/json"
+          multiple
           className="hidden"
         />
 

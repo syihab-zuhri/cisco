@@ -26,6 +26,7 @@ describe('Classroom Feature Suite', () => {
       const p1 = classroomHub.joinClass('NET-1001', 'Ahmad Dani');
       expect(p1).toBeDefined();
       expect(p1?.nickname).toBe('Ahmad Dani');
+      expect(classroomHub.getCurrentParticipant()?.id).toBe(p1?.id);
 
       const participants = classroomHub.getParticipants();
       expect(participants.length).toBe(1);
@@ -155,6 +156,128 @@ describe('Classroom Feature Suite', () => {
       expect(evalResult.status).toBe('failed');
       expect(evalResult.score).toBe(0);
       expect(evalResult.checks.every((c) => !c.passed)).toBe(true);
+    });
+
+    it('memvalidasi defaultGateway pada device_config', async () => {
+      const pcWithGw: DeviceData = {
+        id: 'pc-1',
+        label: 'PC-1',
+        type: 'pc',
+        defaultGateway: '192.168.1.1',
+        ports: [{ id: 'fa0', name: 'FastEthernet 0', status: 'up', ipAddress: '192.168.1.10', subnetMask: '255.255.255.0', macAddress: '00:50:79:00:00:10' }],
+      };
+
+      const testExercise = {
+        id: 'ex-gw-test',
+        title: 'Uji Gateway',
+        instructions: 'Instruksi',
+        difficulty: 'Dasar' as const,
+        targets: [
+          {
+            id: 'tgt-gw-pc1',
+            title: 'Konfigurasi IP PC-1 dan Gateway',
+            type: 'device_config' as const,
+            deviceId: 'PC-1',
+            address: '192.168.1.10',
+            gateway: '192.168.1.1',
+          },
+        ],
+      };
+
+      // Kasus 1: Sesuai
+      const res1 = await evaluateExercise(testExercise, [pcWithGw], []);
+      expect(res1.score).toBe(100);
+      expect(res1.checks[0].passed).toBe(true);
+
+      // Kasus 2: Gateway salah
+      const pcWrongGw = { ...pcWithGw, defaultGateway: '192.168.1.254' };
+      const res2 = await evaluateExercise(testExercise, [pcWrongGw], []);
+      expect(res2.score).toBe(0);
+      expect(res2.checks[0].passed).toBe(false);
+      expect(res2.checks[0].reason).toContain('Default Gateway tidak sesuai');
+
+      // Kasus 3: Gateway belum diisi
+      const pcNoGw = { ...pcWithGw, defaultGateway: undefined };
+      const res3 = await evaluateExercise(testExercise, [pcNoGw], []);
+      expect(res3.score).toBe(0);
+      expect(res3.checks[0].passed).toBe(false);
+      expect(res3.checks[0].reason).toContain('belum diisi');
+    });
+
+    it('memvalidasi konfigurasi IP pada subInterfaces router-on-a-stick', async () => {
+      const routerStick: DeviceData = {
+        id: 'router-1',
+        label: 'Router-1',
+        type: 'router',
+        ports: [
+          {
+            id: 'g0/0',
+            name: 'GigabitEthernet 0/0',
+            status: 'up',
+            macAddress: '00:50:79:00:00:99',
+            subInterfaces: [
+              { vlanId: 10, ipAddress: '192.168.10.1', subnetMask: '255.255.255.0' },
+              { vlanId: 20, ipAddress: '192.168.20.1', subnetMask: '255.255.255.0' },
+            ],
+          },
+        ],
+      };
+
+      const testExercise = {
+        id: 'ex-subif-test',
+        title: 'Uji Sub-Interface',
+        instructions: 'Instruksi',
+        difficulty: 'Menengah' as const,
+        targets: [
+          {
+            id: 'tgt-subif-vlan10',
+            title: 'IP VLAN 10 Router',
+            type: 'device_config' as const,
+            deviceId: 'Router-1',
+            address: '192.168.10.1',
+          },
+        ],
+      };
+
+      const res = await evaluateExercise(testExercise, [routerStick], []);
+      expect(res.score).toBe(100);
+      expect(res.checks[0].passed).toBe(true);
+      expect(res.checks[0].reason).toContain('sub-interface VLAN 10');
+    });
+
+    it('memberikan petunjuk diagnostik yang jelas saat ping gagal karena interface down atau gateway kosong', async () => {
+      const pcDown: DeviceData = {
+        id: 'pc-1',
+        label: 'PC-1',
+        type: 'pc',
+        ports: [{ id: 'fa0', name: 'FastEthernet 0', status: 'down', ipAddress: '192.168.1.10', subnetMask: '255.255.255.0', macAddress: '00:50:79:00:00:11' }],
+      };
+      const pc2: DeviceData = {
+        id: 'pc-2',
+        label: 'PC-2',
+        type: 'pc',
+        ports: [{ id: 'fa0', name: 'FastEthernet 0', status: 'up', ipAddress: '192.168.2.20', subnetMask: '255.255.255.0', macAddress: '00:50:79:00:00:22' }],
+      };
+
+      const testExercise = {
+        id: 'ex-diag-test',
+        title: 'Uji Diagnostik',
+        instructions: 'Instruksi',
+        difficulty: 'Dasar' as const,
+        targets: [
+          {
+            id: 'tgt-ping',
+            title: 'Ping PC-1 ke PC-2',
+            type: 'reachability' as const,
+            sourceDeviceId: 'PC-1',
+            destinationDeviceId: 'PC-2',
+          },
+        ],
+      };
+
+      const res = await evaluateExercise(testExercise, [pcDown, pc2], []);
+      expect(res.checks[0].passed).toBe(false);
+      expect(res.checks[0].reason).toContain('DOWN (belum diaktifkan)');
     });
   });
 });

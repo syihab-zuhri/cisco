@@ -30,6 +30,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { classroomHub } from '@/features/classroom/classroomHub';
+import type { Participant, ClassSession } from '@/features/classroom/types';
 
 interface ToolbarProps {
   onTriggerPing: (sourceNodeId: string, targetIp: string) => void;
@@ -57,6 +59,20 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs, onOpenClassroom
 
   const [pingSource, setPingSource] = useState<string>('');
   const [pingTargetIp, setPingTargetIp] = useState<string>('');
+  const [currentParticipant, setCurrentParticipant] = useState<Participant | null>(() =>
+    classroomHub.getCurrentParticipant()
+  );
+  const [currentSession, setCurrentSession] = useState<ClassSession | null>(() =>
+    classroomHub.getSession()
+  );
+
+  useEffect(() => {
+    const unsub = classroomHub.subscribe(() => {
+      setCurrentParticipant(classroomHub.getCurrentParticipant());
+      setCurrentSession(classroomHub.getSession());
+    });
+    return unsub;
+  }, []);
 
   // M7: reset dropdown bila node sumber hilang dari topologi (ganti template/reset)
   useEffect(() => {
@@ -276,13 +292,25 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs, onOpenClassroom
           <TooltipTrigger
             render={
               <Button
-                variant="outline"
+                variant={currentParticipant || (currentSession && currentSession.status !== 'closed') ? 'secondary' : 'outline'}
                 size="sm"
                 onClick={onOpenClassroom}
-                className="text-primary hover:text-primary/90"
+                className={
+                  currentParticipant
+                    ? 'border-primary/50 bg-primary/15 text-primary font-bold hover:bg-primary/25'
+                    : currentSession && currentSession.status !== 'closed'
+                    ? 'border-emerald-700/50 bg-emerald-950/40 text-emerald-300 hover:bg-emerald-950/60'
+                    : 'text-primary hover:text-primary/90'
+                }
               >
                 <Users data-icon="inline-start" />
-                <span className="hidden font-semibold lg:inline">Kelas</span>
+                <span className="hidden font-semibold lg:inline">
+                  {currentParticipant
+                    ? `Kelas (${currentParticipant.nickname})`
+                    : currentSession && currentSession.status !== 'closed'
+                    ? `Kelas: ${currentSession.classCode}`
+                    : 'Kelas'}
+                </span>
               </Button>
             }
           />

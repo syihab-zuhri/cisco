@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   parseExerciseJson,
+  parseSubmissionJson,
   validateExercise,
   validateExerciseTarget,
   loadExercises,
@@ -199,6 +200,75 @@ describe('Exercise Parser & Validator Suite', () => {
       expect(res.success).toBe(false);
       expect(res.exercises.length).toBe(0);
       expect(res.errors[0]).toContain('Format JSON tidak valid');
+    });
+
+    it('mendukung parsing format paket praktikum mandiri (.oplab)', () => {
+      const oplabObj = {
+        format: 'openpacket_lab_package',
+        version: '1.0',
+        createdAt: 1789360000000,
+        exercise: {
+          id: 'ex-oplab-1',
+          title: 'Praktikum Oplab Mandiri',
+          instructions: 'Kerjakan secara mandiri',
+          difficulty: 'Menengah',
+          targets: [
+            {
+              id: 't-1',
+              title: 'IP Router',
+              type: 'device_config',
+              deviceId: 'Router-1',
+              address: '10.0.0.1',
+            },
+          ],
+        },
+      };
+
+      const res = parseExerciseJson(JSON.stringify(oplabObj));
+      expect(res.success).toBe(true);
+      expect(res.exercises.length).toBe(1);
+      expect(res.exercises[0].id).toBe('ex-oplab-1');
+      expect(res.exercises[0].title).toBe('Praktikum Oplab Mandiri');
+    });
+  });
+
+  describe('parseSubmissionJson (.opsub)', () => {
+    it('berhasil mem-parse format berkas lembar jawaban .opsub', () => {
+      const opsubData = {
+        format: 'openpacket_submission',
+        version: '1.0',
+        submittedAt: 1789361000000,
+        studentNickname: 'Budi Santoso',
+        exerciseId: 'ex-01',
+        submission: {
+          participantId: 'stu-budi-1',
+          nickname: 'Budi Santoso',
+          exerciseId: 'ex-01',
+          score: 100,
+          status: 'passed',
+          evaluation: {
+            status: 'passed',
+            score: 100,
+            checks: [],
+            feedback: 'Sempurna',
+            evaluatedAt: '12:00',
+          },
+          submittedAt: 1789361000000,
+        },
+        topology: { nodes: [], edges: [] },
+      };
+
+      const res = parseSubmissionJson(JSON.stringify(opsubData));
+      expect(res.success).toBe(true);
+      expect(res.submission?.nickname).toBe('Budi Santoso');
+      expect(res.submission?.score).toBe(100);
+      expect(res.topology).toBeDefined();
+    });
+
+    it('menolak format berkas invalid dengan error deskriptif', () => {
+      const res = parseSubmissionJson(JSON.stringify({ format: 'unknown_file' }));
+      expect(res.success).toBe(false);
+      expect(res.error).toContain('tidak dikenali');
     });
   });
 

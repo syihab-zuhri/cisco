@@ -1,4 +1,4 @@
-import type { Exercise, ExerciseTarget } from './types';
+import type { Exercise, ExerciseTarget, Submission } from './types';
 import { DEFAULT_EXERCISES } from './defaultExercises';
 import type { DeviceType } from '../../types/network';
 import { isTopologyJson, convertTopologyToExercise } from './topologyExerciseConverter';
@@ -9,6 +9,13 @@ export interface ParseExerciseResult {
   success: boolean;
   exercises: Exercise[];
   errors: string[];
+}
+
+export interface ParseSubmissionResult {
+  success: boolean;
+  submission?: Submission;
+  topology?: { nodes: any[]; edges: any[] };
+  error?: string;
 }
 
 /**
@@ -57,6 +64,7 @@ export function validateExerciseTarget(target: unknown, index: number): { target
           address: addr,
           subnetMask: typeof t.subnetMask === 'string' ? t.subnetMask : (typeof t.expectedMask === 'string' ? t.expectedMask : undefined),
           prefix: typeof t.prefix === 'number' ? t.prefix : undefined,
+          gateway: typeof t.gateway === 'string' ? t.gateway : (typeof t.defaultGateway === 'string' ? t.defaultGateway : undefined),
         },
       };
     }
@@ -188,6 +196,10 @@ export function validateExercise(item: unknown, itemIndex: number = 0): { exerci
       difficulty,
       targets: validTargets,
       starterTemplateId: typeof ex.starterTemplateId === 'string' ? ex.starterTemplateId : undefined,
+      starterTopology:
+        ex.starterTopology && typeof ex.starterTopology === 'object'
+          ? (ex.starterTopology as { nodes: any[]; edges: any[] })
+          : undefined,
     },
   };
 }
@@ -206,6 +218,17 @@ export function parseExerciseJson(rawJson: string): ParseExerciseResult {
       exercises: [],
       errors: [`Format JSON tidak valid: ${err instanceof Error ? err.message : String(err)}`],
     };
+  }
+
+  // 0. Deteksi format paket lab (.oplab)
+  if (
+    parsed &&
+    typeof parsed === 'object' &&
+    'format' in parsed &&
+    (parsed as Record<string, unknown>).format === 'openpacket_lab_package' &&
+    'exercise' in parsed
+  ) {
+    parsed = (parsed as Record<string, unknown>).exercise;
   }
 
   // 1. Deteksi Cerdas: Jika file berupa topologi OpenPacket (memiliki "nodes" dan "edges")
@@ -279,6 +302,104 @@ export function exportExercisesToJsonFile(data: Exercise | Exercise[], defaultFi
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
+}
+
+/**
+ * Ekspor paket praktikum mandiri (.oplab) berisi soal dan topologi awal
+ */
+export function exportLabPackageFile(exercise: Exercise, defaultFilename?: string): void {
+  const payload = {
+    format: 'openpacket_lab_package',
+    version: '1.0',
+    createdAt: Date.now(),
+    exercise,
+  };
+  const jsonStr = JSON.stringify(payload, null, 2);
+  const blob = new Blob([jsonStr], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+
+  const safeTitle = exercise.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 30);
+  const filename = defaultFilename || `paket-soal-${safeTitle || 'praktikum'}.oplab`;
+
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * Ekspor berkas lembar jawaban siswa (.opsub) untuk diserahkan ke guru
+ */
+export function exportSubmissionPackageFile(
+  submission: Submission,
+  topology: { nodes: any[]; edges: any[] },
+  defaultFilename?: string
+): void {
+  const payload = {
+    format: 'openpacket_submission',
+    version: '1.0',
+    submittedAt: Date.now(),
+    studentNickname: submission.nickname,
+    exerciseId: submission.exerciseId,
+    submission,
+    topology,
+  };
+  const jsonStr = JSON.stringify(payload, null, 2);
+  const blob = new Blob([jsonStr], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+
+  const safeName = submission.nickname.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 20);
+  const filename = defaultFilename || `jawaban-${safeName || 'siswa'}-${Date.now()}.opsub`;
+
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * Parse file berkas lembar jawaban siswa (.opsub)
+ */
+export function parseSubmissionJson(rawJson: string): ParseSubmissionResult {
+  try {
+    const data = JSON.parse(rawJson) as Record<string, unknown>;
+    if (!data || typeof data !== 'object') {
+      return { success: false, error: 'File lembar jawaban bukan objek JSON valid.' };
+    }
+
+    if (data.format === 'openpacket_submission' && data.submission) {
+      return {
+        success: true,
+        submission: data.submission as Submission,
+        topology: data.topology as { nodes: any[]; edges: any[] } | undefined,
+      };
+    }
+
+    // Toleransi jika user mengunggah raw submission object
+    if (data.participantId && data.nickname && typeof data.score === 'number' && data.evaluation) {
+      return {
+        success: true,
+        submission: data as unknown as Submission,
+        topology: data.topology as { nodes: any[]; edges: any[] } | undefined,
+      };
+    }
+
+    return {
+      success: false,
+      error: 'Format berkas tidak dikenali sebagai file lembar jawaban (.opsub) OpenPacket.',
+    };
+  } catch (err) {
+    return {
+      success: false,
+      error: `Gagal membaca file lembar jawaban: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
 }
 
 class InMemoryStorage {

@@ -1,5 +1,6 @@
 import { HeadlessSimulationEngine } from '../../engine/simulationEngine';
 import type { DeviceData, TopologyLink } from '../../types/network';
+import { isSameSubnet } from '../../utils/ipUtils';
 import type { Exercise, ExerciseCheck, ExerciseEvaluation, ExerciseTarget } from './types';
 
 function matchDevice(devices: DeviceData[], identifier: string): DeviceData | undefined {
@@ -63,28 +64,63 @@ async function evaluateTarget(
           reason: `Perangkat ${target.deviceId} tidak ditemukan di kanvas.`,
         };
       }
+
+      // Cari IP pada port fisik atau sub-interface (Router-on-a-Stick)
       const matchedPort = dev.ports.find((p) => p.ipAddress === target.address);
-      if (!matchedPort) {
+      const matchedSubIf = dev.ports
+        .flatMap((p) =>
+          p.subInterfaces ? p.subInterfaces.map((s) => ({ ...s, parentPort: p.name })) : []
+        )
+        .find((s) => s.ipAddress === target.address);
+
+      if (!matchedPort && !matchedSubIf) {
         return {
           targetId: target.id,
           title: target.title,
           passed: false,
-          reason: `IP ${target.address} belum dikonfigurasi pada port ${dev.label}.`,
+          reason: `IP ${target.address} belum dikonfigurasi pada port/sub-interface ${dev.label}.`,
         };
       }
-      if (target.subnetMask && matchedPort.subnetMask !== target.subnetMask) {
+
+      const activeMask = matchedPort?.subnetMask || matchedSubIf?.subnetMask;
+      if (target.subnetMask && activeMask !== target.subnetMask) {
         return {
           targetId: target.id,
           title: target.title,
           passed: false,
-          reason: `Subnet mask tidak cocok (diharapkan: ${target.subnetMask}, saat ini: ${matchedPort.subnetMask || '-'}).`,
+          reason: `Subnet mask tidak cocok (diharapkan: ${target.subnetMask}, saat ini: ${activeMask || '-'}).`,
         };
       }
+
+      // Validasi Default Gateway bila disyaratkan dalam target
+      if (target.gateway) {
+        if (!dev.defaultGateway) {
+          return {
+            targetId: target.id,
+            title: target.title,
+            passed: false,
+            reason: `Default Gateway pada ${dev.label} belum diisi (diharapkan: ${target.gateway}).`,
+          };
+        }
+        if (dev.defaultGateway !== target.gateway) {
+          return {
+            targetId: target.id,
+            title: target.title,
+            passed: false,
+            reason: `Default Gateway tidak sesuai pada ${dev.label} (diharapkan: ${target.gateway}, saat ini: ${dev.defaultGateway}).`,
+          };
+        }
+      }
+
+      const locationDesc = matchedSubIf
+        ? `sub-interface VLAN ${matchedSubIf.vlanId} (${matchedSubIf.parentPort})`
+        : `port ${dev.label}`;
+
       return {
         targetId: target.id,
         title: target.title,
         passed: true,
-        reason: `Konfigurasi IP ${target.address} pada ${dev.label} sesuai.`,
+        reason: `Konfigurasi IP ${target.address}${target.gateway ? ` & Gateway ${target.gateway}` : ''} pada ${locationDesc} sesuai.`,
       };
     }
 
@@ -122,11 +158,25 @@ async function evaluateTarget(
           targetId: target.id,
           title: target.title,
           passed: false,
-          reason: `Perangkat sumber atau tujuan tidak ditemukan di kanvas.`,
+          reason: `Perangkat sumber (${target.sourceDeviceId}) atau tujuan (${target.destinationDeviceId}) tidak ditemukan di kanvas.`,
         };
       }
-      const dstPort = dstDev.ports.find((p) => p.ipAddress && p.status === 'up');
-      if (!dstPort || !dstPort.ipAddress) {
+
+      // Cari IP aktif tujuan pada port fisik atau sub-interface
+      let dstIp = dstDev.ports.find((p) => p.ipAddress && p.status === 'up')?.ipAddress;
+      if (!dstIp) {
+        for (const p of dstDev.ports) {
+          if (p.status !== 'down' && p.subInterfaces && p.subInterfaces.length > 0) {
+            const sub = p.subInterfaces.find((s) => Boolean(s.ipAddress));
+            if (sub) {
+              dstIp = sub.ipAddress;
+              break;
+            }
+          }
+        }
+      }
+
+      if (!dstIp) {
         return {
           targetId: target.id,
           title: target.title,
@@ -136,16 +186,46 @@ async function evaluateTarget(
       }
 
       try {
-        const pingRes = await engine.executePing(srcDev.id, dstPort.ipAddress);
+        const pingRes = await engine.executePing(srcDev.id, dstIp);
         const passed = Boolean(pingRes.success && pingRes.received > 0);
-        const failMessage = (pingRes.outputLines && pingRes.outputLines[pingRes.outputLines.length - 1]) || 'Destination Host Unreachable';
+
+        if (passed) {
+          return {
+            targetId: target.id,
+            title: target.title,
+            passed: true,
+            reason: `Ping sukses dari ${srcDev.label} ke ${dstDev.label} (${pingRes.received}/${pingRes.sent} paket diterima).`,
+          };
+        }
+
+        // Analisa diagnostik edukatif untuk mempermudah siswa
+        let diagnosticHint = (pingRes.outputLines && pingRes.outputLines[pingRes.outputLines.length - 1]) || 'Destination Host Unreachable';
+
+        const srcPort = srcDev.ports.find((p) => p.ipAddress);
+        if (srcPort && srcPort.status === 'down') {
+          diagnosticHint = `Interface ${srcPort.name} pada ${srcDev.label} masih DOWN (belum diaktifkan).`;
+        } else if (srcPort && srcPort.subnetMask && !isSameSubnet(srcPort.ipAddress!, dstIp, srcPort.subnetMask)) {
+          if (!srcDev.defaultGateway) {
+            diagnosticHint = `${srcDev.label} dan ${dstDev.label} berada pada subnet berbeda, namun Default Gateway ${srcDev.label} belum diisi.`;
+          } else {
+            const gwExists = devices.some((d) =>
+              d.ports.some(
+                (p) =>
+                  p.ipAddress === srcDev.defaultGateway ||
+                  p.subInterfaces?.some((s) => s.ipAddress === srcDev.defaultGateway)
+              )
+            );
+            if (!gwExists) {
+              diagnosticHint = `Default Gateway ${srcDev.defaultGateway} pada ${srcDev.label} tidak ditemukan pada router mana pun di topologi.`;
+            }
+          }
+        }
+
         return {
           targetId: target.id,
           title: target.title,
-          passed,
-          reason: passed
-            ? `Ping sukses dari ${srcDev.label} ke ${dstDev.label} (${pingRes.received}/${pingRes.sent} paket diterima).`
-            : `Ping gagal dari ${srcDev.label} ke ${dstDev.label} (${dstPort.ipAddress}): ${failMessage}.`,
+          passed: false,
+          reason: `Ping gagal dari ${srcDev.label} ke ${dstDev.label} (${dstIp}): ${diagnosticHint}`,
         };
       } catch (err) {
         return {

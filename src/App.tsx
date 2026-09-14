@@ -4,6 +4,7 @@ import { Toolbar } from '@/components/toolbar/Toolbar';
 import { DevicePalette } from '@/components/palette/DevicePalette';
 import { TopologyCanvas } from '@/components/canvas/TopologyCanvas';
 import { PduInspectorDrawer } from '@/components/canvas/PduInspectorDrawer';
+import { ClassroomStudentHUD } from '@/components/canvas/ClassroomStudentHUD';
 import { EventLogPanel } from '@/components/log/EventLogPanel';
 import { DeviceConfigModal } from '@/components/modal/DeviceConfigModal';
 import { DeviceCliModal } from '@/components/terminal/DeviceCliModal';
@@ -43,6 +44,7 @@ export default function App() {
             <div className="relative flex-1">
               <TopologyCanvas />
               <PduInspectorDrawer />
+              <ClassroomStudentHUD />
             </div>
             <EventLogPanel />
           </main>

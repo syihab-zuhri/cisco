@@ -13,6 +13,7 @@ const STORAGE_KEY_SESSION = 'openpacket_class_session';
 const STORAGE_KEY_PARTICIPANTS = 'openpacket_class_participants';
 const STORAGE_KEY_SUBMISSIONS = 'openpacket_class_submissions';
 const STORAGE_KEY_ACTIVE_EXERCISE = 'openpacket_class_active_exercise';
+const STORAGE_KEY_CURRENT_PARTICIPANT = 'openpacket_current_participant';
 
 class InMemoryStorage {
   private store = new Map<string, string>();
@@ -235,6 +236,8 @@ class ClassroomHub {
       participant,
     });
 
+    this.setCurrentParticipant(participant);
+
     return participant;
   }
 
@@ -397,12 +400,51 @@ class ClassroomHub {
     getStorage().setItem(STORAGE_KEY_ACTIVE_EXERCISE, JSON.stringify(exercise));
   }
 
+  public getCurrentParticipant(): Participant | null {
+    try {
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        const raw = window.sessionStorage.getItem(STORAGE_KEY_CURRENT_PARTICIPANT);
+        if (raw) return JSON.parse(raw) as Participant;
+      }
+    } catch {
+      // Fallback
+    }
+    const mem = memoryStore.getItem(STORAGE_KEY_CURRENT_PARTICIPANT);
+    return mem ? (JSON.parse(mem) as Participant) : null;
+  }
+
+  public setCurrentParticipant(participant: Participant | null): void {
+    try {
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        if (participant) {
+          window.sessionStorage.setItem(
+            STORAGE_KEY_CURRENT_PARTICIPANT,
+            JSON.stringify(participant)
+          );
+        } else {
+          window.sessionStorage.removeItem(STORAGE_KEY_CURRENT_PARTICIPANT);
+        }
+      }
+    } catch {
+      // Fallback
+    }
+    if (participant) {
+      memoryStore.setItem(
+        STORAGE_KEY_CURRENT_PARTICIPANT,
+        JSON.stringify(participant)
+      );
+    } else {
+      memoryStore.removeItem(STORAGE_KEY_CURRENT_PARTICIPANT);
+    }
+  }
+
   public clearAll(): void {
     const storage = getStorage();
     storage.removeItem(STORAGE_KEY_SESSION);
     storage.removeItem(STORAGE_KEY_PARTICIPANTS);
     storage.removeItem(STORAGE_KEY_SUBMISSIONS);
     storage.removeItem(STORAGE_KEY_ACTIVE_EXERCISE);
+    this.setCurrentParticipant(null);
   }
 }
 

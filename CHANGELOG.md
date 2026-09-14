@@ -11,6 +11,32 @@
 
 ---
 
+## [2026-09-14] — Version 1.7.0 (Redesain UX Kelas: Canvas Student HUD, Diagnostik Gateway & Paket Mandiri .oplab)
+
+### Added
+- **Floating Canvas Student HUD (`src/components/canvas/ClassroomStudentHUD.tsx`)**:
+  - Menyelesaikan masalah *"The Modal Prison"*: setelah bergabung ke kelas atau membuka paket tugas, modal kelas otomatis tertutup dan digantikan oleh floating widget interaktif yang menempel di pojok kanan atas kanvas.
+  - Mode minimized (floating pill) dan expanded (kartu target transparan dengan backdrop blur) agar tidak menghalangi kanvas kerja siswa.
+  - Tombol **"Cek Mandiri (Self-Check)"**: memungkinkan siswa menguji konfigurasi topologi saat itu juga secara real-time tanpa mengirimkan nilai resmi ke guru.
+  - Tombol **"Kirim Jawaban (Submit)"**: mengevaluasi dan mengirim hasil pengerjaan ke guru via `BroadcastChannel` dengan selebrasi konfeti saat skor 100.
+  - Tombol **"Ekspor Lembar Jawaban (.opsub)"**: mengunduh berkas jawaban portabel lengkap dengan snapshot topologi pengerjaan.
+- **Dukungan Paket Tugas Praktikum Mandiri (.oplab) & Lembar Jawaban (.opsub)**:
+  - Format berkas mandiri `.oplab` untuk distribusi tugas tanpa ketergantungan koneksi realtime satu browser: guru dapat mengekspor paket soal dan siswa dapat mengimpornya langsung via tab Siswa (*Buka Tugas Mandiri*).
+  - Format berkas lembar jawaban `.opsub` dan fitur **"Impor Jawaban Siswa (.opsub)"** multi-file pada Mode Guru: guru dapat menilai puluhan berkas tugas siswa sekaligus secara instan.
+- **Ekspor Rekap Nilai Siswa ke CSV**:
+  - Tombol **"Ekspor Nilai (CSV)"** di Mode Guru yang mengunduh rekap lembar kerja siswa (No, Nama Siswa, Status, Skor, Target Tercapai, Feedback, Waktu Submit) yang siap disalin ke spreadsheet rapor guru.
+- **Penyempurnaan Mesin Evaluasi (`src/features/classroom/exerciseEvaluator.ts`)**:
+  - Pengecekan target `defaultGateway` pada perangkat host/PC.
+  - Pengecekan IP pada `subInterfaces` Router-on-a-Stick inter-VLAN.
+  - Petunjuk diagnostik edukatif saat ping gagal (interface DOWN, subnet mismatch tanpa gateway, atau gateway tidak ditemukan).
+- **Proteksi Penimpaan Kanvas**:
+  - Konfirmasi aman sebelum `loadTopology` menimpa kanvas aktif menggunakan `requestConfirm`.
+
+### Status Gate
+- 145 unit tests di Vitest (15 test files) 100% lulus, 0 error type-check (`tsc --noEmit`), bundling produksi Vite 8 berhasil bersih.
+
+---
+
 ## [2026-09-14] — Version 1.6.0 (Fitur Kelas, Impor Topologi Guru & In-App Editor)
 
 ### Added
