@@ -149,3 +149,20 @@ gantt
   - *Dependencies:* `TASK-P0-020`, `TASK-P0-021`
   - *References:* Seluruh dokumen blueprint
   - *Definition of Done:* Bab Metodologi Penelitian (arsitektur, model protokol RFC) dan Bab Hasil & Pembahasan (tabel komparasi & skor SUS) selesai disusun.
+
+---
+
+### Sprint 8: Classroom Sessions & Automated Exercise Evaluator (v1.6.0)
+- **`TASK-P0-023` [Effort: L] Modul Domain & Realtime Hub Sesi Kelas (`src/features/classroom/`)**
+  - *Status:* Completed (2026-09-14)
+  - *Dependencies:* `TASK-P0-013`
+  - *Definition of Done:* Pembuatan sesi kelas tanpa akun (`ClassSession`), kode kelas unik, hub komunikasi antar-tab via `BroadcastChannel` browser (`openpacket_classroom_bus`) dengan fallback memory/storage, serta generator simulasi siswa.
+- **`TASK-P0-024` [Effort: L] Automated Exercise Evaluator Berbasis Engine Simulasi**
+  - *Status:* Completed (2026-09-14)
+  - *Dependencies:* `TASK-P0-023`, `TASK-P0-007`
+  - *Definition of Done:* Mesin penilaian deterministik mengevaluasi konfigurasi IP, sambungan kabel, kuota perangkat, VLAN access/trunk, serta pengujian reachability ICMP via `HeadlessSimulationEngine` (skor 0–100 dan umpan balik detail).
+- **`TASK-P0-025` [Effort: M] Antarmuka Portal Kelas shadcn/ui (Mode Guru & Mode Siswa)**
+  - *Status:* Completed (2026-09-14)
+  - *Dependencies:* `TASK-P0-023`, `TASK-P0-024`
+  - *Definition of Done:* Komponen `ClassroomModal.tsx` dengan Base UI Lyra, kontrol guru (buka/kunci/tutup kelas, siarkan materi, live monitoring skor), dan antarmuka pengerjaan siswa (gabung, muat template, submit otomatis).
+

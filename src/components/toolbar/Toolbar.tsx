@@ -10,6 +10,7 @@ import {
   StepForward,
   ChevronLast,
   GraduationCap,
+  Users,
 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { pauseSimulation, resumeSimulation, simStepNext } from '../../hooks/useSimulationEngine';
@@ -34,9 +35,10 @@ interface ToolbarProps {
   onTriggerPing: (sourceNodeId: string, targetIp: string) => void;
   onOpenDocs: () => void;
   onOpenLabs: () => void;
+  onOpenClassroom: () => void;
 }
 
-export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs }: ToolbarProps) {
+export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs, onOpenClassroom }: ToolbarProps) {
   const {
     nodes,
     edges,
@@ -270,6 +272,23 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs }: ToolbarProps)
 
       {/* Persistence & Tools */}
       <div className="flex items-center gap-2">
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onOpenClassroom}
+                className="text-primary hover:text-primary/90"
+              >
+                <Users data-icon="inline-start" />
+                <span className="hidden font-semibold lg:inline">Kelas</span>
+              </Button>
+            }
+          />
+          <TooltipContent>Portal Kelas &amp; Praktikum</TooltipContent>
+        </Tooltip>
+
         <Tooltip>
           <TooltipTrigger
             render={

@@ -11,6 +11,27 @@
 
 ---
 
+## [2026-09-14] — Version 1.6.0 (Fitur Kelas & Evaluasi Latihan Otomatis)
+
+### Added
+- **Modul Domain Sesi Kelas (`src/features/classroom/`)**:
+  - `types.ts`: Kontrak data `ClassSession`, `Participant`, `Exercise`, `ExerciseTarget`, `Submission`, dan `ClassroomEvent`.
+  - `classroomHub.ts`: Hub komunikasi berbasis `BroadcastChannel` browser (`openpacket_classroom_bus`) dengan fallback storage in-memory/local storage, memungkinkan komunikasi multi-tab secara langsung tanpa backend server eksternal, plus generator simulasi peserta (*synthetic bot*).
+  - `exerciseEvaluator.ts`: Mesin penilaian otomatis deterministik yang menguji konfigurasi IP port, keterhubungan kabel fisik, batasan tipe perangkat, konfigurasi port VLAN, serta ketercapaian ICMP ping via `HeadlessSimulationEngine`.
+  - `defaultExercises.ts`: 4 paket materi latihan praktikum terstruktur (LAN Dasar & Subnetting, Router & Gateway Lintas Subnet, Segmentasi VLAN 10/20, Hotspot Wireless & Cloud).
+- **Antarmuka Pengguna Kelas (`src/components/modal/ClassroomModal.tsx`)**:
+  - **Mode Guru (Host)**: Pembuatan sesi kelas, penyiaran materi soal praktikum secara langsung, monitoring nilai & submission siswa secara live, penguncian sesi, serta penutupan kelas.
+  - **Mode Siswa (Peserta)**: Formulir bergabung menggunakan kode kelas, pembacaan tantangan latihan, tombol muat topologi awal ke kanvas, dan tombol kirim pengerjaan dengan umpan balik checklist evaluasi otomatis instan (skor 0–100).
+- **Integrasi Toolbar & Navigasi**:
+  - Tombol **"Kelas"** pada toolbar utama simulator dengan tooltip dan ikon `Users`.
+- **Pengujian Otomatis (`tests/unit/classroom.test.ts`)**:
+  - 7 skenario pengujian komprehensif untuk siklus hidup kelas (create, join, lock, close, submission) dan akurasi mesin evaluasi (skor sempurna 100, skor parsial, serta deteksi kegagalan).
+
+### Status Gate
+- 125 unit tests di Vitest (13 test files) 100% lulus, 0 error type-check (`tsc --noEmit`), bundling Vite 8 berhasil.
+
+---
+
 ## [2026-09-14] — Version 1.5.0 (Overhaul Komponen UI ke shadcn/ui Base-Lyra)
 
 ### Changed
