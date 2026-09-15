@@ -1,4 +1,4 @@
-# OpenPacket (cisco-pocket-op)
+~# OpenPacket (cisco-pocket-op)
 
 Simulator jaringan komputer edukatif yang ringan, 100% offline, dan gratis — alternatif Cisco Packet Tracer. Dibangun dengan React 19 + TypeScript + `@xyflow/react` (kanvas topologi), engine simulasi ARP/ICMP deterministik di Web Worker, dan dibungkus Tauri v2 untuk desktop Windows.
 

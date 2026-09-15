@@ -22,7 +22,10 @@ export function DeviceNode({ id, data, selected }: NodeProps) {
     setActiveConfigModalNodeId,
     setActiveCliModalNodeId,
     requestConfirm,
+    selectedNodeId,
   } = useAppStore();
+
+  const isSelected = selected || selectedNodeId === id;
 
   const getDeviceIcon = () => {
     switch (deviceData.type) {
@@ -50,7 +53,7 @@ export function DeviceNode({ id, data, selected }: NodeProps) {
   return (
     <div
       className={`group relative flex flex-col items-center rounded-xl border-2 bg-card p-3.5 shadow-xl transition-colors min-w-[150px] cursor-grab active:cursor-grabbing select-none ${
-        selected
+        isSelected
           ? 'border-primary shadow-primary/30 ring-2 ring-primary/20'
           : 'border-border hover:border-muted-foreground/50'
       }`}
@@ -58,7 +61,7 @@ export function DeviceNode({ id, data, selected }: NodeProps) {
       {/* Action floating buttons on hover / selected — otomatis muncul saat node disentuh/selected di mobile */}
       <div
         className={`nodrag nopan absolute -top-9 right-0 flex items-center gap-1.5 rounded-lg bg-popover p-1 border border-border shadow-lg z-30 transition-opacity duration-150 ${
-          selected
+          isSelected
             ? 'opacity-100 pointer-events-auto'
             : 'opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto'
         }`}

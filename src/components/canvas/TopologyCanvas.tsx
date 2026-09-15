@@ -10,7 +10,10 @@ import {
   useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { Terminal, Settings, Trash2, X } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { DeviceNode } from './DeviceNode';
 import { NetworkCableEdge } from './NetworkCableEdge';
 import { WirelessLinkEdge } from './WirelessLinkEdge';
@@ -52,9 +55,18 @@ export function TopologyCanvas() {
     onEdgesChange,
     connectPorts,
     associateWireless,
+    selectedNodeId,
     setSelectedNodeId,
+    setActiveConfigModalNodeId,
+    setActiveCliModalNodeId,
+    deleteNode,
+    requestConfirm,
     activePackets,
   } = useAppStore();
+
+  const selectedNode = nodes.find(
+    (n) => n.id === selectedNodeId && n.type === 'deviceNode'
+  );
 
   const handleConnect = (params: Connection) => {
     if (!params.source || !params.target || !params.sourceHandle || !params.targetHandle) {
@@ -145,6 +157,9 @@ export function TopologyCanvas() {
         elementsSelectable={true}
         connectionMode={ConnectionMode.Loose}
         onNodeClick={(_, node) => setSelectedNodeId(node.id)}
+        onNodeDoubleClick={(_, node) => {
+          if (node.type === 'deviceNode') setActiveConfigModalNodeId(node.id);
+        }}
         onPaneClick={() => setSelectedNodeId(null)}
         fitView
         snapToGrid
@@ -179,6 +194,72 @@ export function TopologyCanvas() {
           className="!hidden sm:!block !border-border !bg-popover"
         />
       </ReactFlow>
+
+      {/* Floating Action Bar untuk Perangkat Terpilih (Sangat mudah dijangkau di Mobile & Layar Sentuh) */}
+      {selectedNode && (
+        <div className="absolute bottom-12 sm:bottom-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 sm:gap-2 rounded-full border border-primary/50 bg-background/95 px-3 sm:px-4 py-1.5 sm:py-2 shadow-2xl backdrop-blur-md max-w-[95vw] animate-in fade-in zoom-in-95 duration-150">
+          <div className="flex items-center gap-1.5 pr-2 border-r border-border text-xs font-bold text-foreground shrink-0">
+            <span className="font-mono text-xs truncate max-w-[90px] sm:max-w-none">
+              {(selectedNode.data as any)?.label || 'Perangkat'}
+            </span>
+            <Badge variant="secondary" className="text-[10px] uppercase font-mono px-1 py-0 hidden xs:inline-flex">
+              {(selectedNode.data as any)?.type}
+            </Badge>
+          </div>
+
+          <Button
+            size="sm"
+            onClick={() => setActiveCliModalNodeId(selectedNode.id)}
+            className="h-7 gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-semibold shrink-0 shadow-xs touch-manipulation cursor-pointer"
+            title="Buka Terminal CLI Cisco"
+          >
+            <Terminal className="h-3.5 w-3.5" />
+            <span>Terminal CLI</span>
+          </Button>
+
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setActiveConfigModalNodeId(selectedNode.id)}
+            className="h-7 gap-1.5 text-xs shrink-0 touch-manipulation cursor-pointer"
+            title="Konfigurasi Perangkat (GUI)"
+          >
+            <Settings className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Konfigurasi</span>
+          </Button>
+
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              const devLabel = (selectedNode.data as any)?.label || 'perangkat';
+              requestConfirm({
+                title: 'Hapus Perangkat',
+                message: `Hapus ${devLabel}? Kabel yang terhubung juga akan dilepas.`,
+                confirmLabel: 'Hapus',
+                onConfirm: () => {
+                  deleteNode(selectedNode.id);
+                  setSelectedNodeId(null);
+                },
+              });
+            }}
+            className="h-7 w-7 p-0 text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 shrink-0 touch-manipulation cursor-pointer"
+            title="Hapus Perangkat"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setSelectedNodeId(null)}
+            className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground shrink-0 touch-manipulation cursor-pointer"
+            title="Tutup Bar"
+          >
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      )}
 
       {/* Packet In-Flight Indicators / Notification banner */}
       {activePackets.length > 0 && (
