@@ -218,6 +218,22 @@ gantt
   - *Dependencies:* `TASK-P0-029`, `TASK-P0-014`
   - *Definition of Done:* Normalisasi lebar floating HUD dan PDU Drawer (`w-[calc(100vw-1rem)]`), HUD mobile auto-minimized, serta adaptasi seluruh dialog modal (`DeviceConfig`, `CLI Terminal`, `Lab`, `Classroom`, `Documentation`) bebas horizontal overflow.
 
+---
+
+### Sprint 12: Realtime Multi-Device Relay & Multi-Exercise Dynamic Flow (v2.1.0)
+- **`TASK-P0-036` [Effort: L] Multi-Device Realtime Relay Server & Client Sync (`vite.config.ts`, `classroomHub.ts`)**
+  - *Status:* Completed (2026-09-15)
+  - *Dependencies:* `TASK-P0-027`, `TASK-P0-032`
+  - *Definition of Done:* Middleware in-memory relay pada `/api/classroom/event` dan `/api/classroom/state` untuk sinkronisasi antar perangkat fisik (Laptop, Tablet, HP); klien melakukan broadcast HTTP dan background polling berkala (`syncWithServer`); menyelesaikan isu "0 murid" saat diakses dari perangkat berbeda.
+- **`TASK-P0-037` [Effort: M] Zero-Exercise Start & Non-Destructive Class Update (`exerciseParser.ts`, `ClassroomModal.tsx`)**
+  - *Status:* Completed (2026-09-15)
+  - *Dependencies:* `TASK-P0-036`
+  - *Definition of Done:* Bank soal default kosong saat pertama kali masuk; guru dapat membuka kelas dengan 0 soal; tombol "Perbarui Soal Kelas" untuk menyiarkan soal baru tanpa menghapus lembar kerja atau skor pengerjaan siswa yang sudah ada.
+- **`TASK-P0-038` [Effort: M] Student Autonomous Multi-Exercise Navigation (`ClassroomStudentHUD.tsx`)**
+  - *Status:* Completed (2026-09-15)
+  - *Dependencies:* `TASK-P0-029`, `TASK-P0-037`
+  - *Definition of Done:* Siswa bebas memilih soal yang ingin dikerjakan melalui pill interaktif dan navigasi Previous/Next; status menunggu soal saat kelas dimulai tanpa soal.
+
 
 
 

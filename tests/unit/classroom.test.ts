@@ -386,5 +386,44 @@ describe('Classroom Feature Suite', () => {
       classroomHub.clearAll();
       expect(classroomHub.getLockedRole()).toBeNull();
     });
+
+    it('memastikan guru dapat membuka kelas tanpa soal (0 soal) dan bank soal awal default kosong', () => {
+      const session = classroomHub.createClass('Kelas Kosong Awal', 'NET-EMPTY', undefined, []);
+      expect(session.activeExercises).toEqual([]);
+      expect(session.activeExerciseId).toBeNull();
+      expect(classroomHub.getActiveExercises()).toEqual([]);
+      expect(classroomHub.getActiveExercise()).toBeNull();
+
+      // Siswa tetap dapat bergabung ke kelas tanpa error
+      const student = classroomHub.joinClass('NET-EMPTY', 'Siswa A');
+      expect(student).toBeDefined();
+      expect(classroomHub.getParticipants().length).toBe(1);
+    });
+
+    it('memperbarui paket soal kelas via updateClassExercises tanpa menghilangkan partisipan', () => {
+      const session = classroomHub.createClass('Kelas Dinamis', 'NET-DYN', undefined, []);
+      const student = classroomHub.joinClass('NET-DYN', 'Siswa B');
+      expect(student).toBeDefined();
+
+      const newExercises = [
+        {
+          id: 'ex-dyn-1',
+          title: 'Soal Praktikum 1',
+          instructions: 'Hubungkan PC ke Switch',
+          difficulty: 'Dasar' as const,
+          category: 'LAN' as const,
+          targets: [],
+        },
+      ];
+
+      classroomHub.updateClassExercises(session.classCode, newExercises);
+      expect(classroomHub.getActiveExercises().length).toBe(1);
+      expect(classroomHub.getActiveExercises()[0].id).toBe('ex-dyn-1');
+      expect(classroomHub.getActiveExercise()?.id).toBe('ex-dyn-1');
+
+      // Partisipan siswa tetap ada dan tidak hilang
+      expect(classroomHub.getParticipants().length).toBe(1);
+      expect(classroomHub.getParticipants()[0].nickname).toBe('Siswa B');
+    });
   });
 });

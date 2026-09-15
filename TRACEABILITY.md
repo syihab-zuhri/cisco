@@ -13,9 +13,9 @@
 
 ## 1. Traceability Summary
 
-- **Total Functional Requirements (P0):** 22
-- **Total Requirements Covered:** 22
-- **Coverage Rate:** **100% (22/22)**
+- **Total Functional Requirements (P0):** 24
+- **Total Requirements Covered:** 24
+- **Coverage Rate:** **100% (24/24)**
 - **Traceability Loop:** Closed (Setiap `FR` P0 tertaut ke minimal satu `PRD`, `Component`, `Task`, dan `Test`).
 
 ---
@@ -46,3 +46,5 @@
 | `FR-020` | Anti-Cheat Workspace Lock | `FEAT-CLASSROOM` | `DevicePalette` | `TopologyTemplate` | `TASK-P0-030` | `TEST-PALETTE-001` | Covered |
 | `FR-021` | Penyelarasan Layout Drawer & HUD | `FEAT-CANVAS` | `ClassroomStudentHUD` | N/A | `TASK-P0-029` | `AC-CANVAS-HUD` | Covered |
 | `FR-022` | Gerbang Peran & Single-Role Exclusivity | `FEAT-CLASSROOM` | `ClassroomModal` | `LockedRole` | `TASK-P0-032`, `033` | `TEST-CLASS-009` | Covered |
+| `FR-023` | Multi-Device Realtime Relay Sync | `FEAT-CLASSROOM` | `ViteRelay`, `ClassroomHub` | `ClassSession`, `Participant` | `TASK-P0-036` | `TEST-CLASS-010` | Covered |
+| `FR-024` | Dynamic Multi-Exercise & Zero-Exercise | `FEAT-CLASSROOM` | `ClassroomModal`, `StudentHUD` | `Exercise`, `Evaluation` | `TASK-P0-037`, `038` | `TEST-CLASS-011` | Covered |

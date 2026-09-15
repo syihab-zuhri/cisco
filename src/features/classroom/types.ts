@@ -72,7 +72,8 @@ export interface Submission {
 export type ClassroomEvent =
   | { type: 'CLASS_CREATED'; session: ClassSession }
   | { type: 'PARTICIPANT_JOINED'; classCode: string; participant: Participant }
-  | { type: 'EXERCISE_STARTED'; classCode: string; exercise: Exercise; exercises?: Exercise[] }
+  | { type: 'EXERCISE_STARTED'; classCode: string; exercise?: Exercise; exercises?: Exercise[] }
+  | { type: 'EXERCISES_UPDATED'; classCode: string; exercises: Exercise[] }
   | { type: 'SUBMISSION_RECEIVED'; classCode: string; submission: Submission }
   | { type: 'CLASS_STATUS_CHANGED'; classCode: string; status: SessionStatus }
   | { type: 'CLASS_CLOSED'; classCode: string }

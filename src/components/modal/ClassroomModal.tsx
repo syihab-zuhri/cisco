@@ -21,6 +21,8 @@ import {
   Pencil,
   Trash2,
   ArrowLeftRight,
+  RefreshCw,
+  BookOpen,
 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { TOPOLOGY_TEMPLATES } from '../../data/topologyTemplates';
@@ -118,9 +120,9 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [submissions, setSubmissions] = useState<Record<string, Submission>>({});
   const [exercises, setExercises] = useState<Exercise[]>(() => loadExercises());
-  const [selectedExercise, setSelectedExercise] = useState<Exercise>(() => {
+  const [selectedExercise, setSelectedExercise] = useState<Exercise | null>(() => {
     const list = loadExercises();
-    return list[0] || DEFAULT_EXERCISES[0];
+    return list[0] || null;
   });
   const [reviewedSubmission, setReviewedSubmission] = useState<Submission | null>(null);
   const [isCopiedCode, setIsCopiedCode] = useState(false);
@@ -150,8 +152,9 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
     return exList.length > 0 ? [exList[0].id] : [];
   });
 
-  // Inisialisasi state dari storage
+  // Inisialisasi state dari storage saat modal dibuka
   useEffect(() => {
+    if (!isOpen) return;
     const existingSession = classroomHub.getSession();
     if (existingSession) {
       setSession(existingSession);
@@ -166,8 +169,22 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
       if (activeList && activeList.length > 0) {
         setSelectedExamExerciseIds(activeList.map((x) => x.id));
       }
+      void classroomHub.syncWithServer(existingSession.classCode);
     }
-  }, []);
+  }, [isOpen]);
+
+  // Polling server relay setiap 2 detik selama modal aktif agar daftar peserta dan event sinkron lintas perangkat
+  useEffect(() => {
+    if (!isOpen) return;
+    const interval = setInterval(() => {
+      const cur = classroomHub.getSession();
+      if (cur && cur.classCode) {
+        void classroomHub.syncWithServer(cur.classCode);
+      }
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [isOpen]);
 
   // Langganan event realtime BroadcastChannel
   useEffect(() => {
@@ -189,9 +206,19 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
           });
           break;
 
+        case 'EXERCISES_UPDATED':
+          if (event.exercises.length > 0) {
+            setSelectedExercise(event.exercises[0]);
+            setActiveExercise(event.exercises[0]);
+            setSelectedExamExerciseIds(event.exercises.map((x) => x.id));
+          }
+          break;
+
         case 'EXERCISE_STARTED':
-          setSelectedExercise(event.exercise);
-          setActiveExercise(event.exercise);
+          if (event.exercise) {
+            setSelectedExercise(event.exercise);
+            setActiveExercise(event.exercise);
+          }
           setMyEvaluation(null);
           if (event.exercises && event.exercises.length > 0) {
             setSelectedExamExerciseIds(event.exercises.map((x) => x.id));
@@ -289,13 +316,26 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
     );
   };
 
+  // Handler Guru: Perbarui Soal Kelas (Kirim soal baru/tambahan tanpa mereset pengerjaan murid yang sudah berjalan)
+  const handleUpdateClassExercises = () => {
+    if (!session) return;
+    const chosen = exercises.filter((e) => selectedExamExerciseIds.includes(e.id));
+    if (chosen.length === 0) {
+      pushToast('warning', 'Pilih minimal 1 soal dari Bank Soal untuk disiarkan ke kelas.');
+      return;
+    }
+    classroomHub.updateClassExercises(session.classCode, chosen);
+    setSelectedExercise(chosen[0]);
+    pushToast(
+      'success',
+      `Paket soal kelas berhasil diperbarui (${chosen.length} soal aktif disiarkan). Pengerjaan siswa tetap aman.`
+    );
+  };
+
   // Handler Guru: Buat Kelas Baru
   const handleCreateClass = () => {
     const chosen = exercises.filter((e) => selectedExamExerciseIds.includes(e.id));
-    const toUse =
-      chosen.length > 0
-        ? chosen
-        : [selectedExercise || exercises[0] || DEFAULT_EXERCISES[0]];
+    const toUse = chosen.length > 0 ? chosen : [];
     const newSession = classroomHub.createClass(
       classTitle,
       customCode,
@@ -305,11 +345,21 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
     setSession(newSession);
     setParticipants([]);
     setSubmissions({});
-    setSelectedExercise(toUse[0]);
+    setSelectedExercise(toUse[0] || null);
     pushToast(
       'success',
-      `Kelas dibuka dengan ${toUse.length} soal ujian! Kode Kelas: ${newSession.classCode}.`
+      toUse.length > 0
+        ? `Kelas dibuka dengan ${toUse.length} soal aktif! Kode Kelas: ${newSession.classCode}.`
+        : `Kelas dibuka (0 soal aktif)! Kode Kelas: ${newSession.classCode}. Anda dapat menambahkan dan menyiarkan soal kapan saja.`
     );
+  };
+
+  const handleLoadDefaultExercises = () => {
+    saveExercises(DEFAULT_EXERCISES);
+    setExercises(DEFAULT_EXERCISES);
+    setSelectedExercise(DEFAULT_EXERCISES[0]);
+    setSelectedExamExerciseIds([DEFAULT_EXERCISES[0].id]);
+    pushToast('info', '3 contoh materi praktikum bawaan berhasil dimuat ke Bank Soal.');
   };
 
   // Handler Import File JSON Soal
@@ -404,16 +454,12 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
   // Handler Hapus Soal
   const handleDeleteExercise = (e: React.MouseEvent, exId: string) => {
     e.stopPropagation();
-    if (exercises.length <= 1) {
-      pushToast('warning', 'Minimal harus ada 1 soal latihan pada daftar.');
-      return;
-    }
     const updated = exercises.filter((x) => x.id !== exId);
     setExercises(updated);
     saveExercises(updated);
     setSelectedExamExerciseIds((prev) => prev.filter((id) => id !== exId));
-    if (selectedExercise.id === exId) {
-      setSelectedExercise(updated[0]);
+    if (selectedExercise?.id === exId) {
+      setSelectedExercise(updated[0] || null);
     }
     pushToast('info', 'Soal telah dihapus dari bank soal.');
   };
@@ -742,14 +788,26 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
             </Button>
 
             {isActiveSession && (
-              <Button
-                size="sm"
-                onClick={handleBroadcastExamPacket}
-                className="h-7 gap-1.5 text-xs bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
-              >
-                <Sparkles className="h-3.5 w-3.5 text-amber-300" />
-                Siarkan Paket Ujian ({selectedExamExerciseIds.length} Soal)
-              </Button>
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleUpdateClassExercises}
+                  className="h-7 gap-1.5 text-xs text-emerald-400 hover:text-emerald-300 border-emerald-500/40"
+                  title="Kirim pembaruan/penambahan soal ke siswa tanpa mereset lembar kerja atau nilai siswa"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  Perbarui Soal Kelas ({selectedExamExerciseIds.length})
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleBroadcastExamPacket}
+                  className="h-7 gap-1.5 text-xs bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
+                >
+                  <Sparkles className="h-3.5 w-3.5 text-amber-300" />
+                  Siarkan Paket Ujian ({selectedExamExerciseIds.length} Soal)
+                </Button>
+              </>
             )}
 
             <Button
@@ -787,8 +845,9 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
             <Button
               size="sm"
               variant="outline"
-              onClick={() => exportLabPackageFile(selectedExercise)}
-              className="h-7 gap-1 text-[11px] text-amber-400 hover:text-amber-300"
+              onClick={() => selectedExercise && exportLabPackageFile(selectedExercise)}
+              disabled={!selectedExercise}
+              className="h-7 gap-1 text-[11px] text-amber-400 hover:text-amber-300 disabled:opacity-40"
               title="Ekspor soal yang dipilih sebagai paket praktikum mandiri (.oplab) untuk dibagikan ke siswa"
             >
               <Download className="h-3 w-3" />
@@ -799,8 +858,9 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
               size="sm"
               variant="ghost"
               onClick={handleExportAllExercises}
+              disabled={exercises.length === 0}
               title="Unduh seluruh bank soal dalam file JSON"
-              className="h-7 gap-1 text-[11px] text-muted-foreground hover:text-foreground"
+              className="h-7 gap-1 text-[11px] text-muted-foreground hover:text-foreground disabled:opacity-40"
             >
               <Download className="h-3 w-3" />
               Ekspor Semua
@@ -808,7 +868,46 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {exercises.length === 0 ? (
+          <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border py-8 text-center bg-muted/20">
+            <BookOpen className="h-8 w-8 text-muted-foreground/60" />
+            <div className="flex flex-col gap-1 max-w-sm">
+              <span className="text-xs font-bold text-foreground">Bank Soal Masih Kosong</span>
+              <span className="text-[11px] text-muted-foreground">
+                Bank soal awal otomatis dikosongkan. Anda dapat membuat soal praktikum baru dari nol, mengonversi topologi dari kanvas, atau memuat paket latihan contoh bawaan.
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 mt-1">
+              <Button
+                size="sm"
+                onClick={handleCreateNewExercise}
+                className="h-7 gap-1.5 text-xs bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Buat Soal Baru
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleCreateFromCanvas}
+                className="h-7 gap-1.5 text-xs text-indigo-400 hover:text-indigo-300"
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                Ubah Dari Kanvas
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleLoadDefaultExercises}
+                className="h-7 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Muat Contoh Praktikum
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {exercises.map((ex, idx) => {
             const isSelectedForExam = selectedExamExerciseIds.includes(ex.id);
             const isCurrentlyRunning = isActiveSession && activeExamIds.includes(ex.id);
@@ -924,6 +1023,7 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
             );
           })}
         </div>
+      )}
       </Card>
     );
   };

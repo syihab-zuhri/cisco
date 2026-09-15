@@ -11,6 +11,27 @@
 
 ---
 
+## [2026-09-15] — Version 2.1.0 (Multi-Device Realtime Relay & Flexible Multi-Exercise Workflow)
+
+### Added & Improved
+- **Relay Kelas Realtime Multi-Perangkat (`vite.config.ts` & `classroomHub.ts`)**:
+  - Middleware relay in-memory pada `/api/classroom/event` dan `/api/classroom/state` yang memungkinkan sinkronisasi langsung antara laptop guru dan ponsel/tablet siswa di jaringan internet atau lab fisik.
+  - Penambahan sinkronisasi otomatis HTTP polling (`syncWithServer`) tiap 2 detik pada modal guru dan HUD siswa, menyelesaikan masalah "0 murid di panel guru" saat diakses dari perangkat berbeda.
+  - Fallback mulus ke `BroadcastChannel` dan offline package jika berjalan tanpa server.
+- **Bank Soal Awal Kosong & Fleksibilitas Buka Kelas (`exerciseParser.ts` & `ClassroomModal.tsx`)**:
+  - Bank soal awal kini default kosong (`[]`) saat pertama kali guru membuka mode kelas, memberi kebebasan penuh bagi guru untuk merancang kurikulum sendiri dari awal atau membuat dari kanvas.
+  - Guru dapat membuka kelas dengan 0 soal aktif.
+  - Menampilkan tampilan ramah "Bank Soal Masih Kosong" dengan opsi pembuatan soal baru, konversi kanvas, atau muat contoh praktikum bawaan.
+- **Tombol "Perbarui Soal Kelas" Tanpa Reset Pengerjaan Siswa (`ClassroomModal.tsx` & `ClassroomStudentHUD.tsx`)**:
+  - Penambahan tombol **"Perbarui Soal Kelas (N)"** pada katalog soal guru yang sedang aktif.
+  - Guru dapat menyiarkan materi/soal baru ke kelas yang sedang berlangsung tanpa menghapus lembar kerja, koneksi kanvas, atau riwayat nilai siswa yang sudah dikerjakan (`evaluationsByExerciseId` tetap utuh).
+- **Navigasi Bebas Multi-Soal di Siswa (`ClassroomStudentHUD.tsx`)**:
+  - Siswa kini bebas memilih soal mana yang ingin dikerjakan terlebih dahulu melalui tombol pill interaktif (`touch-manipulation pointer-events-auto active:scale-95`).
+  - Penambahan kontrol navigasi **Soal Sebelumnya (<)** dan **Soal Selanjutnya (>)** di bagian atas dan bawah kartu lembar kerja siswa, mempermudah akses pada layar sentuh ponsel dan tablet.
+  - Penambahan status HUD "Menunggu Soal dari Guru" saat kelas dibuka dengan 0 soal, sehingga siswa langsung mengetahui status koneksinya dan materi otomatis muncul saat disiarkan guru.
+
+---
+
 ## [2026-09-15] — Version 2.0.0 (Full Responsive Overhaul: Mobile, iPad & Desktop UX)
 
 ### Added & Improved

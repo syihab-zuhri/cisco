@@ -6,7 +6,6 @@ import type {
   ClassroomEvent,
   SessionStatus,
 } from './types';
-import { DEFAULT_EXERCISES } from './defaultExercises';
 
 const CHANNEL_NAME = 'openpacket_classroom_bus';
 const STORAGE_KEY_SESSION = 'openpacket_class_session';
@@ -86,6 +85,22 @@ class ClassroomHub {
         console.warn('[ClassroomHub] postMessage error:', err);
       }
     }
+    // Teruskan ke server relay HTTP jika ada koneksi
+    if (typeof window !== 'undefined' && window.fetch) {
+      try {
+        window
+          .fetch('/api/classroom/event', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(event),
+          })
+          .catch(() => {
+            // Fallback bila offline
+          });
+      } catch {
+        // Fallback
+      }
+    }
   }
 
   private handleIncomingEvent(event: ClassroomEvent): void {
@@ -95,6 +110,12 @@ class ClassroomHub {
         this.saveSession(event.session);
         this.saveParticipants([]);
         this.saveSubmissions({});
+        if (event.session?.activeExercises) {
+          this.saveActiveExercises(event.session.activeExercises);
+          if (event.session.activeExercises[0]) {
+            this.saveActiveExercise(event.session.activeExercises[0]);
+          }
+        }
         break;
 
       case 'PARTICIPANT_JOINED': {
@@ -105,11 +126,34 @@ class ClassroomHub {
         break;
       }
 
+      case 'EXERCISES_UPDATED': {
+        const session = this.getSession();
+        if (session && session.classCode === event.classCode) {
+          session.activeExercises = event.exercises;
+          if (!session.activeExerciseId && event.exercises.length > 0) {
+            session.activeExerciseId = event.exercises[0].id;
+          }
+          this.saveSession(session);
+        }
+        if (event.exercises && event.exercises.length > 0) {
+          this.saveActiveExercises(event.exercises);
+          if (!this.getActiveExercise()) {
+            this.saveActiveExercise(event.exercises[0]);
+          }
+        }
+        break;
+      }
+
       case 'EXERCISE_STARTED':
-        this.saveActiveExercise(event.exercise);
+        if (event.exercise) {
+          this.saveActiveExercise(event.exercise);
+        }
         if (event.exercises && Array.isArray(event.exercises) && event.exercises.length > 0) {
           this.saveActiveExercises(event.exercises);
-        } else {
+          if (!event.exercise) {
+            this.saveActiveExercise(event.exercises[0]);
+          }
+        } else if (event.exercise) {
           this.saveActiveExercises([event.exercise]);
         }
         break;
@@ -191,6 +235,78 @@ class ClassroomHub {
 
   // --- API Methods ---
 
+  public async syncWithServer(classCode?: string): Promise<boolean> {
+    const code = (classCode || this.getSession()?.classCode || '').trim().toUpperCase();
+    if (!code || typeof window === 'undefined' || !window.fetch) return false;
+
+    try {
+      const resp = await window.fetch(`/api/classroom/state?code=${encodeURIComponent(code)}`);
+      if (!resp.ok) return false;
+      const data = await resp.json();
+      if (!data.success) return false;
+
+      let changed = false;
+      if (data.session) {
+        const curSess = this.getSession();
+        if (!curSess || JSON.stringify(curSess) !== JSON.stringify(data.session)) {
+          this.saveSession(data.session);
+          changed = true;
+        }
+      }
+      if (Array.isArray(data.participants)) {
+        const current = this.getParticipants();
+        if (data.participants.length !== current.length || JSON.stringify(data.participants) !== JSON.stringify(current)) {
+          this.saveParticipants(data.participants);
+          changed = true;
+        }
+      }
+      if (data.submissions && Object.keys(data.submissions).length > 0) {
+        const curSubs = this.getSubmissions();
+        if (JSON.stringify(curSubs) !== JSON.stringify(data.submissions)) {
+          this.saveSubmissions(data.submissions);
+          changed = true;
+        }
+      }
+      if (Array.isArray(data.activeExercises)) {
+        const curEx = this.getActiveExercises();
+        if (data.activeExercises.length !== curEx.length || JSON.stringify(data.activeExercises) !== JSON.stringify(curEx)) {
+          this.saveActiveExercises(data.activeExercises);
+          if (data.activeExercise) {
+            this.saveActiveExercise(data.activeExercise);
+          } else if (data.activeExercises.length > 0) {
+            this.saveActiveExercise(data.activeExercises[0]);
+          }
+          changed = true;
+        }
+      }
+
+      if (changed) {
+        queueMicrotask(() => {
+          const syncEvent: ClassroomEvent = {
+            type: 'SYNC_RESPONSE',
+            classCode: code,
+            session: this.getSession()!,
+            participants: this.getParticipants(),
+            submissions: this.getSubmissions(),
+            activeExercise: this.getActiveExercise(),
+            activeExercises: this.getActiveExercises(),
+          };
+          this.listeners.forEach((fn) => {
+            try {
+              fn(syncEvent);
+            } catch (e) {
+              console.error(e);
+            }
+          });
+        });
+      }
+
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   public createClass(
     title: string,
     customCode?: string,
@@ -203,7 +319,7 @@ class ClassroomHub {
     const exercisesList: Exercise[] =
       initialExercises && initialExercises.length > 0
         ? JSON.parse(JSON.stringify(initialExercises))
-        : [DEFAULT_EXERCISES[0]];
+        : [];
 
     const session: ClassSession = {
       id: `cls-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -211,7 +327,7 @@ class ClassroomHub {
       title: title.trim() || 'Kelas Jaringan Komputer',
       status: 'open',
       hostToken: hostToken || `token-${Math.random().toString(36).slice(2, 10)}`,
-      activeExerciseId: exercisesList[0].id,
+      activeExerciseId: exercisesList.length > 0 ? exercisesList[0].id : null,
       activeExercises: exercisesList,
       createdAt: Date.now(),
     };
@@ -219,27 +335,61 @@ class ClassroomHub {
     this.saveSession(session);
     this.saveParticipants([]);
     this.saveSubmissions({});
-    this.saveActiveExercise(exercisesList[0]);
+    if (exercisesList.length > 0) {
+      this.saveActiveExercise(exercisesList[0]);
+    } else {
+      const storage = getStorage();
+      storage.removeItem(STORAGE_KEY_ACTIVE_EXERCISE);
+    }
     this.saveActiveExercises(exercisesList);
 
     this.broadcast({ type: 'CLASS_CREATED', session });
-    this.broadcast({
-      type: 'EXERCISE_STARTED',
-      classCode: code,
-      exercise: exercisesList[0],
-      exercises: exercisesList,
-    });
+    if (exercisesList.length > 0) {
+      this.broadcast({
+        type: 'EXERCISE_STARTED',
+        classCode: code,
+        exercise: exercisesList[0],
+        exercises: exercisesList,
+      });
+    }
 
     return session;
   }
 
-  public joinClass(classCode: string, nickname: string): Participant | null {
-    const session = this.getSession();
+  public updateClassExercises(classCode: string, exercises: Exercise[]): void {
     const cleanCode = classCode.trim().toUpperCase();
+    const frozenList: Exercise[] = JSON.parse(JSON.stringify(exercises));
+    const session = this.getSession();
+    if (session && session.classCode === cleanCode) {
+      session.activeExercises = frozenList;
+      if (!session.activeExerciseId && frozenList.length > 0) {
+        session.activeExerciseId = frozenList[0].id;
+      }
+      this.saveSession(session);
+    }
+    if (frozenList.length > 0) {
+      this.saveActiveExercise(frozenList[0]);
+    } else {
+      const storage = getStorage();
+      storage.removeItem(STORAGE_KEY_ACTIVE_EXERCISE);
+    }
+    this.saveActiveExercises(frozenList);
+
+    this.broadcast({
+      type: 'EXERCISES_UPDATED',
+      classCode: cleanCode,
+      exercises: frozenList,
+    });
+  }
+
+  public joinClass(classCode: string, nickname: string): Participant | null {
+    const cleanCode = classCode.trim().toUpperCase();
+    const session = this.getSession();
 
     if (!session || session.classCode !== cleanCode) {
       // Minta sync dari host jika session belum ada di tab ini
       this.broadcast({ type: 'SYNC_REQUEST', classCode: cleanCode });
+      void this.syncWithServer(cleanCode);
     }
 
     const participant: Participant = {
@@ -374,9 +524,9 @@ class ClassroomHub {
   public getActiveExercise(): Exercise | null {
     try {
       const raw = getStorage().getItem(STORAGE_KEY_ACTIVE_EXERCISE);
-      return raw ? (JSON.parse(raw) as Exercise) : DEFAULT_EXERCISES[0];
+      return raw ? (JSON.parse(raw) as Exercise) : null;
     } catch {
-      return DEFAULT_EXERCISES[0];
+      return null;
     }
   }
 
@@ -393,13 +543,13 @@ class ClassroomHub {
       const raw = getStorage().getItem(STORAGE_KEY_ACTIVE_EXERCISES);
       if (raw) {
         const list = JSON.parse(raw);
-        if (Array.isArray(list) && list.length > 0) return list as Exercise[];
+        if (Array.isArray(list)) return list as Exercise[];
       }
     } catch {
       // Fallback
     }
     const single = this.getActiveExercise();
-    return single ? [single] : [DEFAULT_EXERCISES[0]];
+    return single ? [single] : [];
   }
 
   public saveActiveExercises(exercises: Exercise[]): void {

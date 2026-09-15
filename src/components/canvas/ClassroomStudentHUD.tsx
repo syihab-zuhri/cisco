@@ -7,10 +7,13 @@ import {
   Play,
   ChevronDown,
   ChevronUp,
+  ChevronLeft,
+  ChevronRight,
   LogOut,
   CheckCheck,
   AlertCircle,
   Download,
+  Clock,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { useAppStore } from '../../store/useAppStore';
@@ -91,9 +94,25 @@ export function ClassroomStudentHUD() {
     const unsub = classroomHub.subscribe((event) => {
       switch (event.type) {
         case 'CLASS_CREATED':
-        case 'SYNC_RESPONSE':
           setSession(classroomHub.getSession());
           setActiveExercises(classroomHub.getActiveExercises());
+          break;
+
+        case 'SYNC_RESPONSE':
+          setSession(event.session);
+          if (event.activeExercises) {
+            setActiveExercises(event.activeExercises);
+          }
+          break;
+
+        case 'EXERCISES_UPDATED':
+          if (event.exercises && event.exercises.length > 0) {
+            setActiveExercises(event.exercises);
+            pushToast(
+              'info',
+              `Guru memperbarui paket soal (${event.exercises.length} soal aktif). Pengerjaan Anda tetap aman tersimpan.`
+            );
+          }
           break;
 
         case 'EXERCISE_STARTED':
@@ -109,7 +128,7 @@ export function ClassroomStudentHUD() {
             'info',
             event.exercises && event.exercises.length > 1
               ? `Paket ujian baru dimulai (${event.exercises.length} soal).`
-              : `Materi baru dimulai: "${event.exercise.title}"`
+              : `Materi baru dimulai: "${event.exercise?.title || 'Praktikum'}"`
           );
           break;
 
@@ -133,17 +152,25 @@ export function ClassroomStudentHUD() {
     };
   }, [session, handleLeaveClass, pushToast]);
 
-  // Pantau perubahan local participant
+  // Pantau perubahan participant lokal dan sinkronkan dengan server secara berkala
   useEffect(() => {
     const interval = setInterval(() => {
       const current = classroomHub.getCurrentParticipant();
       if (current?.id !== participant?.id) {
         setParticipant(current);
       }
-    }, 1000);
+      const curSess = classroomHub.getSession();
+      if (curSess && curSess.classCode) {
+        void classroomHub.syncWithServer(curSess.classCode);
+        const latest = classroomHub.getActiveExercises();
+        if (latest && latest.length !== activeExercises.length) {
+          setActiveExercises(latest);
+        }
+      }
+    }, 2000);
 
     return () => clearInterval(interval);
-  }, [participant]);
+  }, [participant, activeExercises.length]);
 
   // Evaluasi topologi kanvas untuk satu soal
   const runEvaluationForExercise = async (
@@ -358,7 +385,7 @@ export function ClassroomStudentHUD() {
   };
 
   // Jika siswa belum bergabung, jangan tampilkan HUD
-  if (!participant || !activeExercise) {
+  if (!participant) {
     return null;
   }
 
@@ -366,6 +393,50 @@ export function ClassroomStudentHUD() {
   const positionClass = inspectorOpen
     ? 'right-2 sm:right-4 md:right-[336px]'
     : 'right-2 sm:right-4';
+
+  // Jika siswa sudah terhubung tetapi belum ada soal yang disiarkan oleh guru
+  if (!activeExercise || activeExercises.length === 0) {
+    return (
+      <Card
+        className={cn(
+          'absolute top-3 z-30 flex flex-col border border-primary/40 bg-background/95 shadow-2xl backdrop-blur transition-all duration-200 w-[calc(100vw-1rem)] sm:w-[380px] max-w-[380px]',
+          positionClass
+        )}
+      >
+        <div className="flex items-center justify-between border-b bg-muted/40 px-3.5 py-2.5">
+          <div className="flex items-center gap-2">
+            <GraduationCap className="h-4 w-4 text-primary" />
+            <div className="flex flex-col">
+              <span className="font-mono text-xs font-bold text-foreground">
+                {session?.classCode || 'KELAS'}
+              </span>
+              <span className="text-[10px] text-muted-foreground">
+                {participant.nickname} • Terhubung
+              </span>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => handleLeaveClass(true)}
+            className="h-7 px-2 text-xs text-rose-400 hover:bg-rose-500/10 hover:text-rose-300"
+          >
+            <LogOut className="h-3.5 w-3.5 mr-1" />
+            Keluar
+          </Button>
+        </div>
+        <div className="flex flex-col items-center justify-center p-6 text-center gap-3">
+          <Clock className="h-8 w-8 text-amber-400 animate-pulse" />
+          <div className="flex flex-col gap-1">
+            <h4 className="text-xs font-bold text-foreground">Menunggu Soal dari Guru</h4>
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              Anda telah terhubung ke ruang kelas. Begitu guru menyiarkan materi ujian atau latihan, lembar instruksi dan target praktikum akan otomatis muncul di sini.
+            </p>
+          </div>
+        </div>
+      </Card>
+    );
+  }
 
   // Tampilan Minimized (Floating Pill)
   if (isMinimized) {
@@ -479,9 +550,12 @@ export function ClassroomStudentHUD() {
               <button
                 key={ex.id}
                 type="button"
-                onClick={() => setSelectedExerciseIndex(idx)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedExerciseIndex(idx);
+                }}
                 className={cn(
-                  'flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-all shrink-0 cursor-pointer select-none border',
+                  'flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-all shrink-0 cursor-pointer select-none border touch-manipulation pointer-events-auto active:scale-95',
                   isSelected
                     ? 'border-primary bg-primary text-primary-foreground shadow-xs font-semibold'
                     : 'border-border/60 bg-background/80 text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -519,9 +593,37 @@ export function ClassroomStudentHUD() {
           <div className="flex items-center justify-between gap-1">
             <h3 className="font-bold text-foreground line-clamp-1">{activeExercise?.title}</h3>
             {activeExercises.length > 1 && (
-              <Badge variant="secondary" className="text-[10px] font-mono shrink-0">
-                {selectedExerciseIndex + 1}/{activeExercises.length}
-              </Badge>
+              <div className="flex items-center gap-1 shrink-0">
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  type="button"
+                  onClick={() => setSelectedExerciseIndex((prev) => Math.max(0, prev - 1))}
+                  disabled={selectedExerciseIndex === 0}
+                  className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground disabled:opacity-30 touch-manipulation"
+                  title="Soal Sebelumnya"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </Button>
+                <Badge variant="secondary" className="text-[10px] font-mono px-1.5 py-0">
+                  {selectedExerciseIndex + 1}/{activeExercises.length}
+                </Badge>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  type="button"
+                  onClick={() =>
+                    setSelectedExerciseIndex((prev) =>
+                      Math.min(activeExercises.length - 1, prev + 1)
+                    )
+                  }
+                  disabled={selectedExerciseIndex === activeExercises.length - 1}
+                  className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground disabled:opacity-30 touch-manipulation"
+                  title="Soal Selanjutnya"
+                >
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </Button>
+              </div>
             )}
           </div>
           <p className="text-[11px] leading-relaxed text-muted-foreground">
@@ -676,6 +778,36 @@ export function ClassroomStudentHUD() {
           <Download className="h-3 w-3" />
           Ekspor Lembar Jawaban (.opsub)
         </Button>
+
+        {activeExercises.length > 1 && (
+          <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-1 border-t border-border/50">
+            <button
+              type="button"
+              onClick={() => setSelectedExerciseIndex((prev) => Math.max(0, prev - 1))}
+              disabled={selectedExerciseIndex === 0}
+              className="flex items-center gap-1 hover:text-foreground disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed touch-manipulation active:scale-95"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+              Soal Sebelumnya
+            </button>
+            <span className="font-mono text-[10px] text-primary font-semibold">
+              {selectedExerciseIndex + 1} dari {activeExercises.length}
+            </span>
+            <button
+              type="button"
+              onClick={() =>
+                setSelectedExerciseIndex((prev) =>
+                  Math.min(activeExercises.length - 1, prev + 1)
+                )
+              }
+              disabled={selectedExerciseIndex === activeExercises.length - 1}
+              className="flex items-center gap-1 hover:text-foreground disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed touch-manipulation active:scale-95"
+            >
+              Soal Selanjutnya
+              <ChevronRight className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
       </div>
     </Card>
   );

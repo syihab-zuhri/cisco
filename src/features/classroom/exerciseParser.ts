@@ -1,5 +1,4 @@
 import type { Exercise, ExerciseTarget, Submission } from './types';
-import { DEFAULT_EXERCISES } from './defaultExercises';
 import type { DeviceType } from '../../types/network';
 import { isTopologyJson, convertTopologyToExercise } from './topologyExerciseConverter';
 
@@ -442,14 +441,14 @@ export function loadExercises(): Exercise[] {
     const raw = getStorage().getItem(STORAGE_KEY_EXERCISES);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
+      if (Array.isArray(parsed)) {
         return parsed as Exercise[];
       }
     }
   } catch (err) {
     console.warn('[ExerciseParser] Gagal membaca storage soal:', err);
   }
-  return DEFAULT_EXERCISES;
+  return [];
 }
 
 export function saveExercises(list: Exercise[]): void {
