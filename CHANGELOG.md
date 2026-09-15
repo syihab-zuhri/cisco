@@ -11,6 +11,23 @@
 
 ---
 
+## [2026-09-15] — Version 2.2.0 (Mobile Terminal Accessibility, Clean IP Starter Topology & Exam Self-Check Toggle)
+
+### Added & Improved
+- **Akses Terminal Cisco CLI di Mobile & Perangkat Sentuh (`DeviceNode.tsx`, `DeviceConfigModal.tsx`, `DeviceCliModal.tsx`)**:
+  - Tombol aksi melayang (`Settings`, `Terminal CLI`, `Hapus`) kini otomatis tampil aktif (`opacity-100 pointer-events-auto`) saat perangkat disentuh atau berstatus `selected` pada kanvas mobile.
+  - Penambahan tombol **`[>_ Terminal CLI]`** langsung di header dan footer dialog konfigurasi perangkat (`DeviceConfigModal`), memungkinkan pengguna mobile mengakses terminal hanya dengan 1 ketukan.
+  - Penyesuaian modal terminal CLI: input otomatis fokus saat area terminal disentuh (`cursor-text`), penonaktifan auto-kapitalisasi keyboard HP (`autoCapitalize="none" autoCorrect="off"`), dan penyesuaian tinggi viewport (`h-[85vh]`).
+- **Pembersihan IP Otomatis pada Starter Topology Siswa (`topologyExerciseConverter.ts` & `ClassroomStudentHUD.tsx`)**:
+  - Saat siswa memuat topologi soal guru ke kanvas, sistem mempertahankan tata letak perangkat dan koneksi kabel fisik tetapi secara otomatis membersihkan seluruh alamat IP (`ipAddress`, `subnetMask`, `defaultGateway`, `subInterfaces.ipAddress`, dan static routes).
+  - Siswa menerima perangkat murni dalam kondisi kosong (belum dikonfigurasi) sehingga dapat mempraktikkan pengisian IP secara mandiri sesuai panduan soal.
+- **Fitur Guru: Kontrol Hak Akses Cek Mandiri Siswa (`types.ts`, `classroomHub.ts`, `ClassroomModal.tsx`, `ClassroomStudentHUD.tsx`)**:
+  - Penambahan pengaturan `allowSelfCheck: boolean` pada `ClassSession` beserta event `CLASS_SETTINGS_CHANGED` dan relay HTTP.
+  - Dashboard guru kini dilengkapi tombol toggle: **`[Cek Mandiri: Aktif]`** (latihan bebas) dan **`[Cek Mandiri: Nonaktif (Ujian)]`** (mode ujian ketat).
+  - Saat dinonaktifkan oleh guru, tombol Cek Mandiri pada HUD siswa terkunci dengan badge peringatan agar siswa fokus menyelesaikan konfigurasi sebelum melakukan submit resmi.
+
+---
+
 ## [2026-09-15] — Version 2.1.0 (Multi-Device Realtime Relay & Flexible Multi-Exercise Workflow)
 
 ### Added & Improved

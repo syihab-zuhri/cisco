@@ -10,6 +10,7 @@ export interface ClassSession {
   hostToken: string;
   activeExerciseId: string | null;
   activeExercises?: Exercise[];
+  allowSelfCheck?: boolean;
   createdAt: number;
 }
 
@@ -76,6 +77,7 @@ export type ClassroomEvent =
   | { type: 'EXERCISES_UPDATED'; classCode: string; exercises: Exercise[] }
   | { type: 'SUBMISSION_RECEIVED'; classCode: string; submission: Submission }
   | { type: 'CLASS_STATUS_CHANGED'; classCode: string; status: SessionStatus }
+  | { type: 'CLASS_SETTINGS_CHANGED'; classCode: string; allowSelfCheck: boolean }
   | { type: 'CLASS_CLOSED'; classCode: string }
   | { type: 'SYNC_REQUEST'; classCode: string }
   | {

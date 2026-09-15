@@ -18,6 +18,7 @@ export function DeviceCliModal() {
 
   const node = nodes.find((n) => n.id === activeCliModalNodeId);
   const terminalBottomRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // Jika perangkat dihapus saat terminal terbuka, tutup modal dengan aman
   useEffect(() => {
@@ -138,7 +139,7 @@ export function DeviceCliModal() {
     >
       <DialogContent
         showCloseButton
-        className="flex h-[80vh] sm:h-[520px] w-[95vw] max-w-[640px] flex-col gap-0 overflow-hidden border p-0 font-mono sm:max-w-[640px]"
+        className="flex h-[85vh] sm:h-[520px] w-[95vw] max-w-[640px] flex-col gap-0 overflow-hidden border p-0 font-mono sm:max-w-[640px]"
         style={{ backgroundColor: 'var(--term-bg)' }}
       >
         <DialogHeader className="flex-row items-center justify-between border-b bg-muted/60 px-4 py-0">
@@ -151,9 +152,10 @@ export function DeviceCliModal() {
           </DialogDescription>
         </DialogHeader>
 
-        {/* Terminal Body */}
+        {/* Terminal Body - Klik untuk fokus otomatis ke baris input */}
         <div
-          className="flex flex-1 flex-col gap-1 overflow-y-auto p-4 text-xs"
+          onClick={() => inputRef.current?.focus()}
+          className="flex flex-1 flex-col gap-1 overflow-y-auto p-4 text-xs cursor-text"
           style={{ color: 'var(--term-text)' }}
         >
           {history.map((line, idx) => (
@@ -164,17 +166,21 @@ export function DeviceCliModal() {
 
           {/* Active Prompt Line */}
           <div className="flex items-center gap-2 pt-1">
-            <span className="font-bold select-none" style={{ color: 'var(--term-prompt)' }}>
+            <span className="font-bold select-none shrink-0" style={{ color: 'var(--term-prompt)' }}>
               {session.prompt()}
             </span>
             <input
+              ref={inputRef}
               type="text"
               autoFocus
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
               disabled={isBusy}
               value={inputVal}
               onChange={(e) => setInputVal(e.target.value)}
               onKeyDown={handleKeyDown}
-              className="flex-1 bg-transparent font-mono text-xs outline-none disabled:opacity-50"
+              className="flex-1 bg-transparent font-mono text-xs outline-none disabled:opacity-50 min-w-0"
               style={{ color: 'var(--term-text)' }}
             />
           </div>

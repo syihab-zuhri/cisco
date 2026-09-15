@@ -10,6 +10,7 @@ import {
   Globe,
   Server,
   Network,
+  Terminal,
 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { isValidIp, isValidSubnetMask, networkAddress, ipToNumber, prefixLength, isSameSubnet } from '../../utils/ipUtils';
@@ -48,9 +49,17 @@ export function DeviceConfigModal() {
 }
 
 function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
-  const { setActiveConfigModalNodeId, updatePortConfig, updateDeviceConfig, addSimulationLog, syncWirelessAssociation, revalidateWirelessClients, addStaticRoute, removeStaticRoute } = useAppStore();
+  const { setActiveConfigModalNodeId, setActiveCliModalNodeId, updatePortConfig, updateDeviceConfig, addSimulationLog, syncWirelessAssociation, revalidateWirelessClients, addStaticRoute, removeStaticRoute } = useAppStore();
 
   const device = node.data;
+
+  const handleOpenCli = () => {
+    const targetId = device.id;
+    setActiveConfigModalNodeId(null);
+    setTimeout(() => {
+      setActiveCliModalNodeId(targetId);
+    }, 50);
+  };
   const [selectedPortId, setSelectedPortId] = useState<string>(device.ports[0]?.id || '');
   const selectedPort = device.ports.find((p) => p.id === selectedPortId);
   const isWirelessPort = selectedPort?.kind === 'wireless';
@@ -272,10 +281,23 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
     <Dialog open onOpenChange={(open) => { if (!open) setActiveConfigModalNodeId(null); }}>
       <DialogContent className="flex max-h-[90vh] w-[95vw] max-w-[540px] flex-col gap-0 p-0 sm:max-w-[540px]">
         <DialogHeader className="border-b px-4 sm:px-5 py-3">
-          <DialogTitle className="flex items-center gap-2 text-sm font-semibold">
-            <ShieldCheck className="h-5 w-5 text-sky-400" />
-            Konfigurasi Perangkat ({device.type.toUpperCase()})
-          </DialogTitle>
+          <div className="flex items-center justify-between gap-2">
+            <DialogTitle className="flex items-center gap-2 text-sm font-semibold">
+              <ShieldCheck className="h-5 w-5 text-sky-400 shrink-0" />
+              <span>Konfigurasi ({device.type.toUpperCase()})</span>
+            </DialogTitle>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={handleOpenCli}
+              className="h-7 gap-1.5 text-xs text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/10 hover:text-emerald-300 shrink-0"
+              title="Buka Terminal CLI Cisco"
+            >
+              <Terminal className="h-3.5 w-3.5" />
+              <span>Terminal CLI</span>
+            </Button>
+          </div>
           <DialogDescription className="sr-only">
             Ubah konfigurasi perangkat {label}
           </DialogDescription>
@@ -708,14 +730,26 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
         </div>
 
         {/* Footer Actions */}
-        <DialogFooter className="px-5 py-3">
-          <Button variant="ghost" size="sm" onClick={() => setActiveConfigModalNodeId(null)}>
-            Batal
+        <DialogFooter className="flex flex-row items-center justify-between gap-2 border-t px-4 sm:px-5 py-3">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleOpenCli}
+            className="gap-1.5 text-xs text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/10 hover:text-emerald-300"
+          >
+            <Terminal className="h-3.5 w-3.5" />
+            <span>Terminal CLI</span>
           </Button>
-          <Button size="sm" onClick={handleSave}>
-            <Save data-icon="inline-start" />
-            Simpan Konfigurasi
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setActiveConfigModalNodeId(null)}>
+              Batal
+            </Button>
+            <Button size="sm" onClick={handleSave}>
+              <Save data-icon="inline-start" />
+              Simpan
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

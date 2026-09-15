@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { classroomHub } from '../../src/features/classroom/classroomHub';
 import { evaluateExercise } from '../../src/features/classroom/exerciseEvaluator';
+import { cleanNodesForStarterTopology } from '../../src/features/classroom/topologyExerciseConverter';
 import { DEFAULT_EXERCISES } from '../../src/features/classroom/defaultExercises';
 import type { DeviceData, TopologyLink } from '../../src/types/network';
 import type { Exercise } from '../../src/features/classroom/types';
@@ -424,6 +425,81 @@ describe('Classroom Feature Suite', () => {
       // Partisipan siswa tetap ada dan tidak hilang
       expect(classroomHub.getParticipants().length).toBe(1);
       expect(classroomHub.getParticipants()[0].nickname).toBe('Siswa B');
+    });
+
+    it('membersihkan seluruh konfigurasi IP saat siswa memuat starter topology guru', () => {
+      const rawTeacherNodes = [
+        {
+          id: 'pc-1',
+          data: {
+            id: 'pc-1',
+            label: 'PC-1',
+            type: 'pc',
+            defaultGateway: '192.168.1.1',
+            staticRoutes: [{ destination: '10.0.0.0', mask: '255.0.0.0', nextHop: '192.168.1.254' }],
+            ports: [
+              {
+                id: 'fa0',
+                name: 'FastEthernet 0',
+                ipAddress: '192.168.1.10',
+                subnetMask: '255.255.255.0',
+                macAddress: '00:50:79:66:01:01',
+              },
+            ],
+          },
+        },
+        {
+          id: 'router-1',
+          data: {
+            id: 'router-1',
+            label: 'Router-1',
+            type: 'router',
+            ports: [
+              {
+                id: 'fa0/0',
+                name: 'FastEthernet 0/0',
+                ipAddress: '192.168.1.1',
+                subnetMask: '255.255.255.0',
+                subInterfaces: [
+                  {
+                    vlanId: 10,
+                    ipAddress: '192.168.10.1',
+                    subnetMask: '255.255.255.0',
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      ];
+
+      const cleaned = cleanNodesForStarterTopology(rawTeacherNodes);
+
+      // Node PC-1
+      expect(cleaned[0].data.label).toBe('PC-1');
+      expect(cleaned[0].data.defaultGateway).toBeUndefined();
+      expect(cleaned[0].data.staticRoutes).toBeUndefined();
+      expect(cleaned[0].data.ports[0].ipAddress).toBeUndefined();
+      expect(cleaned[0].data.ports[0].subnetMask).toBeUndefined();
+      expect(cleaned[0].data.ports[0].macAddress).toBe('00:50:79:66:01:01');
+
+      // Node Router-1 & subInterfaces
+      expect(cleaned[1].data.ports[0].ipAddress).toBeUndefined();
+      expect(cleaned[1].data.ports[0].subInterfaces[0].ipAddress).toBeUndefined();
+      expect(cleaned[1].data.ports[0].subInterfaces[0].vlanId).toBe(10);
+    });
+
+    it('mendukung toggle izin cek mandiri siswa oleh guru (mode ujian)', () => {
+      const session = classroomHub.createClass('Kelas Ujian Ketat', 'NET-EXAM', undefined, []);
+      expect(session.allowSelfCheck).toBe(true);
+
+      // Guru mematikan cek mandiri
+      classroomHub.toggleSelfCheck('NET-EXAM', false);
+      expect(classroomHub.getSession()?.allowSelfCheck).toBe(false);
+
+      // Guru menghidupkan kembali cek mandiri
+      classroomHub.toggleSelfCheck('NET-EXAM', true);
+      expect(classroomHub.getSession()?.allowSelfCheck).toBe(true);
     });
   });
 });

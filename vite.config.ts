@@ -114,6 +114,9 @@ function classroomRelayPlugin(): Plugin {
                   case 'CLASS_STATUS_CHANGED':
                     if (room.session) room.session.status = event.status;
                     break;
+                  case 'CLASS_SETTINGS_CHANGED':
+                    if (room.session) room.session.allowSelfCheck = event.allowSelfCheck;
+                    break;
                   case 'CLASS_CLOSED':
                     if (room.session) room.session.status = 'closed';
                     break;

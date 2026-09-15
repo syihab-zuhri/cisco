@@ -55,9 +55,14 @@ export function DeviceNode({ id, data, selected }: NodeProps) {
           : 'border-border hover:border-muted-foreground/50'
       }`}
     >
-      {/* Action floating buttons on hover / selected — tetap interaktif agar
-          hover bisa "dijangkau" dari node, reveal hanya via opacity */}
-      <div className="nodrag nopan absolute -top-8 right-0 flex items-center gap-1 rounded bg-popover p-1 border border-border shadow-md z-30 opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100">
+      {/* Action floating buttons on hover / selected — otomatis muncul saat node disentuh/selected di mobile */}
+      <div
+        className={`nodrag nopan absolute -top-9 right-0 flex items-center gap-1.5 rounded-lg bg-popover p-1 border border-border shadow-lg z-30 transition-opacity duration-150 ${
+          selected
+            ? 'opacity-100 pointer-events-auto'
+            : 'opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto'
+        }`}
+      >
         <button
           onClick={(e) => {
             e.stopPropagation();
@@ -65,9 +70,9 @@ export function DeviceNode({ id, data, selected }: NodeProps) {
           }}
           title="Konfigurasi Perangkat (GUI)"
           aria-label={`Konfigurasi ${deviceData.label}`}
-          className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+          className="rounded p-1.5 sm:p-1 text-muted-foreground hover:bg-muted hover:text-foreground touch-manipulation cursor-pointer"
         >
-          <Settings className="h-3.5 w-3.5" />
+          <Settings className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
         </button>
         <button
           onClick={(e) => {
@@ -76,9 +81,9 @@ export function DeviceNode({ id, data, selected }: NodeProps) {
           }}
           title="Terminal CLI Cisco"
           aria-label={`Buka terminal CLI ${deviceData.label}`}
-          className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-green-400"
+          className="rounded p-1.5 sm:p-1 text-emerald-400 bg-emerald-500/10 sm:bg-transparent hover:bg-emerald-500/20 sm:hover:bg-muted hover:text-emerald-300 touch-manipulation cursor-pointer"
         >
-          <Terminal className="h-3.5 w-3.5" />
+          <Terminal className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
         </button>
         <button
           onClick={(e) => {
@@ -92,9 +97,9 @@ export function DeviceNode({ id, data, selected }: NodeProps) {
           }}
           title="Hapus Perangkat"
           aria-label={`Hapus ${deviceData.label}`}
-          className="rounded p-1 text-muted-foreground hover:bg-red-950/60 hover:text-red-400"
+          className="rounded p-1.5 sm:p-1 text-muted-foreground hover:bg-red-950/60 hover:text-red-400 touch-manipulation cursor-pointer"
         >
-          <Trash2 className="h-3.5 w-3.5" />
+          <Trash2 className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
         </button>
       </div>
 

@@ -234,6 +234,22 @@ gantt
   - *Dependencies:* `TASK-P0-029`, `TASK-P0-037`
   - *Definition of Done:* Siswa bebas memilih soal yang ingin dikerjakan melalui pill interaktif dan navigasi Previous/Next; status menunggu soal saat kelas dimulai tanpa soal.
 
+---
+
+### Sprint 13: Mobile CLI Accessibility, Clean IP Starter Topology & Exam Self-Check Toggle (v2.2.0)
+- **`TASK-P0-039` [Effort: M] Mobile Touch CLI Action Overlay & Config Shortcut (`DeviceNode.tsx`, `DeviceConfigModal.tsx`, `DeviceCliModal.tsx`)**
+  - *Status:* Completed (2026-09-15)
+  - *Dependencies:* `TASK-P0-015`, `TASK-P0-034`
+  - *Definition of Done:* Menampilkan floating action toolbar saat node berstatus `selected` pada sentuhan mobile; menambahkan tombol pintas buka Terminal CLI langsung dari header & footer modal konfigurasi; serta penyesuaian touch input keyboard HP pada CLI modal.
+- **`TASK-P0-040` [Effort: M] Clean IP Sanitization on Student Starter Topology (`topologyExerciseConverter.ts`, `ClassroomStudentHUD.tsx`)**
+  - *Status:* Completed (2026-09-15)
+  - *Dependencies:* `TASK-P0-024`, `TASK-P0-029`
+  - *Definition of Done:* Membersihkan seluruh konfigurasi IP (`ipAddress`, `subnetMask`, `defaultGateway`, `subInterfaces`, routes) saat siswa memuat topologi soal guru atau template praktikum, sehingga siswa menerima perangkat bersih tanpa IP terisi.
+- **`TASK-P0-041` [Effort: M] Teacher Exam Self-Check Policy Toggle (`types.ts`, `classroomHub.ts`, `ClassroomModal.tsx`, `ClassroomStudentHUD.tsx`)**
+  - *Status:* Completed (2026-09-15)
+  - *Dependencies:* `TASK-P0-036`, `TASK-P0-037`
+  - *Definition of Done:* Opsi toggle izin cek mandiri siswa di panel guru; sinkronisasi status ke relay server; dan penguncian tombol Cek Mandiri di HUD siswa dengan badge mode ujian.
+
 
 
 

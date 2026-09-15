@@ -23,6 +23,7 @@ import {
   ArrowLeftRight,
   RefreshCw,
   BookOpen,
+  CheckCheck,
 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { TOPOLOGY_TEMPLATES } from '../../data/topologyTemplates';
@@ -241,6 +242,10 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
 
         case 'CLASS_STATUS_CHANGED':
           setSession((prev) => (prev ? { ...prev, status: event.status } : null));
+          break;
+
+        case 'CLASS_SETTINGS_CHANGED':
+          setSession((prev) => (prev ? { ...prev, allowSelfCheck: event.allowSelfCheck } : null));
           break;
 
         case 'CLASS_CLOSED':
@@ -481,6 +486,20 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
   const handleExportAllExercises = () => {
     exportExercisesToJsonFile(exercises, `bank-soal-${session ? session.classCode : 'praktikum'}.json`);
     pushToast('success', 'File bank soal (.json) berhasil diunduh.');
+  };
+
+  // Handler Guru: Toggle Izin Cek Mandiri Siswa (Mode Latihan vs Mode Ujian)
+  const handleToggleSelfCheck = () => {
+    if (!session) return;
+    const nextVal = session.allowSelfCheck === false;
+    classroomHub.toggleSelfCheck(session.classCode, nextVal);
+    setSession({ ...session, allowSelfCheck: nextVal });
+    pushToast(
+      'info',
+      nextVal
+        ? 'Cek mandiri diaktifkan: Siswa dapat mengecek target praktikum mandiri.'
+        : 'Cek mandiri dinonaktifkan: Mode ujian aktif — siswa tidak bisa melihat checklist evaluasi sebelum submit.'
+    );
   };
 
   // Handler Guru: Toggle Kunci Kelas
@@ -1261,7 +1280,30 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
                     </div>
 
                     {/* Kontrol Guru */}
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleToggleSelfCheck}
+                        className={`gap-1.5 text-xs ${
+                          session.allowSelfCheck === false
+                            ? 'border-amber-500/50 text-amber-400 hover:bg-amber-500/10'
+                            : 'border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/10'
+                        }`}
+                        title={
+                          session.allowSelfCheck === false
+                            ? 'Klik untuk mengizinkan murid cek mandiri'
+                            : 'Klik untuk menonaktifkan cek mandiri murid (mode ujian ketat)'
+                        }
+                      >
+                        <CheckCheck className="h-3.5 w-3.5" />
+                        <span>
+                          {session.allowSelfCheck === false
+                            ? 'Cek Mandiri: Nonaktif (Ujian)'
+                            : 'Cek Mandiri: Aktif'}
+                        </span>
+                      </Button>
+
                       <Button
                         size="sm"
                         variant="outline"

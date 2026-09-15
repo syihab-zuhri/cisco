@@ -20,6 +20,7 @@ import { useAppStore } from '../../store/useAppStore';
 import { classroomHub } from '../../features/classroom/classroomHub';
 import { evaluateExercise } from '../../features/classroom/exerciseEvaluator';
 import { exportSubmissionPackageFile } from '../../features/classroom/exerciseParser';
+import { cleanNodesForStarterTopology } from '../../features/classroom/topologyExerciseConverter';
 import { TOPOLOGY_TEMPLATES } from '../../data/topologyTemplates';
 import type {
   ClassSession,
@@ -138,6 +139,18 @@ export function ClassroomStudentHUD() {
           }
           break;
 
+        case 'CLASS_SETTINGS_CHANGED':
+          if (session && session.classCode === event.classCode) {
+            setSession({ ...session, allowSelfCheck: event.allowSelfCheck });
+            pushToast(
+              'info',
+              event.allowSelfCheck
+                ? 'Guru mengizinkan fitur Cek Mandiri.'
+                : 'Guru menonaktifkan fitur Cek Mandiri (Mode Ujian).'
+            );
+          }
+          break;
+
         case 'CLASS_CLOSED':
           if (session && session.classCode === event.classCode) {
             pushToast('warning', 'Sesi kelas telah diakhiri oleh guru.');
@@ -190,6 +203,10 @@ export function ClassroomStudentHUD() {
   // Handler Cek Mandiri (Self-Check untuk soal aktif saat ini)
   const handleSelfCheck = async () => {
     if (!activeExercise) return;
+    if (session?.allowSelfCheck === false) {
+      pushToast('warning', 'Fitur cek mandiri dinonaktifkan oleh guru untuk sesi ini.');
+      return;
+    }
     setIsEvaluating(true);
     try {
       const evalResult = await runEvaluationForExercise(activeExercise);
@@ -346,24 +363,27 @@ export function ClassroomStudentHUD() {
     }
   };
 
-  // Handler Muat Topologi Guru
+  // Handler Muat Topologi Guru (Hanya komponen dan kabel fisik, seluruh IP dibersihkan agar siswa mengonfigurasi mandiri)
   const handleLoadStarterTopology = () => {
     if (!activeExercise) return;
     const doLoad = () => {
       if (activeExercise.starterTopology) {
         loadTopology({
-          nodes: activeExercise.starterTopology.nodes,
+          nodes: cleanNodesForStarterTopology(activeExercise.starterTopology.nodes),
           edges: activeExercise.starterTopology.edges,
         });
-        pushToast('success', 'Topologi soal dari guru berhasil dimuat ke kanvas Anda.');
+        pushToast('success', 'Topologi perangkat guru berhasil dimuat (konfigurasi IP kosong untuk latihan).');
         return;
       }
 
       if (activeExercise.starterTemplateId) {
         const tpl = TOPOLOGY_TEMPLATES.find((t) => t.id === activeExercise.starterTemplateId);
         if (tpl) {
-          loadTopology({ nodes: tpl.nodes, edges: tpl.edges });
-          pushToast('success', `Template "${tpl.name}" diterapkan ke kanvas.`);
+          loadTopology({
+            nodes: cleanNodesForStarterTopology(tpl.nodes),
+            edges: tpl.edges,
+          });
+          pushToast('success', `Template "${tpl.name}" diterapkan ke kanvas (konfigurasi IP kosong untuk latihan).`);
           return;
         }
       }
@@ -740,17 +760,27 @@ export function ClassroomStudentHUD() {
 
       {/* Footer Aksi */}
       <div className="flex flex-col gap-2 border-t bg-muted/30 p-3">
-        <div className="flex items-center justify-between">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={handleSelfCheck}
-            disabled={isEvaluating}
-            className="h-8 gap-1.5 text-xs"
-          >
-            <CheckCheck className="h-3.5 w-3.5" />
-            {isEvaluating ? 'Mengecek…' : 'Cek Mandiri'}
-          </Button>
+        <div className="flex items-center justify-between gap-2">
+          {session?.allowSelfCheck === false ? (
+            <div
+              className="flex items-center gap-1.5 text-[11px] font-medium text-amber-400 bg-amber-500/10 px-2.5 py-1.5 rounded border border-amber-500/20"
+              title="Guru menonaktifkan fitur cek mandiri untuk sesi ujian ini."
+            >
+              <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+              <span>Cek Mandiri Dinonaktifkan (Ujian)</span>
+            </div>
+          ) : (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleSelfCheck}
+              disabled={isEvaluating}
+              className="h-8 gap-1.5 text-xs"
+            >
+              <CheckCheck className="h-3.5 w-3.5" />
+              {isEvaluating ? 'Mengecek…' : 'Cek Mandiri'}
+            </Button>
+          )}
 
           <Button
             size="sm"

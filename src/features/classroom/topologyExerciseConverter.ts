@@ -13,6 +13,34 @@ export function isTopologyJson(json: unknown): json is TopologyData {
 }
 
 /**
+ * Membersihkan seluruh konfigurasi IP, subnet mask, gateway, dan routing dari nodes
+ * agar starter topology hanya menyediakan komponen/perangkat dan koneksi fisik tanpa konfigurasi IP.
+ */
+export function cleanNodesForStarterTopology(nodes: any[]): any[] {
+  return nodes.map((node) => {
+    const cloned = JSON.parse(JSON.stringify(node));
+    if (cloned.data) {
+      delete cloned.data.defaultGateway;
+      delete cloned.data.staticRoutes;
+      delete cloned.data.ripEnabled;
+      if (Array.isArray(cloned.data.ports)) {
+        cloned.data.ports.forEach((p: any) => {
+          delete p.ipAddress;
+          delete p.subnetMask;
+          if (Array.isArray(p.subInterfaces)) {
+            p.subInterfaces.forEach((sub: any) => {
+              delete sub.ipAddress;
+              delete sub.subnetMask;
+            });
+          }
+        });
+      }
+    }
+    return cloned;
+  });
+}
+
+/**
  * Mengonversi data topologi OpenPacket (file openpacket-topology-*.json)
  * menjadi objek Exercise yang siap digunakan untuk tugas praktikum siswa.
  */
@@ -149,7 +177,7 @@ export function convertTopologyToExercise(
     difficulty: 'Menengah',
     targets,
     starterTopology: {
-      nodes: JSON.parse(JSON.stringify(nodes)),
+      nodes: cleanNodesForStarterTopology(nodes),
       edges: JSON.parse(JSON.stringify(edges)),
     },
   };

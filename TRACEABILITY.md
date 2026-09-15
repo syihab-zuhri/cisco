@@ -13,9 +13,9 @@
 
 ## 1. Traceability Summary
 
-- **Total Functional Requirements (P0):** 24
-- **Total Requirements Covered:** 24
-- **Coverage Rate:** **100% (24/24)**
+- **Total Functional Requirements (P0):** 26
+- **Total Requirements Covered:** 26
+- **Coverage Rate:** **100% (26/26)**
 - **Traceability Loop:** Closed (Setiap `FR` P0 tertaut ke minimal satu `PRD`, `Component`, `Task`, dan `Test`).
 
 ---
@@ -48,3 +48,5 @@
 | `FR-022` | Gerbang Peran & Single-Role Exclusivity | `FEAT-CLASSROOM` | `ClassroomModal` | `LockedRole` | `TASK-P0-032`, `033` | `TEST-CLASS-009` | Covered |
 | `FR-023` | Multi-Device Realtime Relay Sync | `FEAT-CLASSROOM` | `ViteRelay`, `ClassroomHub` | `ClassSession`, `Participant` | `TASK-P0-036` | `TEST-CLASS-010` | Covered |
 | `FR-024` | Dynamic Multi-Exercise & Zero-Exercise | `FEAT-CLASSROOM` | `ClassroomModal`, `StudentHUD` | `Exercise`, `Evaluation` | `TASK-P0-037`, `038` | `TEST-CLASS-011` | Covered |
+| `FR-025` | Mobile CLI Terminal Direct Access | `FEAT-CANVAS` | `DeviceNode`, `ConfigModal` | `DeviceCliModal` | `TASK-P0-039` | `TEST-CLI-001` | Covered |
+| `FR-026` | Clean IP Starter Topology & Exam Policy | `FEAT-CLASSROOM` | `TopologyConverter`, `HUD` | `Exercise`, `SessionPolicy` | `TASK-P0-040`, `041` | `TEST-CLASS-012` | Covered |

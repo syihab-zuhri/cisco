@@ -183,6 +183,15 @@ class ClassroomHub {
         break;
       }
 
+      case 'CLASS_SETTINGS_CHANGED': {
+        const session = this.getSession();
+        if (session && session.classCode === event.classCode) {
+          session.allowSelfCheck = event.allowSelfCheck;
+          this.saveSession(session);
+        }
+        break;
+      }
+
       case 'CLASS_CLOSED': {
         const session = this.getSession();
         if (session && session.classCode === event.classCode) {
@@ -329,6 +338,7 @@ class ClassroomHub {
       hostToken: hostToken || `token-${Math.random().toString(36).slice(2, 10)}`,
       activeExerciseId: exercisesList.length > 0 ? exercisesList[0].id : null,
       activeExercises: exercisesList,
+      allowSelfCheck: true,
       createdAt: Date.now(),
     };
 
@@ -379,6 +389,20 @@ class ClassroomHub {
       type: 'EXERCISES_UPDATED',
       classCode: cleanCode,
       exercises: frozenList,
+    });
+  }
+
+  public toggleSelfCheck(classCode: string, allow: boolean): void {
+    const cleanCode = classCode.trim().toUpperCase();
+    const session = this.getSession();
+    if (session && session.classCode === cleanCode) {
+      session.allowSelfCheck = allow;
+      this.saveSession(session);
+    }
+    this.broadcast({
+      type: 'CLASS_SETTINGS_CHANGED',
+      classCode: cleanCode,
+      allowSelfCheck: allow,
     });
   }
 
