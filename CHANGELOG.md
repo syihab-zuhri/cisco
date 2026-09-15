@@ -11,6 +11,19 @@
 
 ---
 
+## [2026-09-15] — Version 2.2.2 (Mobile Documentation UI/UX Overhaul & Topic Selector Bar)
+
+### Added & Improved
+- **Bilah Pemilih Topik Mobile Cepat (`DocumentationModal.tsx`)**:
+  - Menggantikan sidebar navigasi bertumpuk setinggi 176px yang sebelumnya menghimpit layar HP dengan **Bilah Navigasi Topik Cepat** ringkas (42px).
+  - Dilengkapi dropdown topik terkelompok (*optgroup*), tombol navigasi bab cepat (`<` dan `>`), serta pencarian pop-up (`🔍`) yang hanya muncul saat dibutuhkan.
+  - Menjaga sidebar desktop 2 kolom asli tetap berfungsi di layar `>=640px` tanpa perubahan.
+- **Pelegaan Area Baca Dokumentasi di Ponsel**:
+  - Mengoptimalkan padding kontainer materi dari `p-6` menjadi responsif `p-3.5 sm:p-6`, memperlebar area baca teks dan kartu diagram di HP.
+  - Menambahkan tombol navigasi bab bawah: `[← Bab Sebelumnya]` dan `[Bab Berikutnya →]` dengan auto-scroll ke bagian atas materi baru.
+
+---
+
 ## [2026-09-15] — Version 2.2.1 (Mobile Responsive Bottom Panel for Simulation Log & Network Tables)
 
 ### Added & Improved

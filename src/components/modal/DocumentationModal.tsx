@@ -17,6 +17,8 @@ import {
   Laptop,
   Router,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Sparkles,
   GraduationCap,
   ScanLine,
@@ -75,6 +77,10 @@ const NAV_GROUPS: Array<{ group: string; items: Array<{ id: SectionId; label: st
     ],
   },
 ];
+
+const ALL_SECTIONS: Array<{ id: SectionId; label: string; group: string }> = NAV_GROUPS.flatMap((g) =>
+  g.items.map((item) => ({ id: item.id, label: item.label, group: g.group }))
+);
 
 const SEARCH_INDEX: Array<{ section: SectionId; label: string; keywords: string; accordion?: string }> = [
   { section: 'home', label: 'Beranda — mulai 3 langkah', keywords: 'beranda quick start cepat mulai ping template' },
@@ -292,6 +298,11 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
   const [activeSection, setActiveSection] = useState<SectionId>('home');
   const [query, setQuery] = useState<string>('');
   const [openProto, setOpenProto] = useState<string | null>('arp');
+  const [mobileSearchOpen, setMobileSearchOpen] = useState<boolean>(false);
+
+  const currentIndex = ALL_SECTIONS.findIndex((s) => s.id === activeSection);
+  const prevSection = currentIndex > 0 ? ALL_SECTIONS[currentIndex - 1] : null;
+  const nextSection = currentIndex < ALL_SECTIONS.length - 1 ? ALL_SECTIONS[currentIndex + 1] : null;
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -305,35 +316,148 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
     setActiveSection(section);
     if (section === 'protocols' && accordion) setOpenProto(accordion);
     setQuery('');
+    setMobileSearchOpen(false);
+    const container = document.getElementById('docs-content-scroll');
+    if (container) container.scrollTop = 0;
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent
         showCloseButton={false}
-        className="flex h-[88vh] w-[92vw] max-w-5xl flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl"
+        className="flex h-[90vh] sm:h-[88vh] w-[96vw] sm:w-[92vw] max-w-5xl flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl"
       >
         {/* Header */}
-        <DialogHeader className="flex-row items-center justify-between border-b px-6 py-3">
-          <div className="flex items-center gap-3">
-            <div className="rounded-lg border border-blue-500/40 bg-blue-600/20 p-2">
-              <BookOpen className="h-5 w-5 text-blue-400" />
+        <DialogHeader className="flex-row items-center justify-between border-b px-4 sm:px-6 py-2.5 sm:py-3">
+          <div className="flex items-center gap-2.5 sm:gap-3 truncate">
+            <div className="rounded-lg border border-blue-500/40 bg-blue-600/20 p-1.5 sm:p-2 shrink-0">
+              <BookOpen className="h-4 w-4 sm:h-5 sm:w-5 text-blue-400" />
             </div>
-            <div>
-              <DialogTitle className="text-base font-bold tracking-wide">Pusat Bantuan OpenPacket</DialogTitle>
-              <DialogDescription className="text-xs">
-                Referensi fitur, protokol, dan panduan build — v1.4.0
+            <div className="truncate">
+              <DialogTitle className="text-sm sm:text-base font-bold tracking-wide truncate">Pusat Bantuan OpenPacket</DialogTitle>
+              <DialogDescription className="text-[11px] sm:text-xs truncate">
+                Panduan fitur, protokol jaringan, &amp; build — v2.2.1
               </DialogDescription>
             </div>
           </div>
-          <DialogClose render={<Button variant="ghost" size="icon-sm" aria-label="Tutup pusat bantuan" />}>
+          <DialogClose render={<Button variant="ghost" size="icon-sm" aria-label="Tutup pusat bantuan" className="shrink-0" />}>
             <X className="h-5 w-5" />
           </DialogClose>
         </DialogHeader>
 
+        {/* Mobile Topic Selector Bar (Lega di HP, menggantikan sidebar bertumpuk) */}
+        <div className="sm:hidden border-b bg-muted/60 px-3 py-2 flex flex-col gap-1.5">
+          <div className="flex items-center gap-1.5">
+            <Button
+              variant="outline"
+              size="icon-sm"
+              disabled={!prevSection}
+              onClick={() => {
+                if (prevSection) {
+                  setActiveSection(prevSection.id);
+                  const c = document.getElementById('docs-content-scroll');
+                  if (c) c.scrollTop = 0;
+                }
+              }}
+              className="h-8 w-8 shrink-0"
+              title="Bab Sebelumnya"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+
+            <div className="relative flex-1 min-w-0">
+              <select
+                value={activeSection}
+                onChange={(e) => {
+                  setActiveSection(e.target.value as SectionId);
+                  setQuery('');
+                  setMobileSearchOpen(false);
+                  const c = document.getElementById('docs-content-scroll');
+                  if (c) c.scrollTop = 0;
+                }}
+                className="w-full h-8 rounded-md border border-input bg-background px-2.5 py-1 text-xs font-semibold text-foreground focus:outline-hidden focus:ring-1 focus:ring-primary truncate cursor-pointer shadow-xs"
+              >
+                {NAV_GROUPS.map((group) => (
+                  <optgroup key={group.group} label={`── ${group.group} ──`}>
+                    {group.items.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.label}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+            </div>
+
+            <Button
+              variant="outline"
+              size="icon-sm"
+              disabled={!nextSection}
+              onClick={() => {
+                if (nextSection) {
+                  setActiveSection(nextSection.id);
+                  const c = document.getElementById('docs-content-scroll');
+                  if (c) c.scrollTop = 0;
+                }
+              }}
+              className="h-8 w-8 shrink-0"
+              title="Bab Berikutnya"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+
+            <Button
+              variant={mobileSearchOpen ? 'secondary' : 'outline'}
+              size="icon-sm"
+              onClick={() => setMobileSearchOpen((prev) => !prev)}
+              className="h-8 w-8 shrink-0"
+              title="Cari Topik"
+            >
+              <Search className="h-4 w-4" />
+            </Button>
+          </div>
+
+          {/* Mobile Search Bar Popup */}
+          {mobileSearchOpen && (
+            <div className="relative pt-1 animate-in fade-in slide-in-from-top-1 duration-150">
+              <Search className="absolute top-3.5 left-2.5 h-3.5 w-3.5 text-muted-foreground/60" />
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Cari topik (cth: arp, routing, vlan, cli)..."
+                className="h-8 pl-8 text-xs bg-background"
+                autoFocus
+              />
+              {results && (
+                <div className="mt-1.5 max-h-44 overflow-y-auto rounded-md border border-border bg-popover p-1 shadow-lg">
+                  <div className="px-2 py-1 text-[10px] font-bold uppercase text-muted-foreground">
+                    {results.length} hasil pencarian
+                  </div>
+                  {results.length === 0 ? (
+                    <div className="px-2 py-1.5 text-xs italic text-muted-foreground">Tidak ada topik cocok.</div>
+                  ) : (
+                    results.map((entry, i) => (
+                      <button
+                        key={i}
+                        onClick={() => goTo(entry.section, entry.accordion)}
+                        className="w-full rounded px-2 py-1.5 text-left text-xs hover:bg-muted"
+                      >
+                        <div className="font-medium text-foreground">{entry.label}</div>
+                        <div className="text-[10px] text-muted-foreground">
+                          {NAV_GROUPS.flatMap((g) => g.items).find((it) => it.id === entry.section)?.label}
+                        </div>
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
         <div className="flex flex-col sm:flex-row min-h-0 flex-1">
-          {/* Sidebar */}
-          <nav className="flex w-full sm:w-64 shrink-0 flex-col border-b sm:border-b-0 sm:border-r bg-background/40 max-h-44 sm:max-h-none overflow-y-auto">
+          {/* Desktop Sidebar (Hanya tampil di sm:flex, tidak menghimpit mobile) */}
+          <nav className="hidden sm:flex sm:w-64 shrink-0 flex-col sm:border-r bg-background/40 overflow-y-auto">
             <div className="p-3">
               <div className="relative">
                 <Search className="absolute top-2.5 left-2.5 h-3.5 w-3.5 text-muted-foreground/60" />
@@ -404,7 +528,7 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
           </nav>
 
           {/* Content */}
-          <div className="min-w-0 flex-1 overflow-y-auto p-6">
+          <div id="docs-content-scroll" className="min-w-0 flex-1 overflow-y-auto p-3.5 sm:p-6 flex flex-col justify-between">
             {/* ============ BERANDA ============ */}
             {activeSection === 'home' && (
               <div className="flex flex-col gap-5">
@@ -740,6 +864,43 @@ npm run build && npx cap add android`}</CodeBlock>
                 </Card>
               </div>
             )}
+
+            {/* Bottom Chapter Navigation */}
+            <div className="mt-8 border-t border-border/60 pt-4 flex items-center justify-between gap-2">
+              {prevSection ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setActiveSection(prevSection.id);
+                    const c = document.getElementById('docs-content-scroll');
+                    if (c) c.scrollTop = 0;
+                  }}
+                  className="gap-1.5 text-xs h-8"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                  <span className="truncate max-w-[130px] sm:max-w-none">{prevSection.label}</span>
+                </Button>
+              ) : (
+                <div />
+              )}
+
+              {nextSection ? (
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={() => {
+                    setActiveSection(nextSection.id);
+                    const c = document.getElementById('docs-content-scroll');
+                    if (c) c.scrollTop = 0;
+                  }}
+                  className="gap-1.5 text-xs h-8 ml-auto"
+                >
+                  <span className="truncate max-w-[130px] sm:max-w-none">{nextSection.label}</span>
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </Button>
+              ) : null}
+            </div>
           </div>
         </div>
       </DialogContent>
