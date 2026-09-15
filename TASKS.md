@@ -194,5 +194,18 @@ gantt
   - *Dependencies:* `TASK-P0-025`
   - *Definition of Done:* Tombol dan generator simulasi bot dihapus dari antarmuka guru; sinkronisasi event bus lokal dideferensialkan menggunakan `queueMicrotask` guna mencegah benturan render React 19.
 
+---
+
+### Sprint 10: Role Gate Portal & Single-Role Exclusivity (v1.9.0)
+- **`TASK-P0-032` [Effort: M] Single-Role Exclusivity & Storage Persistence (`src/features/classroom/classroomHub.ts`)**
+  - *Status:* Completed (2026-09-15)
+  - *Dependencies:* `TASK-P0-023`
+  - *Definition of Done:* Penambahan getter/setter `lockedRole` dengan persistensi `sessionStorage`, reset otomatis partisipan siswa saat beralih ke peran Guru, dan pengosongan menyeluruh saat `clearAll()`.
+- **`TASK-P0-033` [Effort: M] Role Gate Portal UI & Safe Role Switching (`ClassroomModal.tsx`, `Toolbar.tsx`, `ClassroomStudentHUD.tsx`)**
+  - *Status:* Completed (2026-09-15)
+  - *Dependencies:* `TASK-P0-032`, `TASK-P0-025`
+  - *Definition of Done:* Menghilangkan tab switcher bebas di modal kelas; menyuguhkan menu gerbang 2 kartu besar (Guru vs Siswa); menampilkan badge peran aktif di header modal dan toolbar; serta aksi "Ganti Peran" aman dengan dialog konfirmasi.
+
+
 
 

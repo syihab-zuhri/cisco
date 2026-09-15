@@ -353,5 +353,38 @@ describe('Classroom Feature Suite', () => {
       expect(savedSubs[student!.id].exerciseScores?.['ex-02-router-gateway']).toBe(70);
       expect(savedSubs[student!.id].score).toBe(85);
     });
+
+    it('mengunci peran pengguna ke teacher atau student secara eksklusif dan aman', () => {
+      // 1. Awalnya peran kosong (null)
+      classroomHub.setLockedRole(null);
+      expect(classroomHub.getLockedRole()).toBeNull();
+
+      // 2. Kunci ke mode siswa & set partisipan
+      classroomHub.setLockedRole('student');
+      expect(classroomHub.getLockedRole()).toBe('student');
+      classroomHub.setCurrentParticipant({
+        id: 'stu-999',
+        nickname: 'Ahmad Siswa',
+        joinedAt: Date.now(),
+        status: 'in_progress',
+      });
+      expect(classroomHub.getCurrentParticipant()?.nickname).toBe('Ahmad Siswa');
+
+      // 3. Ketika beralih kunci ke mode guru, status siswa aktif wajib otomatis di-reset
+      classroomHub.setLockedRole('teacher');
+      expect(classroomHub.getLockedRole()).toBe('teacher');
+      expect(classroomHub.getCurrentParticipant()).toBeNull();
+
+      // 4. Reset peran (Ganti Peran)
+      classroomHub.setLockedRole(null);
+      expect(classroomHub.getLockedRole()).toBeNull();
+    });
+
+    it('membersihkan lockedRole saat clearAll() dipanggil', () => {
+      classroomHub.setLockedRole('teacher');
+      expect(classroomHub.getLockedRole()).toBe('teacher');
+      classroomHub.clearAll();
+      expect(classroomHub.getLockedRole()).toBeNull();
+    });
   });
 });

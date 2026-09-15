@@ -65,11 +65,15 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs, onOpenClassroom
   const [currentSession, setCurrentSession] = useState<ClassSession | null>(() =>
     classroomHub.getSession()
   );
+  const [lockedRole, setLockedRole] = useState<'teacher' | 'student' | null>(() =>
+    classroomHub.getLockedRole()
+  );
 
   useEffect(() => {
     const unsub = classroomHub.subscribe(() => {
       setCurrentParticipant(classroomHub.getCurrentParticipant());
       setCurrentSession(classroomHub.getSession());
+      setLockedRole(classroomHub.getLockedRole());
     });
     return unsub;
   }, []);
@@ -309,6 +313,10 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs, onOpenClassroom
                     ? `Kelas (${currentParticipant.nickname})`
                     : currentSession && currentSession.status !== 'closed'
                     ? `Kelas: ${currentSession.classCode}`
+                    : lockedRole === 'teacher'
+                    ? 'Kelas (Guru)'
+                    : lockedRole === 'student'
+                    ? 'Kelas (Siswa)'
                     : 'Kelas'}
                 </span>
               </Button>

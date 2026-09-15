@@ -13,9 +13,9 @@
 
 ## 1. Traceability Summary
 
-- **Total Functional Requirements (P0):** 21
-- **Total Requirements Covered:** 21
-- **Coverage Rate:** **100% (21/21)**
+- **Total Functional Requirements (P0):** 22
+- **Total Requirements Covered:** 22
+- **Coverage Rate:** **100% (22/22)**
 - **Traceability Loop:** Closed (Setiap `FR` P0 tertaut ke minimal satu `PRD`, `Component`, `Task`, dan `Test`).
 
 ---
@@ -45,3 +45,4 @@
 | `FR-019` | Student Canvas HUD Switcher | `FEAT-CLASSROOM` | `ClassroomStudentHUD` | `Submission` | `TASK-P0-029` | `TEST-CLASS-008` | Covered |
 | `FR-020` | Anti-Cheat Workspace Lock | `FEAT-CLASSROOM` | `DevicePalette` | `TopologyTemplate` | `TASK-P0-030` | `TEST-PALETTE-001` | Covered |
 | `FR-021` | Penyelarasan Layout Drawer & HUD | `FEAT-CANVAS` | `ClassroomStudentHUD` | N/A | `TASK-P0-029` | `AC-CANVAS-HUD` | Covered |
+| `FR-022` | Gerbang Peran & Single-Role Exclusivity | `FEAT-CLASSROOM` | `ClassroomModal` | `LockedRole` | `TASK-P0-032`, `033` | `TEST-CLASS-009` | Covered |

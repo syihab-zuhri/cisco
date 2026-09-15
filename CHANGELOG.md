@@ -11,6 +11,27 @@
 
 ---
 
+## [2026-09-15] — Version 1.9.0 (Single-Role Exclusivity, Role Gate Portal & Safe Switching)
+
+### Added
+- **Role Gate Portal Ruang Kelas (`src/components/modal/ClassroomModal.tsx`)**:
+  - Pintu masuk awal portal kelas dengan antarmuka gerbang peran elegan (Pilih Mode Guru vs Pilih Mode Siswa) menggantikan tab switcher bebas.
+  - Setiap perangkat/browser hanya dapat masuk ke salah satu peran eksklusif dalam satu waktu untuk mencegah kecurangan dan benturan alur kerja.
+- **Enforcement Kunci Peran Tunggal (`src/features/classroom/classroomHub.ts`)**:
+  - Penambahan helper `getLockedRole()` dan `setLockedRole()` dengan penyimpanan persisten `sessionStorage` (`openpacket_locked_role`).
+  - Pemilihan peran Guru otomatis melepas dan mereset status partisipan siswa (`currentParticipant = null`).
+- **Aksi Ganti Peran Aman (`src/components/modal/ClassroomModal.tsx`)**:
+  - Penyediaan tombol "Ganti Peran" dengan dialog konfirmasi (`requestConfirm`) di header modal kelas untuk keluar dari peran aktif sebelum berpindah peran.
+- **Sinkronisasi Status Peran di Toolbar & Palet**:
+  - Toolbar menampilkan badge dinamis sesuai peran yang terkunci (`Kelas (Guru)` atau `Kelas (Siswa)`).
+  - Palet perangkat (`DevicePalette.tsx`) mengunci tab template jika peran siswa terkunci.
+  - Student HUD (`ClassroomStudentHUD.tsx`) otomatis mereset peran yang terkunci saat siswa menekan "Keluar dari Kelas".
+
+### Tested
+- Penambahan unit test isolasi peran dan pembersihan state pada `tests/unit/classroom.test.ts` (149 test lulus 100%).
+
+---
+
 ## [2026-09-14] — Version 1.8.0 (Multi-Exercise Exam, Frozen Snapshot, Student HUD Switcher, Template Lock & Clean UI)
 
 ### Added

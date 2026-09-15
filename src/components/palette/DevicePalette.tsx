@@ -54,17 +54,24 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
   const reactFlow = useReactFlow();
   const [activeTab, setActiveTab] = useState<'devices' | 'templates'>('devices');
   const [isStudentInClass, setIsStudentInClass] = useState<boolean>(() => {
-    return classroomHub.getCurrentParticipant() !== null;
+    return (
+      classroomHub.getCurrentParticipant() !== null ||
+      classroomHub.getLockedRole() === 'student'
+    );
   });
 
   useEffect(() => {
-    const unsub = classroomHub.subscribe(() => {
-      const inClass = classroomHub.getCurrentParticipant() !== null;
+    const checkStatus = () => {
+      const inClass =
+        classroomHub.getCurrentParticipant() !== null ||
+        classroomHub.getLockedRole() === 'student';
       setIsStudentInClass(inClass);
       if (inClass && activeTab === 'templates') {
         setActiveTab('devices');
       }
-    });
+    };
+    const unsub = classroomHub.subscribe(checkStatus);
+    checkStatus();
     return unsub;
   }, [activeTab]);
 

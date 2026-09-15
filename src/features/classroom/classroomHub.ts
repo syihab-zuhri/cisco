@@ -15,6 +15,7 @@ const STORAGE_KEY_SUBMISSIONS = 'openpacket_class_submissions';
 const STORAGE_KEY_ACTIVE_EXERCISE = 'openpacket_class_active_exercise';
 const STORAGE_KEY_ACTIVE_EXERCISES = 'openpacket_class_active_exercises';
 const STORAGE_KEY_CURRENT_PARTICIPANT = 'openpacket_current_participant';
+const STORAGE_KEY_LOCKED_ROLE = 'openpacket_locked_role';
 
 class InMemoryStorage {
   private store = new Map<string, string>();
@@ -447,6 +448,44 @@ class ClassroomHub {
     }
   }
 
+  public getLockedRole(): 'teacher' | 'student' | null {
+    try {
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        const raw = window.sessionStorage.getItem(STORAGE_KEY_LOCKED_ROLE);
+        if (raw === 'teacher' || raw === 'student') return raw;
+      }
+    } catch {
+      // Fallback
+    }
+    const mem = memoryStore.getItem(STORAGE_KEY_LOCKED_ROLE);
+    if (mem === 'teacher' || mem === 'student') return mem;
+    return null;
+  }
+
+  public setLockedRole(role: 'teacher' | 'student' | null): void {
+    try {
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        if (role) {
+          window.sessionStorage.setItem(STORAGE_KEY_LOCKED_ROLE, role);
+        } else {
+          window.sessionStorage.removeItem(STORAGE_KEY_LOCKED_ROLE);
+        }
+      }
+    } catch {
+      // Fallback
+    }
+
+    if (role) {
+      memoryStore.setItem(STORAGE_KEY_LOCKED_ROLE, role);
+      if (role === 'teacher') {
+        // Mode guru: lepas status sebagai siswa
+        this.setCurrentParticipant(null);
+      }
+    } else {
+      memoryStore.removeItem(STORAGE_KEY_LOCKED_ROLE);
+    }
+  }
+
   public clearAll(): void {
     const storage = getStorage();
     storage.removeItem(STORAGE_KEY_SESSION);
@@ -455,6 +494,7 @@ class ClassroomHub {
     storage.removeItem(STORAGE_KEY_ACTIVE_EXERCISE);
     storage.removeItem(STORAGE_KEY_ACTIVE_EXERCISES);
     this.setCurrentParticipant(null);
+    this.setLockedRole(null);
   }
 }
 

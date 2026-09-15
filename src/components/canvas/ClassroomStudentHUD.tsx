@@ -63,6 +63,7 @@ export function ClassroomStudentHUD() {
     (confirm = true) => {
       const doLeave = () => {
         classroomHub.setCurrentParticipant(null);
+        classroomHub.setLockedRole(null);
         setParticipant(null);
         setEvaluationsByExerciseId({});
         pushToast('info', 'Anda telah keluar dari ruang kelas.');

@@ -20,6 +20,7 @@ import {
   Plus,
   Pencil,
   Trash2,
+  ArrowLeftRight,
 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { TOPOLOGY_TEMPLATES } from '../../data/topologyTemplates';
@@ -56,7 +57,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -71,7 +71,45 @@ interface ClassroomModalProps {
 export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
   const { nodes, edges, loadTopology, pushToast, requestConfirm } = useAppStore();
 
-  const [activeTab, setActiveTab] = useState<'teacher' | 'student'>('teacher');
+  const [lockedRole, setLockedRole] = useState<'teacher' | 'student' | null>(() => {
+    const role = classroomHub.getLockedRole();
+    if (role) return role;
+    if (classroomHub.getCurrentParticipant()) return 'student';
+    const sess = classroomHub.getSession();
+    if (sess && sess.status !== 'closed') return 'teacher';
+    return null;
+  });
+
+  const handleSelectRole = (role: 'teacher' | 'student') => {
+    classroomHub.setLockedRole(role);
+    setLockedRole(role);
+    if (role === 'teacher') {
+      pushToast('info', 'Mode Guru aktif. Akses siswa dinonaktifkan di perangkat ini.');
+    } else {
+      pushToast('info', 'Mode Siswa aktif. Akses administrasi guru dinonaktifkan di perangkat ini.');
+    }
+  };
+
+  const handleSwitchRole = () => {
+    requestConfirm({
+      title: 'Ganti Peran Pengguna?',
+      message:
+        lockedRole === 'teacher'
+          ? 'Anda akan keluar dari Mode Guru. Sesi administrasi guru pada perangkat ini akan dilepas.'
+          : 'Anda akan keluar dari Mode Siswa. Anda akan dikeluarkan dari sesi kelas siswa aktif saat ini.',
+      confirmLabel: 'Ganti Peran',
+      onConfirm: () => {
+        if (lockedRole === 'student') {
+          classroomHub.setCurrentParticipant(null);
+          setJoinedParticipant(null);
+          setActiveExercise(null);
+        }
+        classroomHub.setLockedRole(null);
+        setLockedRole(null);
+        pushToast('info', 'Silakan tentukan peran baru yang ingin Anda masuki.');
+      },
+    });
+  };
 
   // Teacher State
   const [session, setSession] = useState<ClassSession | null>(null);
@@ -909,26 +947,116 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
               </div>
             </div>
 
-            {/* Role Switcher */}
-            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'teacher' | 'student')}>
-              <TabsList className="h-8">
-                <TabsTrigger value="teacher" className="gap-1.5 text-xs">
-                  <GraduationCap className="h-3.5 w-3.5" />
-                  Mode Guru
-                </TabsTrigger>
-                <TabsTrigger value="student" className="gap-1.5 text-xs">
-                  <Users className="h-3.5 w-3.5" />
-                  Mode Siswa
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
+            {/* Status Peran / Aksi Ganti Peran */}
+            {lockedRole ? (
+              <div className="flex items-center gap-2">
+                <Badge
+                  variant="outline"
+                  className="flex items-center gap-1.5 py-1 px-2.5 text-xs font-semibold"
+                >
+                  {lockedRole === 'teacher' ? (
+                    <>
+                      <GraduationCap className="h-3.5 w-3.5 text-primary" />
+                      <span>Mode Guru Aktif</span>
+                    </>
+                  ) : (
+                    <>
+                      <Users className="h-3.5 w-3.5 text-sky-400" />
+                      <span>Mode Siswa Aktif</span>
+                    </>
+                  )}
+                </Badge>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleSwitchRole}
+                  className="h-7 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                  title="Keluar dari peran saat ini untuk berganti peran"
+                >
+                  <ArrowLeftRight className="h-3 w-3" />
+                  Ganti Peran
+                </Button>
+              </div>
+            ) : (
+              <Badge variant="secondary" className="text-xs text-muted-foreground">
+                Pilih Peran Anda
+              </Badge>
+            )}
           </div>
         </DialogHeader>
 
         {/* Modal Body */}
         <div className="flex flex-1 flex-col overflow-y-auto p-6">
-          {/* ======================= TAB GURU ======================= */}
-          {activeTab === 'teacher' && (
+          {/* ======================= GERBANG PEMILIHAN PERAN (ROLE GATE) ======================= */}
+          {lockedRole === null && (
+            <div className="flex flex-col items-center justify-center py-6 gap-6 max-w-2xl mx-auto w-full my-auto">
+              <div className="text-center flex flex-col gap-1.5">
+                <h3 className="text-lg font-bold text-foreground">
+                  Pilih Peran di Ruang Kelas
+                </h3>
+                <p className="text-xs text-muted-foreground leading-relaxed max-w-md mx-auto">
+                  Untuk menjaga independensi pengerjaan ujian, satu perangkat hanya dapat memegang satu peran aktif (Guru atau Siswa) dalam satu waktu.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
+                {/* Pilihan 1: Guru */}
+                <div
+                  onClick={() => handleSelectRole('teacher')}
+                  className="group relative flex flex-col justify-between rounded-xl border border-border/80 bg-card p-5 transition-all hover:border-primary hover:shadow-lg cursor-pointer hover:bg-primary/5"
+                >
+                  <div className="flex flex-col gap-3">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-all">
+                      <GraduationCap className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-sm text-foreground">
+                        Masuk Sebagai Guru
+                      </h4>
+                      <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
+                        Buka sesi kelas baru, kelola dan siarkan paket soal ujian ke siswa, pantau skor secara live, dan unduh rekap nilai ke CSV.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-5 pt-3 border-t border-border/50">
+                    <Button className="w-full gap-2 text-xs font-semibold">
+                      <Play className="h-3.5 w-3.5" />
+                      Pilih Mode Guru
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Pilihan 2: Siswa */}
+                <div
+                  onClick={() => handleSelectRole('student')}
+                  className="group relative flex flex-col justify-between rounded-xl border border-border/80 bg-card p-5 transition-all hover:border-sky-500 hover:shadow-lg cursor-pointer hover:bg-sky-500/5"
+                >
+                  <div className="flex flex-col gap-3">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-sky-500/10 text-sky-400 group-hover:bg-sky-500 group-hover:text-white transition-all">
+                      <Users className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-sm text-foreground">
+                        Masuk Sebagai Siswa
+                      </h4>
+                      <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
+                        Bergabung ke kelas dengan kode dari guru, buka paket tugas praktikum mandiri (.oplab), dan rakit topologi di kanvas.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-5 pt-3 border-t border-border/50">
+                    <Button variant="secondary" className="w-full gap-2 text-xs font-semibold">
+                      <Play className="h-3.5 w-3.5" />
+                      Pilih Mode Siswa
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ======================= TAMPILAN GURU ======================= */}
+          {lockedRole === 'teacher' && (
             <div className="flex flex-col gap-5">
               {!session ? (
                 <div className="flex flex-col gap-5">
@@ -1249,8 +1377,8 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
             </div>
           )}
 
-          {/* ======================= TAB SISWA ======================= */}
-          {activeTab === 'student' && (
+          {/* ======================= TAMPILAN SISWA ======================= */}
+          {lockedRole === 'student' && (
             <div className="flex flex-col gap-5">
               {!joinedParticipant ? (
                 /* Form Gabung Kelas */
