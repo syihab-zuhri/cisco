@@ -17,7 +17,12 @@ import { useSimulationEngine } from '@/hooks/useSimulationEngine';
 
 export default function App() {
   const { triggerPing } = useSimulationEngine();
-  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth >= 768;
+    }
+    return true;
+  });
   const [isDocsOpen, setIsDocsOpen] = useState<boolean>(false);
   const [isLabOpen, setIsLabOpen] = useState<boolean>(false);
   const [isClassroomOpen, setIsClassroomOpen] = useState<boolean>(false);

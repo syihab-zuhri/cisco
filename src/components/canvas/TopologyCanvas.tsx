@@ -176,7 +176,7 @@ export function TopologyCanvas() {
             if (n.data?.type === 'cloud') return '#60A5FA';
             return '#F59E0B';
           }}
-          className="!border-border !bg-popover"
+          className="!hidden sm:!block !border-border !bg-popover"
         />
       </ReactFlow>
 

@@ -138,7 +138,7 @@ export function DeviceCliModal() {
     >
       <DialogContent
         showCloseButton
-        className="flex h-[520px] w-[640px] flex-col gap-0 overflow-hidden border p-0 font-mono sm:max-w-[640px]"
+        className="flex h-[80vh] sm:h-[520px] w-[95vw] max-w-[640px] flex-col gap-0 overflow-hidden border p-0 font-mono sm:max-w-[640px]"
         style={{ backgroundColor: 'var(--term-bg)' }}
       >
         <DialogHeader className="flex-row items-center justify-between border-b bg-muted/60 px-4 py-0">

@@ -117,50 +117,73 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
 
   if (!isOpen) {
     return (
-      <div className="relative z-10 flex flex-col items-center border-r bg-card py-3 px-1.5 select-none transition-all">
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={onToggle}
-                aria-label="Buka Panel Alat"
-              >
-                <PanelLeftOpen />
-              </Button>
-            }
-          />
-          <TooltipContent side="right">Buka Sidebar Panel</TooltipContent>
-        </Tooltip>
-        <div className="mt-4 flex flex-col items-center gap-6">
-          <span
-            style={{ writingMode: 'vertical-rl' }}
-            className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground transform rotate-180"
-          >
-            Panel Alat
-          </span>
+      <>
+        {/* Desktop Collapsed Strip */}
+        <div className="hidden md:flex relative z-10 flex-col items-center border-r bg-card py-3 px-1.5 select-none transition-all">
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={onToggle}
+                  aria-label="Buka Panel Alat"
+                >
+                  <PanelLeftOpen />
+                </Button>
+              }
+            />
+            <TooltipContent side="right">Buka Sidebar Panel</TooltipContent>
+          </Tooltip>
+          <div className="mt-4 flex flex-col items-center gap-6">
+            <span
+              style={{ writingMode: 'vertical-rl' }}
+              className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground transform rotate-180"
+            >
+              Panel Alat
+            </span>
+          </div>
         </div>
-      </div>
+
+        {/* Mobile Floating Button saat tertutup */}
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={onToggle}
+          className="md:hidden absolute top-3 left-3 z-20 h-8 gap-1.5 rounded-full border border-border/70 bg-card/90 px-3 text-xs font-semibold shadow-md backdrop-blur-sm"
+          aria-label="Buka Palet Alat"
+        >
+          <Layers className="h-3.5 w-3.5 text-primary" />
+          <span>Komponen</span>
+        </Button>
+      </>
     );
   }
 
   return (
-    <aside className="relative flex w-64 flex-col border-r bg-card text-foreground select-none transition-all duration-200">
-      {/* Header with Close/Toggle Button */}
-      <div className="flex h-10 shrink-0 items-center justify-between border-b px-3">
-        <span className="text-xs font-bold uppercase tracking-wider text-foreground">
-          Panel Alat
-        </span>
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          onClick={onToggle}
-          aria-label="Tutup Panel Alat"
-        >
-          <PanelLeftClose />
-        </Button>
-      </div>
+    <>
+      {/* Mobile Backdrop saat terbuka */}
+      <div
+        className="md:hidden fixed inset-0 z-40 bg-black/50 backdrop-blur-xs transition-opacity"
+        onClick={onToggle}
+        aria-hidden="true"
+      />
+
+      <aside className="fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] md:relative md:inset-auto md:z-auto md:w-64 md:max-w-none flex flex-col border-r bg-card text-foreground select-none transition-all duration-200 shadow-2xl md:shadow-none">
+        {/* Header with Close/Toggle Button */}
+        <div className="flex h-10 shrink-0 items-center justify-between border-b px-3">
+          <span className="text-xs font-bold uppercase tracking-wider text-foreground">
+            Panel Alat
+          </span>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            onClick={onToggle}
+            aria-label="Tutup Panel Alat"
+          >
+            <PanelLeftClose />
+          </Button>
+        </div>
 
       {/* Tab Switcher */}
       <Tabs
@@ -382,6 +405,7 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
         </TabsContent>
       </Tabs>
     </aside>
+    </>
   );
 }
 

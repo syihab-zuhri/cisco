@@ -31,7 +31,7 @@ export function PduInspectorDrawer() {
   const pdu = inspectorEvent?.pdu;
 
   return (
-    <div className="absolute right-2 top-2 bottom-2 z-20 flex w-80 flex-col rounded-lg border border-violet-800/60 bg-popover/95 shadow-2xl backdrop-blur-sm">
+    <div className="absolute right-2 top-2 bottom-2 z-20 flex w-[calc(100vw-1rem)] sm:w-80 max-w-[320px] flex-col rounded-lg border border-violet-800/60 bg-popover/95 shadow-2xl backdrop-blur-sm">
       {/* Header */}
       <div className="flex h-9 items-center justify-between border-b border-border px-3">
         <div className="flex items-center gap-2">

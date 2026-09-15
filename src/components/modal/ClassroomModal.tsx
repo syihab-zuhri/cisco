@@ -931,17 +931,17 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent className="flex max-h-[88vh] w-[95vw] max-w-4xl flex-col gap-0 p-0 sm:max-w-4xl">
-        <DialogHeader className="border-b px-6 py-3.5">
-          <div className="flex items-center justify-between">
+        <DialogHeader className="border-b px-4 sm:px-6 py-3 sm:py-3.5">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div className="flex items-center gap-2.5">
-              <div className="rounded-lg bg-primary/20 p-2 text-primary">
+              <div className="rounded-lg bg-primary/20 p-2 text-primary shrink-0">
                 <Users className="h-5 w-5" />
               </div>
               <div>
                 <DialogTitle className="text-sm font-bold tracking-tight">
                   Portal Kelas &amp; Praktikum Jaringan
                 </DialogTitle>
-                <DialogDescription className="text-xs text-muted-foreground">
+                <DialogDescription className="text-xs text-muted-foreground line-clamp-1 sm:line-clamp-none">
                   Ruang kelas interaktif tanpa akun: guru memandu soal, evaluasi otomatis deterministik.
                 </DialogDescription>
               </div>
@@ -949,7 +949,7 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
 
             {/* Status Peran / Aksi Ganti Peran */}
             {lockedRole ? (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 <Badge
                   variant="outline"
                   className="flex items-center gap-1.5 py-1 px-2.5 text-xs font-semibold"
@@ -978,7 +978,7 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
                 </Button>
               </div>
             ) : (
-              <Badge variant="secondary" className="text-xs text-muted-foreground">
+              <Badge variant="secondary" className="text-xs text-muted-foreground shrink-0">
                 Pilih Peran Anda
               </Badge>
             )}
@@ -986,7 +986,7 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
         </DialogHeader>
 
         {/* Modal Body */}
-        <div className="flex flex-1 flex-col overflow-y-auto p-6">
+        <div className="flex flex-1 flex-col overflow-y-auto p-4 sm:p-6">
           {/* ======================= GERBANG PEMILIHAN PERAN (ROLE GATE) ======================= */}
           {lockedRole === null && (
             <div className="flex flex-col items-center justify-center py-6 gap-6 max-w-2xl mx-auto w-full my-auto">

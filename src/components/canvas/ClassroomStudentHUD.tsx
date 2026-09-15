@@ -46,7 +46,9 @@ export function ClassroomStudentHUD() {
     Record<string, ExerciseEvaluation>
   >({});
   const [isEvaluating, setIsEvaluating] = useState(false);
-  const [isMinimized, setIsMinimized] = useState(false);
+  const [isMinimized, setIsMinimized] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth < 640 : false
+  );
 
   // Soal yang sedang dipilih oleh siswa
   const activeExercise: Exercise | null =
@@ -360,27 +362,29 @@ export function ClassroomStudentHUD() {
     return null;
   }
 
-  // Posisi dinamis: jika PDU Inspector terbuka di kanan, geser HUD ke kirinya agar tidak bertumpukan
-  const positionClass = inspectorOpen ? 'right-[336px]' : 'right-4';
+  // Posisi dinamis: jika PDU Inspector terbuka di kanan, geser HUD ke kirinya pada layar lebar agar tidak bertumpukan
+  const positionClass = inspectorOpen
+    ? 'right-2 sm:right-4 md:right-[336px]'
+    : 'right-2 sm:right-4';
 
   // Tampilan Minimized (Floating Pill)
   if (isMinimized) {
     return (
       <div
         className={cn(
-          'absolute top-4 z-30 flex items-center gap-2 rounded-full border border-primary/40 bg-background/90 px-3.5 py-1.5 shadow-2xl backdrop-blur transition-all duration-200',
+          'absolute top-3 z-30 flex items-center gap-2 rounded-full border border-primary/40 bg-background/90 px-3 py-1.5 shadow-2xl backdrop-blur transition-all duration-200 max-w-[calc(100vw-1rem)]',
           positionClass
         )}
       >
-        <div className="flex items-center gap-1.5 text-xs">
-          <GraduationCap className="h-4 w-4 text-primary" />
-          <span className="font-mono font-bold text-foreground">
+        <div className="flex items-center gap-1.5 text-xs truncate">
+          <GraduationCap className="h-4 w-4 text-primary shrink-0" />
+          <span className="font-mono font-bold text-foreground shrink-0">
             {session?.classCode || 'KELAS'}
           </span>
-          <span className="text-muted-foreground">• {participant?.nickname || 'Siswa'}</span>
+          <span className="text-muted-foreground truncate">• {participant?.nickname || 'Siswa'}</span>
           {activeExercises.length > 1 && (
-            <span className="text-[10px] text-primary font-mono">
-              (Soal {selectedExerciseIndex + 1}/{activeExercises.length})
+            <span className="text-[10px] text-primary font-mono shrink-0">
+              ({selectedExerciseIndex + 1}/{activeExercises.length})
             </span>
           )}
         </div>
@@ -388,7 +392,7 @@ export function ClassroomStudentHUD() {
         {evaluation && (
           <Badge
             variant="outline"
-            className={`text-[10px] font-bold ${
+            className={`text-[10px] font-bold shrink-0 ${
               evaluation.score === 100
                 ? 'border-emerald-800 bg-emerald-950/60 text-emerald-300'
                 : 'border-amber-800 bg-amber-950/60 text-amber-300'
@@ -402,7 +406,7 @@ export function ClassroomStudentHUD() {
           size="icon"
           variant="ghost"
           onClick={() => setIsMinimized(false)}
-          className="h-6 w-6 text-muted-foreground hover:text-foreground"
+          className="h-6 w-6 text-muted-foreground hover:text-foreground shrink-0"
           title="Buka Lembar Kerja"
         >
           <ChevronDown className="h-4 w-4" />
@@ -415,7 +419,7 @@ export function ClassroomStudentHUD() {
   return (
     <Card
       className={cn(
-        'absolute top-4 z-30 flex max-h-[82vh] w-[390px] flex-col overflow-hidden border-border/80 bg-background/95 shadow-2xl backdrop-blur transition-all duration-200',
+        'absolute top-3 z-30 flex max-h-[80vh] w-[calc(100vw-1rem)] sm:w-[380px] max-w-[380px] flex-col overflow-hidden border-border/80 bg-background/95 shadow-2xl backdrop-blur transition-all duration-200',
         positionClass
       )}
     >

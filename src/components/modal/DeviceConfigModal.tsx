@@ -270,8 +270,8 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
 
   return (
     <Dialog open onOpenChange={(open) => { if (!open) setActiveConfigModalNodeId(null); }}>
-      <DialogContent className="flex max-h-[90vh] w-[540px] flex-col gap-0 p-0 sm:max-w-[540px]">
-        <DialogHeader className="border-b px-5 py-3">
+      <DialogContent className="flex max-h-[90vh] w-[95vw] max-w-[540px] flex-col gap-0 p-0 sm:max-w-[540px]">
+        <DialogHeader className="border-b px-4 sm:px-5 py-3">
           <DialogTitle className="flex items-center gap-2 text-sm font-semibold">
             <ShieldCheck className="h-5 w-5 text-sky-400" />
             Konfigurasi Perangkat ({device.type.toUpperCase()})
@@ -282,7 +282,7 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
         </DialogHeader>
 
         {/* Content */}
-        <div className="flex flex-col gap-4 overflow-y-auto p-5">
+        <div className="flex flex-col gap-4 overflow-y-auto p-4 sm:p-5">
           {errorMsg && (
             <div role="alert" className="rounded-lg border border-destructive/50 bg-destructive/10 p-2.5 text-xs text-destructive">
               {errorMsg}

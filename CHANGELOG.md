@@ -11,6 +11,29 @@
 
 ---
 
+## [2026-09-15] — Version 2.0.0 (Full Responsive Overhaul: Mobile, iPad & Desktop UX)
+
+### Added & Improved
+- **Header Toolbar Responsif (`src/components/toolbar/Toolbar.tsx`)**:
+  - Di layar HP (< 768px), header toolbar dikunci ramping (`h-13`) satu baris tanpa wrapping yang berantakan.
+  - Penambahan **Mobile Action Sheet (Laci Menu)** untuk kecepatan simulasi, kontrol play/pause/step, impor/ekspor JSON, lab mandiri, panduan docs, dan reset kanvas.
+  - Penambahan **Collapsible Quick Ping Bar** untuk layar mobile/tablet (`< xl`).
+  - Tablet & desktop menyajikan tombol ringkas dengan tooltip dan tata letak proporsional.
+- **Overlay Drawer Palet Perangkat di Mobile (`src/components/palette/DevicePalette.tsx`)**:
+  - Di desktop/tablet, palet tetap berfungsi sebagai dock samping kiri.
+  - Di HP (< 768px), palet berubah menjadi **Overlay Drawer (Laci Mengambang)** dengan backdrop blur, dibuka via tombol mengambang `"Komponen"`, sehingga kanvas tetap 100% luas dan tidak terpotong.
+- **Floating Student HUD & PDU Drawer Anti-Overflow (`ClassroomStudentHUD.tsx` & `PduInspectorDrawer.tsx`)**:
+  - Lebar HUD dan Drawer dibuat dinamis `w-[calc(100vw-1rem)] sm:w-[380px]` (dan `sm:w-80` untuk PDU) sehingga tidak pernah keluar dari batas layar ponsel.
+  - Di mobile, HUD otomatis default dalam status **Minimized Pill** di kanvas agar tidak menutupi diagram topologi.
+- **Responsivitas Dialog Modal Sistem**:
+  - `DeviceConfigModal.tsx`, `DeviceCliModal.tsx`, `LabModal.tsx`, `ExerciseEditorModal.tsx`, dan `ClassroomModal.tsx` disesuaikan menggunakan `w-[95vw]` dan padding adaptif `p-4 sm:p-6`.
+  - `DocumentationModal.tsx` menyesuaikan tata letak grid dan daftar topik menjadi navigasi bertingkat yang rapi di layar HP.
+- **Optimasi Kanvas & Event Log**:
+  - MiniMap kanvas otomatis disembunyikan di layar ponsel (`!hidden sm:!block`) agar tidak memakan ruang sentuh jari.
+  - Panel Event Log default dalam kondisi terlipat (*collapsed* setinggi 32px) di perangkat seluler dengan label responsif.
+
+---
+
 ## [2026-09-15] — Version 1.9.0 (Single-Role Exclusivity, Role Gate Portal & Safe Switching)
 
 ### Added

@@ -206,6 +206,19 @@ gantt
   - *Dependencies:* `TASK-P0-032`, `TASK-P0-025`
   - *Definition of Done:* Menghilangkan tab switcher bebas di modal kelas; menyuguhkan menu gerbang 2 kartu besar (Guru vs Siswa); menampilkan badge peran aktif di header modal dan toolbar; serta aksi "Ganti Peran" aman dengan dialog konfirmasi.
 
+---
+
+### Sprint 11: Multi-Device Responsive UI/UX Overhaul (v2.0.0)
+- **`TASK-P0-034` [Effort: L] Responsive Layout Architecture & Mobile Sheet Menu (`Toolbar.tsx`, `DevicePalette.tsx`, `EventLogPanel.tsx`)**
+  - *Status:* Completed (2026-09-15)
+  - *Dependencies:* `TASK-P0-004`, `TASK-P0-013`
+  - *Definition of Done:* Header toolbar ramping anti-wrap di mobile dengan laci menu samping (`Sheet`) dan bar ping lipat; palet alat adaptif sebagai overlay drawer di HP dengan floating trigger button; serta penyembunyian MiniMap dan auto-collapse Event Log di mobile.
+- **`TASK-P0-035` [Effort: M] Modal & Floating Overlay Boundary Normalization (`ClassroomStudentHUD.tsx`, `PduInspectorDrawer.tsx`, Modals)**
+  - *Status:* Completed (2026-09-15)
+  - *Dependencies:* `TASK-P0-029`, `TASK-P0-014`
+  - *Definition of Done:* Normalisasi lebar floating HUD dan PDU Drawer (`w-[calc(100vw-1rem)]`), HUD mobile auto-minimized, serta adaptasi seluruh dialog modal (`DeviceConfig`, `CLI Terminal`, `Lab`, `Classroom`, `Documentation`) bebas horizontal overflow.
+
+
 
 
 

@@ -33,8 +33,8 @@ export function LabModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="flex max-h-[86vh] w-[680px] flex-col gap-0 p-0 sm:max-w-[680px]">
-        <DialogHeader className="border-b px-5 py-3">
+      <DialogContent className="flex max-h-[86vh] w-[95vw] max-w-[680px] flex-col gap-0 p-0 sm:max-w-[680px]">
+        <DialogHeader className="border-b px-4 sm:px-5 py-3">
           <DialogTitle className="flex items-center gap-2.5 text-sm font-bold">
             <GraduationCap className="h-5 w-5 text-amber-400" />
             Mode Lab Praktikum
@@ -50,7 +50,7 @@ export function LabModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
         </DialogHeader>
 
         {/* Body */}
-        <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-5">
+        <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-5">
           {!activeLab && !selected && (
             <>
               <p className="text-xs leading-relaxed text-muted-foreground">

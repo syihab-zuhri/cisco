@@ -196,17 +196,17 @@ export function ExerciseEditorModal({
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent className="flex max-h-[90vh] w-[95vw] max-w-3xl flex-col gap-0 p-0 sm:max-w-3xl">
-        <DialogHeader className="border-b px-6 py-4">
+        <DialogHeader className="border-b px-4 sm:px-6 py-3 sm:py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <div className="rounded-lg bg-primary/20 p-2 text-primary">
+              <div className="rounded-lg bg-primary/20 p-2 text-primary shrink-0">
                 <FileEdit className="h-5 w-5" />
               </div>
               <div>
                 <DialogTitle className="text-sm font-bold tracking-tight">
                   {initialExercise ? 'Sunting Soal Praktikum Guru' : 'Buat Soal Praktikum Baru'}
                 </DialogTitle>
-                <DialogDescription className="text-xs text-muted-foreground">
+                <DialogDescription className="text-xs text-muted-foreground line-clamp-1 sm:line-clamp-none">
                   Sesuaikan teks materi, instruksi, dan kriteria evaluasi otomatis untuk siswa.
                 </DialogDescription>
               </div>
@@ -216,16 +216,16 @@ export function ExerciseEditorModal({
               size="sm"
               variant="outline"
               onClick={handleExportThis}
-              className="gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+              className="gap-1.5 text-xs text-muted-foreground hover:text-foreground shrink-0"
             >
               <Download className="h-3.5 w-3.5" />
-              Unduh .json
+              <span className="hidden sm:inline">Unduh .json</span>
             </Button>
           </div>
         </DialogHeader>
 
         {/* Scrollable Form Body */}
-        <div className="flex flex-1 flex-col gap-5 overflow-y-auto p-6">
+        <div className="flex flex-1 flex-col gap-5 overflow-y-auto p-4 sm:p-6">
           {errorMsg && (
             <div className="flex items-start gap-2.5 rounded-lg border border-rose-800/60 bg-rose-950/30 p-3 text-xs text-rose-300">
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-400" />

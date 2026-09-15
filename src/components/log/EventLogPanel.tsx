@@ -93,7 +93,9 @@ export function EventLogPanel() {
 
   // State tinggi panel (dalam pixel)
   const [height, setHeight] = useState<number>(160);
-  const [isCollapsed, setIsCollapsed] = useState<boolean>(false);
+  const [isCollapsed, setIsCollapsed] = useState<boolean>(() =>
+    typeof window !== 'undefined' ? window.innerWidth < 768 : false
+  );
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<PanelTab>('log');
 
@@ -189,13 +191,14 @@ export function EventLogPanel() {
 
       {/* Header */}
       <div className="flex h-8 items-center justify-between border-b bg-muted/60 px-3">
-        <div className="flex items-center gap-2">
-          <Terminal className="h-3.5 w-3.5 text-blue-400" />
-          <span className="text-[11px] font-semibold tracking-wider uppercase text-foreground/90">
-            Network Event Log &amp; PDU Inspection
+        <div className="flex items-center gap-2 truncate">
+          <Terminal className="h-3.5 w-3.5 text-blue-400 shrink-0" />
+          <span className="text-[11px] font-semibold tracking-wider uppercase text-foreground/90 truncate">
+            <span className="hidden sm:inline">Network Event Log &amp; PDU Inspection</span>
+            <span className="sm:hidden">Event Log</span>
           </span>
-          <Badge variant="secondary" className="text-[11px] font-normal">
-            {simulationLogs.length} events
+          <Badge variant="secondary" className="text-[11px] font-normal shrink-0">
+            {simulationLogs.length}
           </Badge>
         </div>
 

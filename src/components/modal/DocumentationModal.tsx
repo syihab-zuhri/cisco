@@ -331,9 +331,9 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
           </DialogClose>
         </DialogHeader>
 
-        <div className="flex min-h-0 flex-1">
+        <div className="flex flex-col sm:flex-row min-h-0 flex-1">
           {/* Sidebar */}
-          <nav className="flex w-64 shrink-0 flex-col border-r bg-background/40">
+          <nav className="flex w-full sm:w-64 shrink-0 flex-col border-b sm:border-b-0 sm:border-r bg-background/40 max-h-44 sm:max-h-none overflow-y-auto">
             <div className="p-3">
               <div className="relative">
                 <Search className="absolute top-2.5 left-2.5 h-3.5 w-3.5 text-muted-foreground/60" />
@@ -413,7 +413,7 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
                   title="Mulai di Sini"
                   subtitle="Tiga langkah dari kanvas kosong menjadi jaringan yang berfungsi."
                 />
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   {[
                     { n: '1', title: 'Bangun topologi', body: 'Klik perangkat di palet, atau buka tab Template dan terapkan topologi siap pakai (16 katalog, 5 grup).' },
                     { n: '2', title: 'Konfigurasi', body: 'Klik perangkat → ikon gear untuk form GUI, atau ikon terminal untuk CLI Cisco IOS. Keduanya tersinkron dua arah.' },
@@ -433,7 +433,7 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
                   <div className="mb-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">
                     Yang bisa kamu lakukan
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {[
                       { icon: <Layers className="h-3.5 w-3.5" />, text: '8 jenis perangkat + 16 template topologi' },
                       { icon: <Zap className="h-3.5 w-3.5" />, text: 'ARP/ICMP deterministik + warm cache' },
@@ -702,7 +702,7 @@ npm run build && npx cap add android`}</CodeBlock>
                   title="Arsitektur & Keamanan"
                   subtitle="Delapan invariants non-negotiable dan kualitas yang terukur."
                 />
-                <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                   {[
                     { t: 'Zero DOM in Engine', c: 'text-emerald-400', b: 'Engine murni TypeScript di Web Worker — tanpa React/DOM (INV-001).' },
                     { t: 'Typed IPC (INV-002)', c: 'text-cyan-400', b: 'Semua pesan UI ↔ Worker adalah tagged union di src/types/ipc.ts.' },
@@ -724,7 +724,7 @@ npm run build && npx cap add android`}</CodeBlock>
                     <ShieldCheck className="h-4 w-4 text-emerald-400" />
                     <span className="text-xs font-bold">Quality Gates (terverifikasi CI)</span>
                   </div>
-                  <div className="grid grid-cols-4 gap-2 text-center text-xs">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
                     {[
                       { v: '70', l: 'unit test' },
                       { v: '94%+', l: 'coverage engine' },
