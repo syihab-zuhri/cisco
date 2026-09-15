@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  Terminal,
   Trash2,
   GripHorizontal,
   ChevronUp,
@@ -89,15 +88,28 @@ export function EventLogPanel() {
   const setInspectorEvent = useAppStore((s) => s.setInspectorEvent);
   const setInspectorOpen = useAppStore((s) => s.setInspectorOpen);
   const selectedNodeId = useAppStore((s) => s.selectedNodeId);
+  const setSelectedNodeId = useAppStore((s) => s.setSelectedNodeId);
   const nodes = useAppStore((s) => s.nodes);
 
-  // State tinggi panel (dalam pixel)
-  const [height, setHeight] = useState<number>(160);
-  const [isCollapsed, setIsCollapsed] = useState<boolean>(() =>
-    typeof window !== 'undefined' ? window.innerWidth < 768 : false
+  const isLogPanelOpen = useAppStore((s) => s.isLogPanelOpen);
+  const setIsLogPanelOpen = useAppStore((s) => s.setIsLogPanelOpen);
+  const logPanelActiveTab = useAppStore((s) => s.logPanelActiveTab);
+  const setLogPanelActiveTab = useAppStore((s) => s.setLogPanelActiveTab);
+
+  // State tinggi panel (dalam pixel) — default mobile 220px, desktop 180px
+  const [height, setHeight] = useState<number>(() =>
+    typeof window !== 'undefined' && window.innerWidth < 768 ? 220 : 180
   );
+  const [isCollapsed, setIsCollapsed] = useState<boolean>(() => !isLogPanelOpen);
   const [isDragging, setIsDragging] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<PanelTab>('log');
+
+  // Sync state dengan store global
+  useEffect(() => {
+    setIsCollapsed(!isLogPanelOpen);
+  }, [isLogPanelOpen]);
+
+  const activeTab = logPanelActiveTab;
+  const setActiveTab = setLogPanelActiveTab;
 
   const dragStartYRef = useRef<number>(0);
   const dragStartHeightRef = useRef<number>(0);
@@ -110,13 +122,22 @@ export function EventLogPanel() {
     }
   }, [simPlayedUpTo, activeTab]);
 
+  const deviceNodes = nodes.filter((n) => n.type === 'deviceNode');
   const selectedDevice = nodes.find((n) => n.id === selectedNodeId)?.data;
 
-  // Dragging event handlers
+  // Mouse Dragging
   const handleMouseDown = (e: React.MouseEvent) => {
     setIsDragging(true);
     dragStartYRef.current = e.clientY;
-    dragStartHeightRef.current = isCollapsed ? 32 : height;
+    dragStartHeightRef.current = isCollapsed ? 40 : height;
+  };
+
+  // Touch Dragging (HP / Layar Sentuh)
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length !== 1) return;
+    setIsDragging(true);
+    dragStartYRef.current = e.touches[0].clientY;
+    dragStartHeightRef.current = isCollapsed ? 40 : height;
   };
 
   useEffect(() => {
@@ -125,13 +146,15 @@ export function EventLogPanel() {
       const deltaY = dragStartYRef.current - e.clientY;
       const newHeight = Math.min(
         Math.max(dragStartHeightRef.current + deltaY, 40),
-        window.innerHeight * 0.8
+        window.innerHeight * 0.85
       );
 
-      if (newHeight <= 45) {
+      if (newHeight <= 50) {
         setIsCollapsed(true);
+        setIsLogPanelOpen(false);
       } else {
         setIsCollapsed(false);
+        setIsLogPanelOpen(true);
         setHeight(newHeight);
       }
     };
@@ -140,29 +163,66 @@ export function EventLogPanel() {
       setIsDragging(false);
     };
 
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!isDragging || e.touches.length !== 1) return;
+      if (e.cancelable) e.preventDefault();
+      const deltaY = dragStartYRef.current - e.touches[0].clientY;
+      const newHeight = Math.min(
+        Math.max(dragStartHeightRef.current + deltaY, 40),
+        window.innerHeight * 0.85
+      );
+
+      if (newHeight <= 50) {
+        setIsCollapsed(true);
+        setIsLogPanelOpen(false);
+      } else {
+        setIsCollapsed(false);
+        setIsLogPanelOpen(true);
+        setHeight(newHeight);
+      }
+    };
+
+    const handleTouchEnd = () => {
+      setIsDragging(false);
+    };
+
     if (isDragging) {
       window.addEventListener('mousemove', handleMouseMove);
       window.addEventListener('mouseup', handleMouseUp);
+      window.addEventListener('touchmove', handleTouchMove, { passive: false });
+      window.addEventListener('touchend', handleTouchEnd);
+      window.addEventListener('touchcancel', handleTouchEnd);
     }
 
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleTouchEnd);
+      window.removeEventListener('touchcancel', handleTouchEnd);
     };
-  }, [isDragging]);
+  }, [isDragging, setIsLogPanelOpen]);
 
   const toggleCollapse = () => {
-    if (isCollapsed) {
-      setIsCollapsed(false);
-      setHeight(180);
-    } else {
-      setIsCollapsed(true);
+    const nextCollapsed = !isCollapsed;
+    setIsCollapsed(nextCollapsed);
+    setIsLogPanelOpen(!nextCollapsed);
+    if (!nextCollapsed && height < 120) {
+      setHeight(typeof window !== 'undefined' && window.innerWidth < 768 ? 220 : 180);
     }
   };
 
   const handleMaximize = () => {
-    if (isCollapsed) setIsCollapsed(false);
-    setHeight((prev) => (prev > 350 ? 160 : 420));
+    if (isCollapsed) {
+      setIsCollapsed(false);
+      setIsLogPanelOpen(true);
+    }
+    setHeight((prev) => {
+      const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+      const maxHeight = Math.round(window.innerHeight * 0.75);
+      const normalHeight = isMobile ? 220 : 180;
+      return prev > 300 ? normalHeight : maxHeight;
+    });
   };
 
   const handleSelectEvent = (event: SimEvent) => {
@@ -172,45 +232,54 @@ export function EventLogPanel() {
 
   return (
     <div
-      style={{ height: isCollapsed ? 32 : `${height}px` }}
+      style={{ height: isCollapsed ? 40 : `${height}px` }}
       className={cn(
         'relative flex select-none flex-col border-t bg-card transition-[height]',
         isDragging ? 'transition-none' : 'duration-150'
       )}
     >
-      {/* Resizer Handle Bar */}
+      {/* Resizer Handle Bar — mendukung Mouse dan Touch */}
       <div
         onMouseDown={handleMouseDown}
-        title="Tarik ke atas/bawah untuk mengubah tinggi terminal"
-        className="group absolute -top-1.5 right-0 left-0 z-30 flex h-3 cursor-row-resize items-center justify-center hover:bg-primary/20"
+        onTouchStart={handleTouchStart}
+        title="Tarik ke atas/bawah untuk mengubah tinggi panel"
+        className="group absolute -top-2 right-0 left-0 z-30 flex h-4 cursor-row-resize items-center justify-center hover:bg-primary/20 touch-none select-none"
       >
         <div className="flex h-1.5 w-16 items-center justify-center rounded-full bg-muted-foreground/50 transition-all group-hover:w-24 group-hover:bg-primary">
           <GripHorizontal className="h-3 w-3 opacity-0 group-hover:opacity-100" />
         </div>
       </div>
 
-      {/* Header */}
-      <div className="flex h-8 items-center justify-between border-b bg-muted/60 px-3">
+      {/* Header — Seluruh baris bisa diketuk untuk toggle buka/tutup */}
+      <div
+        onClick={toggleCollapse}
+        className="flex h-10 sm:h-8 items-center justify-between border-b bg-muted/80 px-3 cursor-pointer select-none hover:bg-muted/95 transition-colors touch-manipulation"
+      >
         <div className="flex items-center gap-2 truncate">
-          <Terminal className="h-3.5 w-3.5 text-blue-400 shrink-0" />
-          <span className="text-[11px] font-semibold tracking-wider uppercase text-foreground/90 truncate">
-            <span className="hidden sm:inline">Network Event Log &amp; PDU Inspection</span>
-            <span className="sm:hidden">Event Log</span>
+          <ScrollText className="h-4 w-4 sm:h-3.5 sm:w-3.5 text-blue-400 shrink-0" />
+          <span className="text-xs sm:text-[11px] font-semibold tracking-wider uppercase text-foreground/90 truncate">
+            <span className="hidden sm:inline">Log Simulasi &amp; Tabel Jaringan</span>
+            <span className="sm:hidden">Log &amp; Tabel Simulasi</span>
           </span>
-          <Badge variant="secondary" className="text-[11px] font-normal shrink-0">
+          <Badge variant="secondary" className="text-[10px] font-normal shrink-0 h-5 px-1.5">
             {simulationLogs.length}
           </Badge>
+          {isCollapsed && (
+            <span className="text-[11px] text-muted-foreground italic hidden xs:inline">
+              (Ketuk untuk membuka)
+            </span>
+          )}
         </div>
 
         {/* Action buttons */}
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
           <Button
             variant="ghost"
             size="icon-sm"
             onClick={clearSimulationLogs}
             title="Bersihkan Log"
             aria-label="Bersihkan Log"
-            className="text-muted-foreground hover:text-red-400"
+            className="text-muted-foreground hover:text-red-400 h-7 w-7"
           >
             <Trash2 className="h-3.5 w-3.5" />
           </Button>
@@ -219,11 +288,11 @@ export function EventLogPanel() {
             variant="ghost"
             size="icon-sm"
             onClick={handleMaximize}
-            title={height > 350 ? 'Kecilkan Panel' : 'Perbesar Panel'}
-            aria-label={height > 350 ? 'Kecilkan Panel' : 'Perbesar Panel'}
-            className="text-muted-foreground"
+            title={height > 300 ? 'Kecilkan Panel' : 'Perbesar Panel'}
+            aria-label={height > 300 ? 'Kecilkan Panel' : 'Perbesar Panel'}
+            className="text-muted-foreground h-7 w-7"
           >
-            {height > 350 ? (
+            {height > 300 ? (
               <Minimize2 className="h-3.5 w-3.5" />
             ) : (
               <Maximize2 className="h-3.5 w-3.5" />
@@ -236,12 +305,12 @@ export function EventLogPanel() {
             onClick={toggleCollapse}
             title={isCollapsed ? 'Buka Panel' : 'Sembunyikan Panel'}
             aria-label={isCollapsed ? 'Buka Panel' : 'Sembunyikan Panel'}
-            className="text-muted-foreground"
+            className="text-muted-foreground h-7 w-7"
           >
             {isCollapsed ? (
-              <ChevronUp className="h-3.5 w-3.5" />
+              <ChevronUp className="h-4 w-4" />
             ) : (
-              <ChevronDown className="h-3.5 w-3.5" />
+              <ChevronDown className="h-4 w-4" />
             )}
           </Button>
         </div>
@@ -254,24 +323,33 @@ export function EventLogPanel() {
           onValueChange={(value) => setActiveTab(value as PanelTab)}
           className="min-h-0 flex-1 flex-col gap-0"
         >
-          <div className="flex h-7 items-stretch gap-1 border-b bg-card px-2">
-            <TabsList variant="line" className="h-7 gap-1 p-0">
-              <TabsTrigger value="log" className="gap-1.5 px-2.5 text-[11px] font-semibold tracking-wider uppercase after:hidden data-active:border-b-2 data-active:border-primary data-active:rounded-none">
-                <ScrollText className="h-3 w-3" />
-                Log
+          <div className="flex h-8 sm:h-7 items-stretch gap-1 border-b bg-card px-2">
+            <TabsList variant="line" className="h-8 sm:h-7 gap-1 p-0">
+              <TabsTrigger
+                value="log"
+                className="gap-1.5 px-3 text-xs sm:text-[11px] font-semibold tracking-wider uppercase after:hidden data-active:border-b-2 data-active:border-primary data-active:rounded-none touch-manipulation"
+              >
+                <ScrollText className="h-3.5 w-3.5 sm:h-3 sm:w-3 text-sky-400" />
+                <span>Log</span>
               </TabsTrigger>
-              <TabsTrigger value="sim" className="gap-1.5 px-2.5 text-[11px] font-semibold tracking-wider uppercase after:hidden data-active:border-b-2 data-active:border-primary data-active:rounded-none">
-                <ListTree className="h-3 w-3" />
-                Simulasi
+              <TabsTrigger
+                value="sim"
+                className="gap-1.5 px-3 text-xs sm:text-[11px] font-semibold tracking-wider uppercase after:hidden data-active:border-b-2 data-active:border-primary data-active:rounded-none touch-manipulation"
+              >
+                <ListTree className="h-3.5 w-3.5 sm:h-3 sm:w-3 text-violet-400" />
+                <span>Simulasi</span>
               </TabsTrigger>
-              <TabsTrigger value="tables" className="gap-1.5 px-2.5 text-[11px] font-semibold tracking-wider uppercase after:hidden data-active:border-b-2 data-active:border-primary data-active:rounded-none">
-                <Table2 className="h-3 w-3" />
-                Tabel
+              <TabsTrigger
+                value="tables"
+                className="gap-1.5 px-3 text-xs sm:text-[11px] font-semibold tracking-wider uppercase after:hidden data-active:border-b-2 data-active:border-primary data-active:rounded-none touch-manipulation"
+              >
+                <Table2 className="h-3.5 w-3.5 sm:h-3 sm:w-3 text-emerald-400" />
+                <span>Tabel</span>
               </TabsTrigger>
             </TabsList>
             {activeTab === 'sim' && simPlan.length > 0 && (
-              <span className="ml-auto self-center font-mono text-[11px] text-muted-foreground">
-                {Math.min(simPlayedUpTo, simPlan.length)}/{simPlan.length} event diputar
+              <span className="ml-auto self-center font-mono text-[11px] text-muted-foreground truncate">
+                {Math.min(simPlayedUpTo, simPlan.length)}/{simPlan.length} event
               </span>
             )}
           </div>
@@ -330,89 +408,158 @@ export function EventLogPanel() {
           </TabsContent>
 
           <TabsContent value="tables" className="min-h-0 overflow-y-auto bg-background/60 p-2.5 font-mono text-[11px]">
+            {/* Device Selector Bar di Tab Tabel */}
+            <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2 border-b border-border/70 pb-2">
+              <div className="flex items-center gap-2 text-xs">
+                <span className="font-semibold text-foreground shrink-0">Perangkat:</span>
+                {deviceNodes.length === 0 ? (
+                  <span className="italic text-muted-foreground text-xs">Belum ada perangkat di kanvas</span>
+                ) : (
+                  <select
+                    value={selectedNodeId || ''}
+                    onChange={(e) => setSelectedNodeId(e.target.value || null)}
+                    className="h-7 rounded border border-border bg-background px-2 py-0.5 text-xs font-medium text-foreground focus:outline-hidden focus:ring-1 focus:ring-primary max-w-[220px]"
+                  >
+                    <option value="">-- Pilih Perangkat ({deviceNodes.length}) --</option>
+                    {deviceNodes.map((n) => (
+                      <option key={n.id} value={n.id}>
+                        {n.data.label} ({n.data.type.toUpperCase()})
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+              {selectedDevice && (
+                <Badge variant="outline" className="text-[10px] uppercase font-mono">
+                  {selectedDevice.type} • {selectedDevice.label}
+                </Badge>
+              )}
+            </div>
+
             {!selectedDevice ? (
-              <div className="py-2 text-center italic text-muted-foreground">
-                Pilih perangkat di kanvas untuk melihat tabel CAM, ARP, dan Routing secara real-time.
+              <div className="py-4 text-center italic text-muted-foreground">
+                Pilih perangkat melalui menu dropdown di atas atau ketuk perangkat di kanvas untuk melihat tabel CAM, ARP, dan Routing secara real-time.
               </div>
             ) : selectedDevice.type === 'hub' ? (
-              <div className="py-2 text-center italic text-muted-foreground">
+              <div className="py-4 text-center italic text-muted-foreground">
                 Hub adalah repeater Layer-1 murni — sinyal hanya diulang ke semua port, tidak ada tabel.
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pb-2">
                 {/* CAM Table — hanya switch (L2 MAC learning) */}
                 {selectedDevice.type === 'switch' && (
-                  <div className="rounded border bg-background/60 p-2">
-                    <div className="mb-1 text-[11px] font-bold uppercase text-emerald-400">
-                      CAM Table — {selectedDevice.label}
+                  <div className="rounded border bg-background/80 p-2 shadow-xs">
+                    <div className="mb-1.5 flex items-center justify-between border-b border-border/50 pb-1">
+                      <span className="text-[11px] font-bold uppercase text-emerald-400">
+                        CAM Table (MAC)
+                      </span>
+                      <span className="text-[10px] text-muted-foreground font-mono">
+                        {selectedDevice.label}
+                      </span>
                     </div>
                     {Object.keys(selectedDevice.macTable ?? {}).length === 0 ? (
-                      <div className="italic text-muted-foreground/60">(kosong)</div>
+                      <div className="italic text-muted-foreground/60 py-1">(kosong — belum ada frame L2)</div>
                     ) : (
-                      Object.entries(selectedDevice.macTable ?? {}).map(([mac, port]) => (
-                        <div key={mac} className="flex items-center gap-1 text-foreground/90">
-                          <span className="truncate">{mac.toLowerCase()}</span>
-                          <ArrowRight className="h-2.5 w-2.5 shrink-0 text-muted-foreground/50" />
-                          <span className="text-emerald-300">{port}</span>
-                        </div>
-                      ))
+                      <div className="space-y-1">
+                        {Object.entries(selectedDevice.macTable ?? {}).map(([mac, port]) => (
+                          <div key={mac} className="flex items-center justify-between gap-1 text-foreground/90 bg-muted/30 px-1.5 py-0.5 rounded">
+                            <span className="font-mono text-[11px]">{mac.toLowerCase()}</span>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <ArrowRight className="h-2.5 w-2.5 text-muted-foreground/50" />
+                              <span className="font-semibold text-emerald-400 font-mono">{port}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
                 )}
 
                 {/* ARP Cache — perangkat ber-IP */}
                 {selectedDevice.type !== 'switch' && (
-                  <div className="rounded border bg-background/60 p-2">
-                    <div className="mb-1 text-[11px] font-bold uppercase text-cyan-400">
-                      ARP Cache — {selectedDevice.label}
+                  <div className="rounded border bg-background/80 p-2 shadow-xs">
+                    <div className="mb-1.5 flex items-center justify-between border-b border-border/50 pb-1">
+                      <span className="text-[11px] font-bold uppercase text-cyan-400">
+                        ARP Cache (IP ↔ MAC)
+                      </span>
+                      <span className="text-[10px] text-muted-foreground font-mono">
+                        {selectedDevice.label}
+                      </span>
                     </div>
                     {Object.keys(selectedDevice.arpTable ?? {}).length === 0 ? (
-                      <div className="italic text-muted-foreground/60">(kosong)</div>
+                      <div className="italic text-muted-foreground/60 py-1">(kosong — belum ada resolusi ARP)</div>
                     ) : (
-                      Object.entries(selectedDevice.arpTable ?? {}).map(([ip, mac]) => (
-                        <div key={ip} className="flex items-center gap-1 text-foreground/90">
-                          <span>{ip}</span>
-                          <ArrowRight className="h-2.5 w-2.5 shrink-0 text-muted-foreground/50" />
-                          <span className="truncate text-cyan-300">{mac.toLowerCase()}</span>
-                        </div>
-                      ))
+                      <div className="space-y-1">
+                        {Object.entries(selectedDevice.arpTable ?? {}).map(([ip, mac]) => (
+                          <div key={ip} className="flex items-center justify-between gap-1 text-foreground/90 bg-muted/30 px-1.5 py-0.5 rounded">
+                            <span className="font-mono text-[11px] text-foreground font-medium">{ip}</span>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <ArrowRight className="h-2.5 w-2.5 text-muted-foreground/50" />
+                              <span className="font-mono text-[11px] text-cyan-300">{mac.toLowerCase()}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
                 )}
 
                 {/* Routing Table — hanya router */}
                 {selectedDevice.type === 'router' && (
-                  <div className="rounded border bg-background/60 p-2">
-                    <div className="mb-1 text-[11px] font-bold uppercase text-amber-400">
-                      Routing — {selectedDevice.label}
+                  <div className="rounded border bg-background/80 p-2 shadow-xs">
+                    <div className="mb-1.5 flex items-center justify-between border-b border-border/50 pb-1">
+                      <span className="text-[11px] font-bold uppercase text-amber-400">
+                        Routing Table
+                      </span>
+                      <span className="text-[10px] text-muted-foreground font-mono">
+                        {selectedDevice.label}
+                      </span>
                     </div>
                     {(selectedDevice.routes ?? []).length === 0 ? (
-                      <div className="italic text-muted-foreground/60">(kosong)</div>
+                      <div className="italic text-muted-foreground/60 py-1">(kosong — belum ada rute statis)</div>
                     ) : (
-                      (selectedDevice.routes ?? []).map((r, idx) => (
-                        <div key={idx} className="truncate text-foreground/90">
-                          {r.network}/{r.subnetMask} → <span className="text-amber-300">{r.nextHop}</span>
-                        </div>
-                      ))
+                      <div className="space-y-1">
+                        {(selectedDevice.routes ?? []).map((r, idx) => (
+                          <div key={idx} className="flex items-center justify-between gap-1 text-foreground/90 bg-muted/30 px-1.5 py-0.5 rounded">
+                            <span className="font-mono text-[11px]">
+                              {r.network}/{r.subnetMask}
+                            </span>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <ArrowRight className="h-2.5 w-2.5 text-muted-foreground/50" />
+                              <span className="font-semibold text-amber-300 font-mono">{r.nextHop}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
                 )}
 
                 {/* NAT Translations — hanya router */}
                 {selectedDevice.type === 'router' && (
-                  <div className="rounded border bg-background/60 p-2">
-                    <div className="mb-1 text-[11px] font-bold uppercase text-sky-400">
-                      NAT Table — {selectedDevice.label}
+                  <div className="rounded border bg-background/80 p-2 shadow-xs">
+                    <div className="mb-1.5 flex items-center justify-between border-b border-border/50 pb-1">
+                      <span className="text-[11px] font-bold uppercase text-sky-400">
+                        NAT Translations
+                      </span>
+                      <span className="text-[10px] text-muted-foreground font-mono">
+                        {selectedDevice.label}
+                      </span>
                     </div>
                     {(selectedDevice.natTable ?? []).length === 0 ? (
-                      <div className="italic text-muted-foreground/60">(kosong)</div>
+                      <div className="italic text-muted-foreground/60 py-1">(kosong)</div>
                     ) : (
-                      (selectedDevice.natTable ?? []).map((t, idx) => (
-                        <div key={idx} className="truncate text-foreground/90">
-                          {t.insideIp} → <span className="text-sky-300">{t.globalIp}</span>
-                          <span className="text-muted-foreground/60"> (id {t.icmpId}#{t.echoSeq})</span>
-                        </div>
-                      ))
+                      <div className="space-y-1">
+                        {(selectedDevice.natTable ?? []).map((t, idx) => (
+                          <div key={idx} className="flex items-center justify-between gap-1 text-foreground/90 bg-muted/30 px-1.5 py-0.5 rounded">
+                            <span className="font-mono text-[11px]">{t.insideIp}</span>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <ArrowRight className="h-2.5 w-2.5 text-muted-foreground/50" />
+                              <span className="font-semibold text-sky-300 font-mono">{t.globalIp}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
                 )}

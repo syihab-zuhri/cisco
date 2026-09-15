@@ -110,6 +110,14 @@ interface AppStoreState {
   setInspectorOpen: (open: boolean) => void;
   setInspectorAutoFollow: (value: boolean) => void;
 
+  // Log & Tables Panel (v2.2.1)
+  isLogPanelOpen: boolean;
+  setIsLogPanelOpen: (open: boolean) => void;
+  toggleLogPanel: () => void;
+  logPanelActiveTab: 'log' | 'sim' | 'tables';
+  setLogPanelActiveTab: (tab: 'log' | 'sim' | 'tables') => void;
+  openLogPanelTab: (tab: 'log' | 'sim' | 'tables') => void;
+
   // Mode Lab Praktikum (P1): topologi terkunci + verifikasi otomatis
   activeLabId: string | null;
   labCompleted: Record<string, boolean>;
@@ -781,6 +789,14 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     set({ inspectorEvent: event, inspectorAutoFollow: false }),
   setInspectorOpen: (open) => set({ inspectorOpen: open }),
   setInspectorAutoFollow: (value) => set({ inspectorAutoFollow: value }),
+
+  // Log & Tables Panel
+  isLogPanelOpen: true,
+  setIsLogPanelOpen: (open) => set({ isLogPanelOpen: open }),
+  toggleLogPanel: () => set((state) => ({ isLogPanelOpen: !state.isLogPanelOpen })),
+  logPanelActiveTab: 'log',
+  setLogPanelActiveTab: (tab) => set({ logPanelActiveTab: tab }),
+  openLogPanelTab: (tab) => set({ isLogPanelOpen: true, logPanelActiveTab: tab }),
 
   activeLabId: null,
   labCompleted: {},

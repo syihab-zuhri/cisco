@@ -12,10 +12,13 @@ import {
   GraduationCap,
   Users,
   Menu,
+  ScrollText,
+  Table2,
 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { pauseSimulation, resumeSimulation, simStepNext } from '../../hooks/useSimulationEngine';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -65,6 +68,10 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs, onOpenClassroom
     addSimulationLog,
     pushToast,
     requestConfirm,
+    isLogPanelOpen,
+    toggleLogPanel,
+    openLogPanelTab,
+    simulationLogs,
   } = useAppStore();
 
   const [pingSource, setPingSource] = useState<string>('');
@@ -443,6 +450,21 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs, onOpenClassroom
             </Tooltip>
           </div>
 
+          {/* Quick Toggle Log & Tabel Bawah */}
+          <Button
+            variant={isLogPanelOpen ? 'secondary' : 'outline'}
+            size="sm"
+            onClick={toggleLogPanel}
+            className="h-8 gap-1.5 text-xs px-2 sm:px-2.5 font-medium shrink-0"
+            title="Buka/Tutup Panel Log Simulasi & Tabel Bawah"
+          >
+            <ScrollText className="h-3.5 w-3.5 text-sky-400" />
+            <span className="hidden sm:inline">Log &amp; Tabel</span>
+            <span className="text-[10px] font-mono rounded bg-muted/80 px-1 py-0.5 leading-none">
+              {simulationLogs.length}
+            </span>
+          </Button>
+
           {/* Mobile Sheet Menu Trigger (Mobile only) */}
           <div className="md:hidden">
             <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
@@ -539,6 +561,46 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs, onOpenClassroom
                     >
                       <Activity className="h-4 w-4 text-sky-400" />
                       <span>Panduan Lengkap &amp; Porting</span>
+                    </Button>
+                  </div>
+
+                  <Separator />
+
+                  {/* Inspeksi Log & Tabel Jaringan */}
+                  <div className="flex flex-col gap-2">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Inspeksi &amp; Data Jaringan
+                    </span>
+                    <Button
+                      variant="outline"
+                      className="justify-between text-xs h-9"
+                      onClick={() => {
+                        setMobileMenuOpen(false);
+                        openLogPanelTab('log');
+                      }}
+                    >
+                      <div className="flex items-center gap-2">
+                        <ScrollText className="h-4 w-4 text-sky-400" />
+                        <span>Log Simulasi</span>
+                      </div>
+                      <Badge variant="secondary" className="text-[10px] h-5 px-1.5 font-mono">
+                        {simulationLogs.length}
+                      </Badge>
+                    </Button>
+
+                    <Button
+                      variant="outline"
+                      className="justify-between text-xs h-9"
+                      onClick={() => {
+                        setMobileMenuOpen(false);
+                        openLogPanelTab('tables');
+                      }}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Table2 className="h-4 w-4 text-emerald-400" />
+                        <span>Tabel ARP / CAM / Routing</span>
+                      </div>
+                      <span className="text-[10px] text-muted-foreground">Real-time</span>
                     </Button>
                   </div>
 

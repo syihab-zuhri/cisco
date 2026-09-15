@@ -11,6 +11,24 @@
 
 ---
 
+## [2026-09-15] — Version 2.2.1 (Mobile Responsive Bottom Panel for Simulation Log & Network Tables)
+
+### Added & Improved
+- **Peningkatan Aksesibilitas Panel Bawah (Log Simulasi & Tabel Jaringan di Mobile) (`EventLogPanel.tsx`)**:
+  - Penambahan dukungan *touch dragging* (`onTouchStart`, `onTouchMove`, `onTouchEnd`) pada resizer handle sehingga panel bawah dapat ditarik (*drag*) secara bebas menggunakan jari di layar sentuh ponsel dan tablet.
+  - Header panel kini dapat diketuk di seluruh baris (`cursor-pointer touch-manipulation`) untuk membuka/menutup panel secara instan tanpa harus membidik ikon kecil.
+  - Penyesuaian tinggi default saat dibuka di mobile (`220px` / `75vh` saat diperbesar) dan tinggi bar terlipat ramah sentuhan (`40px`).
+- **Tata Letak Responsif & Dropdown Pemilih Perangkat pada Tab Tabel (`EventLogPanel.tsx`)**:
+  - Menambahkan dropdown pemilih perangkat langsung di tab Tabel (`<select>`), memungkinkan pengguna mobile berpindah antar-tabel CAM, ARP, Routing, dan NAT tanpa harus menutup panel untuk memilih perangkat di kanvas.
+  - Mengubah grid tabel dari 2 kolom kaku menjadi responsif 1 kolom di mobile (`grid-cols-1 sm:grid-cols-2`), sehingga seluruh alamat MAC dan IP terbaca jelas dan tidak terpotong.
+- **Integrasi Tombol Pintas Panel di Toolbar (`Toolbar.tsx` & `useAppStore.ts`)**:
+  - Penambahan tombol pintas **`[📜 Log & Tabel (N)]`** di toolbar utama (desktop dan mobile).
+  - Penambahan menu cepat di drawer menu mobile untuk langsung melompat ke tab Log Simulasi atau Tabel Perangkat.
+- **Perapian Kanvas Topologi (`TopologyCanvas.tsx`)**:
+  - Menghapus bilah aksi melayang tambahan pada kanvas agar area kanvas tetap bersih dan tidak menumpuk dengan panel log bawah, sembari mempertahankan tombol aksi terminal di `DeviceNode` dan `DeviceConfigModal`.
+
+---
+
 ## [2026-09-15] — Version 2.2.0 (Mobile Terminal Accessibility, Clean IP Starter Topology & Exam Self-Check Toggle)
 
 ### Added & Improved
