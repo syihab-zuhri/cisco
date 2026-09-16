@@ -476,19 +476,20 @@ describe('Classroom Feature Suite', () => {
       const cleaned = cleanNodesForStarterTopology(rawTeacherNodes);
 
       // Node PC-1
+      const pcPorts = cleaned[0].data.ports[0] as { ipAddress?: string; subnetMask?: string; macAddress?: string };
       expect(cleaned[0].data.label).toBe('PC-1');
       expect(cleaned[0].data.defaultGateway).toBeUndefined();
       expect(cleaned[0].data.staticRoutes).toBeUndefined();
-      expect(cleaned[0].data.ports[0].ipAddress).toBeUndefined();
-      expect(cleaned[0].data.ports[0].subnetMask).toBeUndefined();
-      expect(cleaned[0].data.ports[0].macAddress).toBe('00:50:79:66:01:01');
+      expect(pcPorts.ipAddress).toBeUndefined();
+      expect(pcPorts.subnetMask).toBeUndefined();
+      expect(pcPorts.macAddress).toBe('00:50:79:66:01:01');
 
       // Node Router-1 & subInterfaces
-      expect(cleaned[1].data.ports[0].ipAddress).toBeUndefined();
-      expect(cleaned[1].data.ports[0].subInterfaces[0].ipAddress).toBeUndefined();
-      expect(cleaned[1].data.ports[0].subInterfaces[0].vlanId).toBe(10);
+      const routerPorts = cleaned[1].data.ports[0] as { ipAddress?: string; subInterfaces?: Array<{ vlanId: number; ipAddress?: string }> };
+      expect(routerPorts.ipAddress).toBeUndefined();
+      expect(routerPorts.subInterfaces?.[0].ipAddress).toBeUndefined();
+      expect(routerPorts.subInterfaces?.[0].vlanId).toBe(10);
     });
-
     it('mendukung toggle izin cek mandiri siswa oleh guru (mode ujian)', () => {
       const session = classroomHub.createClass('Kelas Ujian Ketat', 'NET-EXAM', undefined, []);
       expect(session.allowSelfCheck).toBe(true);
@@ -500,6 +501,309 @@ describe('Classroom Feature Suite', () => {
       // Guru menghidupkan kembali cek mandiri
       classroomHub.toggleSelfCheck('NET-EXAM', true);
       expect(classroomHub.getSession()?.allowSelfCheck).toBe(true);
+    });
+
+    it('membersihkan soal aktif saat guru menutup kelas (closeClass)', () => {
+      const exercise: Exercise = {
+        id: 'ex-cleanup-1',
+        title: 'Soal Cleanup Test',
+        instructions: 'Test',
+        difficulty: 'Dasar',
+        targets: [],
+      };
+      const session = classroomHub.createClass('Kelas Bersih', 'NET-CLEAN', undefined, [exercise]);
+      expect(classroomHub.getActiveExercises().length).toBe(1);
+      expect(classroomHub.getActiveExercise()?.id).toBe('ex-cleanup-1');
+
+      // Guru menutup kelas
+      classroomHub.closeClass(session.classCode);
+
+      // Soal aktif harus bersih
+      expect(classroomHub.getActiveExercises().length).toBe(0);
+      expect(classroomHub.getActiveExercise()).toBeNull();
+      expect(classroomHub.getSession()?.status).toBe('closed');
+      expect(classroomHub.getSession()?.activeExercises).toEqual([]);
+      expect(classroomHub.getSession()?.activeExerciseId).toBeNull();
+    });
+
+    it('membersihkan soal aktif saat guru keluar dari mode guru (leaveClass)', () => {
+      const exercise: Exercise = {
+        id: 'ex-leave-1',
+        title: 'Soal Leave Test',
+        instructions: 'Test',
+        difficulty: 'Dasar',
+        targets: [],
+      };
+      classroomHub.setLockedRole('teacher');
+      classroomHub.createClass('Kelas Guru Keluar', 'NET-LEAVE', undefined, [exercise]);
+      expect(classroomHub.getActiveExercises().length).toBe(1);
+
+      // Guru keluar dari kelas / mode guru
+      classroomHub.leaveClass();
+
+      expect(classroomHub.getActiveExercises().length).toBe(0);
+      expect(classroomHub.getActiveExercise()).toBeNull();
+      expect(classroomHub.getLockedRole()).toBeNull();
+    });
+
+    it('membersihkan soal aktif saat beralih dari role teacher ke role student', () => {
+      const exercise: Exercise = {
+        id: 'ex-switch-1',
+        title: 'Soal Switch Test',
+        instructions: 'Test',
+        difficulty: 'Dasar',
+        targets: [],
+      };
+      classroomHub.setLockedRole('teacher');
+      classroomHub.saveActiveExercises([exercise]);
+      classroomHub.saveActiveExercise(exercise);
+      expect(classroomHub.getActiveExercises().length).toBe(1);
+
+      // Switch ke student
+      classroomHub.setLockedRole('student');
+      expect(classroomHub.getActiveExercises().length).toBe(0);
+      expect(classroomHub.getActiveExercise()).toBeNull();
+    });
+
+    it('membersihkan soal aktif ketika updateClassExercises dipanggil dengan array kosong', () => {
+      const exercise: Exercise = {
+        id: 'ex-clear-1',
+        title: 'Soal Clear Test',
+        instructions: 'Test',
+        difficulty: 'Dasar',
+        targets: [],
+      };
+      const session = classroomHub.createClass('Kelas Kosongkan', 'NET-EMPTY', undefined, [exercise]);
+      expect(classroomHub.getActiveExercises().length).toBe(1);
+
+      classroomHub.updateClassExercises(session.classCode, []);
+      expect(classroomHub.getActiveExercises().length).toBe(0);
+      expect(classroomHub.getActiveExercise()).toBeNull();
+      expect(classroomHub.getSession()?.activeExerciseId).toBeNull();
+      expect(classroomHub.getSession()?.activeExercises).toEqual([]);
+    });
+
+    it('menolak target device_config pada router jika interface masih DOWN (no shutdown)', async () => {
+      const routerDown: DeviceData = {
+        id: 'r-1',
+        label: 'Router-1',
+        type: 'router',
+        ports: [
+          {
+            id: 'fa0/0',
+            name: 'FastEthernet 0/0',
+            status: 'down',
+            ipAddress: '192.168.1.1',
+            subnetMask: '255.255.255.0',
+            macAddress: '00:50:79:00:00:01',
+          },
+        ],
+      };
+
+      const ex: Exercise = {
+        id: 'ex-r-down',
+        title: 'Uji Router Down',
+        instructions: '',
+        difficulty: 'Dasar',
+        targets: [
+          {
+            id: 'tgt-ip',
+            title: 'IP Router',
+            type: 'device_config',
+            deviceId: 'Router-1',
+            address: '192.168.1.1',
+            subnetMask: '255.255.255.0',
+          },
+        ],
+      };
+
+      const evalRes = await evaluateExercise(ex, [routerDown], []);
+      expect(evalRes.checks[0].passed).toBe(false);
+      expect(evalRes.checks[0].reason).toContain('no shutdown');
+    });
+
+    it('menolak target device_config sub-interface jika interface induk DOWN', async () => {
+      const routerSubDown: DeviceData = {
+        id: 'r-1',
+        label: 'Router-1',
+        type: 'router',
+        ports: [
+          {
+            id: 'fa0/0',
+            name: 'FastEthernet 0/0',
+            status: 'down',
+            macAddress: '00:50:79:00:00:01',
+            subInterfaces: [
+              {
+                vlanId: 10,
+                ipAddress: '192.168.10.1',
+                subnetMask: '255.255.255.0',
+              },
+            ],
+          },
+        ],
+      };
+
+      const ex: Exercise = {
+        id: 'ex-sub-down',
+        title: 'Uji Sub-Interface Parent Down',
+        instructions: '',
+        difficulty: 'Dasar',
+        targets: [
+          {
+            id: 'tgt-sub-ip',
+            title: 'IP Sub-Interface',
+            type: 'device_config',
+            deviceId: 'Router-1',
+            address: '192.168.10.1',
+            subnetMask: '255.255.255.0',
+          },
+        ],
+      };
+
+      const evalRes = await evaluateExercise(ex, [routerSubDown], []);
+      expect(evalRes.checks[0].passed).toBe(false);
+      expect(evalRes.checks[0].reason).toContain('DOWN');
+      expect(evalRes.checks[0].reason).toContain('FastEthernet 0/0');
+    });
+
+    it('memvalidasi prefix length (target.prefix) pada device_config', async () => {
+      const pc: DeviceData = {
+        id: 'pc-1',
+        label: 'PC-1',
+        type: 'pc',
+        ports: [
+          {
+            id: 'fa0',
+            name: 'FastEthernet 0',
+            status: 'up',
+            ipAddress: '10.0.0.1',
+            subnetMask: '255.255.255.0', // /24
+            macAddress: '00:50:79:00:00:11',
+          },
+        ],
+      };
+
+      const exWrongPrefix: Exercise = {
+        id: 'ex-prefix-test',
+        title: 'Uji Prefix',
+        instructions: '',
+        difficulty: 'Dasar',
+        targets: [
+          {
+            id: 'tgt-prefix',
+            title: 'IP dengan /16',
+            type: 'device_config',
+            deviceId: 'PC-1',
+            address: '10.0.0.1',
+            prefix: 16, // Ekspektasi /16 tetapi konfigurasi /24
+          },
+        ],
+      };
+
+      const resWrong = await evaluateExercise(exWrongPrefix, [pc], []);
+      expect(resWrong.checks[0].passed).toBe(false);
+      expect(resWrong.checks[0].reason).toContain('Prefix length tidak cocok');
+
+      const exRightPrefix: Exercise = {
+        id: 'ex-prefix-ok',
+        title: 'Uji Prefix OK',
+        instructions: '',
+        difficulty: 'Dasar',
+        targets: [
+          {
+            id: 'tgt-prefix-ok',
+            title: 'IP dengan /24',
+            type: 'device_config',
+            deviceId: 'PC-1',
+            address: '10.0.0.1',
+            prefix: 24,
+          },
+        ],
+      };
+
+      const resRight = await evaluateExercise(exRightPrefix, [pc], []);
+      expect(resRight.checks[0].passed).toBe(true);
+    });
+
+    it('menolak target link_exists jika port yang disambungkan tidak ada pada perangkat', async () => {
+      const pc1: DeviceData = {
+        id: 'pc-1',
+        label: 'PC-1',
+        type: 'pc',
+        ports: [{ id: 'fa0', name: 'FastEthernet 0', status: 'up', macAddress: '00:50:79:00:00:01' }],
+      };
+      const pc2: DeviceData = {
+        id: 'pc-2',
+        label: 'PC-2',
+        type: 'pc',
+        ports: [{ id: 'fa0', name: 'FastEthernet 0', status: 'up', macAddress: '00:50:79:00:00:02' }],
+      };
+
+      // Link dengan port hantu (non-existent port)
+      const badLink: TopologyLink = {
+        sourceNodeId: 'pc-1',
+        sourcePortId: 'port-hantu',
+        targetNodeId: 'pc-2',
+        targetPortId: 'fa0',
+      };
+
+      const ex: Exercise = {
+        id: 'ex-bad-link',
+        title: 'Uji Link Hantu',
+        instructions: '',
+        difficulty: 'Dasar',
+        targets: [
+          {
+            id: 'tgt-link',
+            title: 'Kabel PC-1 ke PC-2',
+            type: 'link_exists',
+            fromDeviceId: 'PC-1',
+            toDeviceId: 'PC-2',
+          },
+        ],
+      };
+
+      const res = await evaluateExercise(ex, [pc1, pc2], [badLink]);
+      expect(res.checks[0].passed).toBe(false);
+    });
+
+    it('memvalidasi vlan_config mode trunk dan nama port yang fleksibel (spasi / huruf besar)', async () => {
+      const sw: DeviceData = {
+        id: 'sw-1',
+        label: 'Switch-1',
+        type: 'switch',
+        ports: [
+          {
+            id: 'fa0/1',
+            name: 'FastEthernet 0/1',
+            status: 'up',
+            portMode: 'trunk',
+            macAddress: '00:50:79:00:00:33',
+          },
+        ],
+      };
+
+      const ex: Exercise = {
+        id: 'ex-vlan-trunk',
+        title: 'Uji VLAN Trunk',
+        instructions: '',
+        difficulty: 'Dasar',
+        targets: [
+          {
+            id: 'tgt-trunk',
+            title: 'Trunk Port Fa0/1',
+            type: 'vlan_config',
+            deviceId: 'Switch-1',
+            portId: 'Fa0/1', // Huruf besar / format singkat
+            vlanId: 1,
+            mode: 'trunk',
+          },
+        ],
+      };
+
+      const res = await evaluateExercise(ex, [sw], []);
+      expect(res.checks[0].passed).toBe(true);
     });
   });
 });

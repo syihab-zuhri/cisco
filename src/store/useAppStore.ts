@@ -88,6 +88,8 @@ interface AppStoreState {
   disconnectEdge: (edgeId: string) => void;
   addStaticRoute: (nodeId: string, route: RoutingEntry) => void;
   removeStaticRoute: (nodeId: string, index: number) => void;
+  clearMacTable: (nodeId: string) => void;
+  clearArpTable: (nodeId: string) => void;
 
   // Simulation Actions
   setSimulationStatus: (status: SimulationStatus) => void;
@@ -282,11 +284,56 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       .filter((c) => c.type === 'remove')
       .map((c) => c.id);
     if (removedNodeIds.length > 0) {
+      const currentNodes = get().nodes;
+      const deletedIps = new Set<string>();
+      const deletedMacs = new Set<string>();
       for (const nodeId of removedNodeIds) {
+        const node = currentNodes.find((n) => n.id === nodeId);
+        if (node) {
+          for (const p of node.data.ports) {
+            if (p.ipAddress) deletedIps.add(p.ipAddress);
+            if (p.macAddress) deletedMacs.add(p.macAddress);
+            for (const s of p.subInterfaces ?? []) {
+              if (s.ipAddress) deletedIps.add(s.ipAddress);
+            }
+          }
+        }
         const connectedEdges = get().edges.filter(
           (e) => e.source === nodeId || e.target === nodeId
         );
         connectedEdges.forEach((edge) => get().disconnectEdge(edge.id));
+      }
+      if (deletedIps.size > 0 || deletedMacs.size > 0) {
+        set((state) => ({
+          nodes: state.nodes.map((n) => {
+            let arpTable = n.data.arpTable;
+            let macTable = n.data.macTable;
+            let changed = false;
+            if (arpTable) {
+              for (const ip of deletedIps) {
+                if (ip in arpTable) {
+                  if (!changed) {
+                    arpTable = { ...arpTable };
+                    changed = true;
+                  }
+                  delete arpTable[ip];
+                }
+              }
+            }
+            if (macTable) {
+              for (const mac of deletedMacs) {
+                if (mac in macTable) {
+                  if (!changed) {
+                    macTable = { ...macTable };
+                    changed = true;
+                  }
+                  delete macTable[mac];
+                }
+              }
+            }
+            return changed ? { ...n, data: { ...n.data, arpTable, macTable } } : n;
+          }),
+        }));
       }
     }
 
@@ -355,16 +402,56 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       return;
     }
     const node = get().nodes.find((n) => n.id === nodeId);
+    const deletedIps = new Set<string>();
+    const deletedMacs = new Set<string>();
+    if (node) {
+      for (const p of node.data.ports) {
+        if (p.ipAddress) deletedIps.add(p.ipAddress);
+        if (p.macAddress) deletedMacs.add(p.macAddress);
+        for (const s of p.subInterfaces ?? []) {
+          if (s.ipAddress) deletedIps.add(s.ipAddress);
+        }
+      }
+    }
+
     const connectedEdges = get().edges.filter(
       (e) => e.source === nodeId || e.target === nodeId
     );
     // Lepas kabel dulu agar port perangkat lawan kembali ke DOWN...
     connectedEdges.forEach((edge) => get().disconnectEdge(edge.id));
 
-    // ...lalu hapus node dari STATE TERKINI (bukan snapshot lama),
-    // supaya reset status port tidak tertimpa data basi.
+    // ...lalu hapus node dari STATE TERKINI dan bersihkan entri ARP/CAM pada node yang tersisa
     set((state) => ({
-      nodes: state.nodes.filter((n) => n.id !== nodeId),
+      nodes: state.nodes
+        .filter((n) => n.id !== nodeId)
+        .map((n) => {
+          let arpTable = n.data.arpTable;
+          let macTable = n.data.macTable;
+          let changed = false;
+          if (arpTable && deletedIps.size > 0) {
+            for (const ip of deletedIps) {
+              if (ip in arpTable) {
+                if (!changed) {
+                  arpTable = { ...arpTable };
+                  changed = true;
+                }
+                delete arpTable[ip];
+              }
+            }
+          }
+          if (macTable && deletedMacs.size > 0) {
+            for (const mac of deletedMacs) {
+              if (mac in macTable) {
+                if (!changed) {
+                  macTable = { ...macTable };
+                  changed = true;
+                }
+                delete macTable[mac];
+              }
+            }
+          }
+          return changed ? { ...n, data: { ...n.data, arpTable, macTable } } : n;
+        }),
       edges: state.edges.filter((e) => e.source !== nodeId && e.target !== nodeId),
       selectedNodeId: state.selectedNodeId === nodeId ? null : state.selectedNodeId,
     }));
@@ -458,7 +545,18 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       return false;
     }
 
-    if (sPort.connectedEdgeId || tPort.connectedEdgeId) {
+    const isPortBound = (nodeId: string, portId: string) => {
+      const p = nodes.find((n) => n.id === nodeId)?.data.ports.find((pr) => pr.id === portId);
+      if (p?.connectedEdgeId) return true;
+      return edges.some(
+        (e) =>
+          e.type !== 'wirelessLink' &&
+          ((e.source === nodeId && e.sourceHandle === portId) ||
+            (e.target === nodeId && e.targetHandle === portId))
+      );
+    };
+
+    if (isPortBound(sourceNodeId, sourcePortId) || isPortBound(targetNodeId, targetPortId)) {
       return false; // Port already bound (INV-003)
     }
 
@@ -697,6 +795,21 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     }));
   },
 
+  clearMacTable: (nodeId) => {
+    set((state) => ({
+      nodes: state.nodes.map((n) =>
+        n.id === nodeId ? { ...n, data: { ...n.data, macTable: {} } } : n
+      ),
+    }));
+  },
+
+  clearArpTable: (nodeId) => {
+    set((state) => ({
+      nodes: state.nodes.map((n) =>
+        n.id === nodeId ? { ...n, data: { ...n.data, arpTable: {} } } : n
+      ),
+    }));
+  },
   setSimulationStatus: (status) => set({ simulationStatus: status }),
   setSimulationSpeed: (speed) => set({ simulationSpeed: speed }),
   addSimulationLog: (type, message) => {
@@ -962,10 +1075,40 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       }
       return n;
     });
+    const nodeMap = new Map<string, Node<DeviceData>>();
+    for (const n of nodes) nodeMap.set(n.id, n);
+
+    const seenEthernetPorts = new Set<string>();
+    const seenEdgeIds = new Set<string>();
+    const validEdges: Edge[] = [];
+
+    for (const edge of data.edges ?? []) {
+      if (!edge.id || seenEdgeIds.has(edge.id)) continue;
+      const srcNode = nodeMap.get(edge.source);
+      const dstNode = nodeMap.get(edge.target);
+      if (!srcNode || !dstNode) continue;
+
+      const srcPort = srcNode.data.ports.find((p) => p.id === edge.sourceHandle);
+      const dstPort = dstNode.data.ports.find((p) => p.id === edge.targetHandle);
+      if (!srcPort || !dstPort) continue;
+
+      if (edge.type !== 'wirelessLink') {
+        const srcKey = `${edge.source}:${edge.sourceHandle}`;
+        const dstKey = `${edge.target}:${edge.targetHandle}`;
+        if (seenEthernetPorts.has(srcKey) || seenEthernetPorts.has(dstKey)) {
+          continue;
+        }
+        seenEthernetPorts.add(srcKey);
+        seenEthernetPorts.add(dstKey);
+      }
+
+      seenEdgeIds.add(edge.id);
+      validEdges.push(edge);
+    }
 
     set({
       nodes,
-      edges: data.edges,
+      edges: validEdges,
       selectedNodeId: null,
       topologyVersion: get().topologyVersion + 1,
     });

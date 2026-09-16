@@ -88,8 +88,8 @@ export function DeviceCliModal() {
         if (idx >= 0) {
           subInterfaces[idx] = {
             ...subInterfaces[idx],
-            ...(updates.ipAddress !== undefined ? { ipAddress: updates.ipAddress } : {}),
-            ...(updates.subnetMask !== undefined ? { subnetMask: updates.subnetMask } : {}),
+            ...('ipAddress' in updates ? { ipAddress: updates.ipAddress ?? '' } : {}),
+            ...('subnetMask' in updates ? { subnetMask: updates.subnetMask ?? '' } : {}),
           };
         } else {
           subInterfaces.push({
@@ -99,6 +99,20 @@ export function DeviceCliModal() {
           });
         }
         useAppStore.getState().updatePortConfig(deviceId, parentPortId, { subInterfaces });
+      },
+      removeSubInterface: (parentPortId, vlanId) => {
+        const dev = useAppStore.getState().nodes.find((n) => n.id === deviceId)?.data;
+        if (!dev) return;
+        const port = dev.ports.find((p) => p.id === parentPortId);
+        if (!port) return;
+        const subInterfaces = (port.subInterfaces ?? []).filter((s) => s.vlanId !== vlanId);
+        useAppStore.getState().updatePortConfig(deviceId, parentPortId, { subInterfaces });
+      },
+      clearMacTable: () => {
+        useAppStore.getState().clearMacTable(deviceId);
+      },
+      clearArpTable: () => {
+        useAppStore.getState().clearArpTable(deviceId);
       },
     });
     setSession(cliSession);

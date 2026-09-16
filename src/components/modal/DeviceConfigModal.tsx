@@ -238,6 +238,8 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
           natEnabled,
           status: portStatus,
           subInterfaces: subIfs.length > 0 ? subIfs : undefined,
+          ipAddress: ipAddress.trim() || undefined,
+          subnetMask: subnetMask.trim() || undefined,
         });
         const pools = { ...(device.dhcpPools ?? {}) };
         pools[selectedPort.id] = {
@@ -248,10 +250,6 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
           maxClients: Math.max(1, poolMaxClients),
         };
         updateDeviceConfig(device.id, { dhcpPools: pools });
-        updatePortConfig(device.id, selectedPort.id, {
-          ipAddress: ipAddress.trim() || undefined,
-          subnetMask: subnetMask.trim() || undefined,
-        });
         addSimulationLog(
           'INFO',
           `${label}: ${selectedPort.id} — NAT ${natEnabled ? 'AKTIF' : 'nonaktif'}, DHCP server ${poolEnabled ? 'AKTIF' : 'nonaktif'}.`

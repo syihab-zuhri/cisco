@@ -70,7 +70,10 @@ export function ClassroomStudentHUD() {
       const doLeave = () => {
         classroomHub.leaveClass();
         setParticipant(null);
+        setActiveExercises([]);
+        setSelectedExerciseIndex(0);
         setEvaluationsByExerciseId({});
+        setSession(null);
         pushToast('info', 'Anda telah keluar dari ruang kelas.');
       };
 
@@ -100,18 +103,32 @@ export function ClassroomStudentHUD() {
 
         case 'SYNC_RESPONSE':
           setSession(event.session);
-          if (event.activeExercises) {
+          if (event.activeExercises && event.activeExercises.length > 0) {
             setActiveExercises(event.activeExercises);
+            setSelectedExerciseIndex((prev) => (prev >= event.activeExercises!.length ? 0 : prev));
+          } else if (event.activeExercise) {
+            setActiveExercises([event.activeExercise]);
+            setSelectedExerciseIndex(0);
+          } else {
+            setActiveExercises([]);
+            setSelectedExerciseIndex(0);
+            setEvaluationsByExerciseId({});
           }
           break;
 
         case 'EXERCISES_UPDATED':
           if (event.exercises && event.exercises.length > 0) {
             setActiveExercises(event.exercises);
+            setSelectedExerciseIndex((prev) => (prev >= event.exercises.length ? 0 : prev));
             pushToast(
               'info',
               `Guru memperbarui paket soal (${event.exercises.length} soal aktif). Pengerjaan Anda tetap aman tersimpan.`
             );
+          } else {
+            setActiveExercises([]);
+            setSelectedExerciseIndex(0);
+            setEvaluationsByExerciseId({});
+            pushToast('info', 'Materi/soal aktif telah ditiadakan oleh guru.');
           }
           break;
 
@@ -151,9 +168,33 @@ export function ClassroomStudentHUD() {
           break;
 
         case 'CLASS_CLOSED':
-          if (session && session.classCode === event.classCode) {
+          if (!session || session.classCode === event.classCode) {
             pushToast('warning', 'Sesi kelas telah diakhiri oleh guru.');
+            setActiveExercises([]);
+            setSelectedExerciseIndex(0);
+            setEvaluationsByExerciseId({});
+            setSession(null);
             handleLeaveClass(false);
+          }
+          break;
+
+        case 'ROLE_CHANGED':
+          if (event.role === 'teacher') {
+            setParticipant(null);
+            setActiveExercises([]);
+            setSelectedExerciseIndex(0);
+            setEvaluationsByExerciseId({});
+            setSession(null);
+          }
+          break;
+
+        case 'PARTICIPANT_CHANGED':
+          setParticipant(event.participant);
+          if (!event.participant) {
+            setActiveExercises([]);
+            setSelectedExerciseIndex(0);
+            setEvaluationsByExerciseId({});
+            setSession(null);
           }
           break;
       }
@@ -170,19 +211,42 @@ export function ClassroomStudentHUD() {
       const current = classroomHub.getCurrentParticipant();
       if (current?.id !== participant?.id) {
         setParticipant(current);
+        if (!current) {
+          setActiveExercises([]);
+          setSelectedExerciseIndex(0);
+          setEvaluationsByExerciseId({});
+          setSession(null);
+        }
       }
       const curSess = classroomHub.getSession();
-      if (curSess && curSess.classCode) {
+      if (curSess && curSess.classCode && curSess.status !== 'closed') {
         void classroomHub.syncWithServer(curSess.classCode);
         const latest = classroomHub.getActiveExercises();
-        if (latest && latest.length !== activeExercises.length) {
-          setActiveExercises(latest);
+        if (latest) {
+          if (
+            latest.length !== activeExercises.length ||
+            JSON.stringify(latest) !== JSON.stringify(activeExercises)
+          ) {
+            setActiveExercises(latest);
+            if (latest.length === 0) {
+              setEvaluationsByExerciseId({});
+            }
+          }
+        }
+      } else {
+        if (session && curSess?.status === 'closed') {
+          setSession(null);
+        }
+        if (activeExercises.length > 0) {
+          setActiveExercises([]);
+          setSelectedExerciseIndex(0);
+          setEvaluationsByExerciseId({});
         }
       }
     }, 2000);
 
     return () => clearInterval(interval);
-  }, [participant, activeExercises.length]);
+  }, [participant, activeExercises, session]);
 
   // Evaluasi topologi kanvas untuk satu soal
   const runEvaluationForExercise = async (

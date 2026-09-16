@@ -596,7 +596,8 @@ export class HeadlessSimulationEngine {
         vlanId?: number;
       } | null = null;
       for (const p of dev.ports) {
-        // Connected network via sub-interface (router-on-a-stick) — cek semua port
+        if (p.status !== 'up') continue;
+        // Connected network via sub-interface (router-on-a-stick) — cek semua port up
         for (const s of p.subInterfaces ?? []) {
           if (isSameSubnet(s.ipAddress, targetIp, s.subnetMask)) {
             const prefix = prefixLength(s.subnetMask);
@@ -611,7 +612,7 @@ export class HeadlessSimulationEngine {
             }
           }
         }
-        if (!p.ipAddress || !p.subnetMask || p.status !== 'up') continue;
+        if (!p.ipAddress || !p.subnetMask) continue;
         if (isSameSubnet(p.ipAddress, targetIp, p.subnetMask)) {
           const prefix = prefixLength(p.subnetMask);
           if (!best || prefix > best.prefix) best = { nextHopIp: targetIp, prefix, portId: p.id };
@@ -622,16 +623,33 @@ export class HeadlessSimulationEngine {
           r.network === '0.0.0.0' && (r.subnetMask === '0.0.0.0' || r.subnetMask === '0');
         if (isDefault || isSameSubnet(targetIp, r.network, r.subnetMask)) {
           const prefix = isDefault ? 0 : prefixLength(r.subnetMask);
-          // Egress interface static route: cari port yang satu segmen dengan nextHop
-          const egress =
+          // Egress interface static route: cari port atau sub-interface yang satu segmen dengan nextHop
+          let egress =
             dev.ports.find(
               (p) =>
                 p.ipAddress &&
                 p.status === 'up' &&
                 isSameSubnet(p.ipAddress, r.nextHop, p.subnetMask ?? '255.255.255.0')
-            ) ?? dev.ports.find((p) => p.id === r.interfaceId);
+            );
+          let subIfIp: string | undefined;
+          let vlanId: number | undefined;
+          if (!egress) {
+            for (const p of dev.ports) {
+              if (p.status !== 'up') continue;
+              const sub = p.subInterfaces?.find((s) => isSameSubnet(s.ipAddress, r.nextHop, s.subnetMask));
+              if (sub) {
+                egress = p;
+                subIfIp = sub.ipAddress;
+                vlanId = sub.vlanId;
+                break;
+              }
+            }
+          }
+          if (!egress) {
+            egress = dev.ports.find((p) => p.id === r.interfaceId);
+          }
           if (!best || prefix > best.prefix)
-            best = { nextHopIp: r.nextHop, prefix, portId: egress?.id ?? r.interfaceId };
+            best = { nextHopIp: r.nextHop, prefix, portId: egress?.id ?? r.interfaceId, subIfIp, vlanId };
         }
       }
       if (!best) {
@@ -883,11 +901,18 @@ export class HeadlessSimulationEngine {
       // Router egress ARP: gunakan port egress router untuk ARP di segmen egress
       const egressPort = (path.length > 0 ? this.portOf(sender.dev.id, path[0].fromPortId) : null) ?? sender.port;
       let effectiveEgressPort = egressPort;
-      if (!egressPort.ipAddress && egressPort.subInterfaces?.length) {
-        const subIf =
-          egressPort.subInterfaces.find((s) => s.ipAddress === next.subIfIp) ??
-          egressPort.subInterfaces.find((s) => isSameSubnet(s.ipAddress, next.nextHopIp, s.subnetMask)) ??
-          egressPort.subInterfaces[0];
+      const matchingSub =
+        egressPort.subInterfaces?.find((s) => s.ipAddress === next.subIfIp) ??
+        egressPort.subInterfaces?.find((s) => isSameSubnet(s.ipAddress, next.nextHopIp, s.subnetMask));
+      if (matchingSub) {
+        effectiveEgressPort = {
+          ...egressPort,
+          ipAddress: matchingSub.ipAddress,
+          subnetMask: matchingSub.subnetMask,
+          vlanId: matchingSub.vlanId,
+        };
+      } else if (!egressPort.ipAddress && egressPort.subInterfaces?.length) {
+        const subIf = egressPort.subInterfaces[0];
         if (subIf) {
           effectiveEgressPort = {
             ...egressPort,
@@ -1330,7 +1355,7 @@ export class HeadlessSimulationEngine {
     );
 
     // Cari kandidat server: router dalam cakupan broadcast dengan pool aktif
-    const scope = this.broadcastPaths(clientNodeId);
+    const scope = this.broadcastPaths(clientNodeId, port.id, port.vlanId);
     let chosen: {
       router: DeviceData;
       iface: PhysicalPort;
@@ -1553,6 +1578,7 @@ export class HeadlessSimulationEngine {
     const seedConnected = (dev: DeviceData): Map<string, RipRoute> => {
       const m = new Map<string, RipRoute>();
       for (const p of dev.ports) {
+        if (p.status !== 'up') continue;
         if (p.ipAddress && p.subnetMask) {
           const network = networkAddress(p.ipAddress, p.subnetMask);
           m.set(`${network}/${p.subnetMask}`, {
@@ -1607,6 +1633,7 @@ export class HeadlessSimulationEngine {
               // Split horizon sederhana: jangan iklankan lewat interface asal route
               if (route.interfaceId === pr.id) continue;
               const newMetric = route.metric + 1;
+              if (newMetric >= 16) continue;
               const existing = nState.get(key);
               if (existing && (existing.metric <= newMetric || !existing.learned)) continue;
 
@@ -1787,10 +1814,18 @@ export class HeadlessSimulationEngine {
     }
 
     let effectiveSourcePort = sourcePort;
-    if (!sourcePort.ipAddress && sourcePort.subInterfaces?.length) {
-      const subIf =
-        sourcePort.subInterfaces.find((s) => isSameSubnet(s.ipAddress, targetIp, s.subnetMask)) ??
-        sourcePort.subInterfaces[0];
+    const matchingSubIf = sourcePort.subInterfaces?.find((s) =>
+      isSameSubnet(s.ipAddress, targetIp, s.subnetMask)
+    );
+    if (matchingSubIf) {
+      effectiveSourcePort = {
+        ...sourcePort,
+        ipAddress: matchingSubIf.ipAddress,
+        subnetMask: matchingSubIf.subnetMask,
+        vlanId: matchingSubIf.vlanId,
+      };
+    } else if (!sourcePort.ipAddress && sourcePort.subInterfaces?.length) {
+      const subIf = sourcePort.subInterfaces[0];
       if (subIf) {
         effectiveSourcePort = {
           ...sourcePort,

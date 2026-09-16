@@ -35,6 +35,9 @@ export interface CliSessionDeps {
     vlanId: number,
     updates: { ipAddress?: string; subnetMask?: string }
   ) => void;
+  removeSubInterface?: (parentPortId: string, vlanId: number) => void;
+  clearMacTable?: () => void;
+  clearArpTable?: () => void;
 }
 /**
  * 10 perintah P0 kanonik (keputusan resolusi kontradiksi, lihat CHANGELOG):
@@ -269,7 +272,24 @@ export class CliSession {
         return this.showArp();
       }
     }
-
+      if (
+        cmd === 'clear mac-address-table' ||
+        cmd === 'clear mac-address-table dynamic' ||
+        cmd === 'clear mac address-table' ||
+        cmd === 'clear mac address-table dynamic' ||
+        cmd === 'clear mac'
+      ) {
+        const dev = this.deps.getDevice();
+        if (dev.type !== 'switch') {
+          return this.invalid('Tabel MAC hanya ada pada Switch.');
+        }
+        this.deps.clearMacTable?.();
+        return ['[OK]'];
+      }
+      if (cmd === 'clear arp-cache' || cmd === 'clear arp') {
+        this.deps.clearArpTable?.();
+        return ['[OK]'];
+      }
     return this.invalid(`Perintah tidak dikenal: "${cmd}"`);
   }
 
@@ -394,35 +414,11 @@ export class CliSession {
     }
 
     if (lowerTokens[0] === 'interface' || lowerTokens[0] === 'int') {
-      const target = rawTokens.slice(1).join(' ');
-      if (!target) {
-        return this.invalid('Incomplete command. Format: interface <id> (contoh: int fa0/0)');
-      }
-      // Cek sub-interface (contoh: int fa0/0.10)
-      if (target.includes('.')) {
-        const dotIdx = target.lastIndexOf('.');
-        const parentTarget = target.slice(0, dotIdx);
-        const subIdStr = target.slice(dotIdx + 1);
-        const vlanId = parseInt(subIdStr, 10);
-        const parentPort = this.findPort(parentTarget);
-        if (parentPort && !isNaN(vlanId) && vlanId >= 1 && vlanId <= 4094) {
-          this.currentInterface = parentPort.id;
-          this.currentSubInterface = { parentPortId: parentPort.id, vlanId };
-          this.deps.setSubInterfaceConfig?.(parentPort.id, vlanId, {});
-          this.mode = 'config-if';
-          return [];
-        }
-      }
+      return this.handleInterface(rawTokens.slice(1).join(' '));
+    }
 
-      const port = this.findPort(target);
-      if (!port) {
-        const available = this.deps.getDevice().ports.map((p) => p.id).join(', ');
-        return this.invalid(`Invalid interface "${target}". Port yang ada: ${available}`);
-      }
-      this.currentInterface = port.id;
-      this.currentSubInterface = null;
-      this.mode = 'config-if';
-      return [];
+    if (lowerTokens[0] === 'no' && (lowerTokens[1] === 'interface' || lowerTokens[1] === 'int')) {
+      return this.handleNoInterface(rawTokens.slice(2).join(' '));
     }
 
     // ip route <network> <subnet-mask> <next-hop>
@@ -525,6 +521,14 @@ export class CliSession {
         rawTokens.slice(1),
         lowerTokens.slice(1).join(' ')
       );
+    }
+
+    if (lowerTokens[0] === 'interface' || lowerTokens[0] === 'int') {
+      return this.handleInterface(rawTokens.slice(1).join(' '));
+    }
+
+    if (lowerTokens[0] === 'no' && (lowerTokens[1] === 'interface' || lowerTokens[1] === 'int')) {
+      return this.handleNoInterface(rawTokens.slice(2).join(' '));
     }
 
     if (cmd === 'no ip address' || cmd === 'no ip addr') {
@@ -645,6 +649,64 @@ export class CliSession {
     }
     return this.invalid(`Perintah tidak dikenal di interface mode: "${cmd}"`);
   }
+
+  private handleInterface(target: string): string[] {
+    if (!target) {
+      return this.invalid('Incomplete command. Format: interface <id> (contoh: int fa0/0)');
+    }
+    // Cek sub-interface (contoh: int fa0/0.10)
+    if (target.includes('.')) {
+      const dotIdx = target.lastIndexOf('.');
+      const parentTarget = target.slice(0, dotIdx);
+      const subIdStr = target.slice(dotIdx + 1);
+      const vlanId = parseInt(subIdStr, 10);
+      const parentPort = this.findPort(parentTarget);
+      if (parentPort && !isNaN(vlanId) && vlanId >= 1 && vlanId <= 4094) {
+        this.currentInterface = parentPort.id;
+        this.currentSubInterface = { parentPortId: parentPort.id, vlanId };
+        this.deps.setSubInterfaceConfig?.(parentPort.id, vlanId, {});
+        this.mode = 'config-if';
+        return [];
+      }
+    }
+
+    const port = this.findPort(target);
+    if (!port) {
+      const available = this.deps.getDevice().ports.map((p) => p.id).join(', ');
+      return this.invalid(`Invalid interface "${target}". Port yang ada: ${available}`);
+    }
+    this.currentInterface = port.id;
+    this.currentSubInterface = null;
+    this.mode = 'config-if';
+    return [];
+  }
+
+  private handleNoInterface(target: string): string[] {
+    if (!target) {
+      return this.invalid('Incomplete command. Format: no interface <id> (contoh: no int fa0/0.10)');
+    }
+    if (target.includes('.')) {
+      const dotIdx = target.lastIndexOf('.');
+      const parentTarget = target.slice(0, dotIdx);
+      const subIdStr = target.slice(dotIdx + 1);
+      const vlanId = parseInt(subIdStr, 10);
+      const parentPort = this.findPort(parentTarget);
+      if (parentPort && !isNaN(vlanId) && vlanId >= 1 && vlanId <= 4094) {
+        this.deps.removeSubInterface?.(parentPort.id, vlanId);
+        if (
+          this.currentSubInterface &&
+          this.currentSubInterface.parentPortId === parentPort.id &&
+          this.currentSubInterface.vlanId === vlanId
+        ) {
+          this.currentSubInterface = null;
+          this.currentInterface = null;
+          this.mode = 'config';
+        }
+        return [];
+      }
+    }
+    return this.invalid(`Physical interface "${target}" tidak dapat dihapus.`);
+  }
   private showRunningConfig(): string[] {
     const device = this.deps.getDevice();
     const lines: string[] = [
@@ -662,6 +724,14 @@ export class CliSession {
 
     if (device.ripEnabled) {
       lines.push('router rip', ' version 2', '!');
+    }
+
+    for (const [portId, pool] of Object.entries(device.dhcpPools ?? {})) {
+      if (pool.enabled) {
+        lines.push(`ip dhcp pool POOL_${portId.toUpperCase().replace(/[^A-Z0-9_]/g, '_')}`);
+        lines.push(` network ${pool.network} ${pool.mask}`);
+        lines.push('!');
+      }
     }
 
     for (const port of device.ports) {

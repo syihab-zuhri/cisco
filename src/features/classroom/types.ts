@@ -1,4 +1,10 @@
-import type { DeviceType } from '../../types/network';
+import type { Edge, Node } from '@xyflow/react';
+import type { DeviceData, DeviceType } from '../../types/network';
+
+export interface StarterTopology {
+  nodes: Node<DeviceData>[];
+  edges: Edge[];
+}
 
 export type SessionStatus = 'open' | 'locked' | 'closed';
 
@@ -37,10 +43,7 @@ export interface Exercise {
   difficulty: 'Dasar' | 'Menengah' | 'Lanjutan';
   targets: ExerciseTarget[];
   starterTemplateId?: string;
-  starterTopology?: {
-    nodes: any[];
-    edges: any[];
-  };
+  starterTopology?: StarterTopology;
 }
 
 export interface ExerciseCheck {

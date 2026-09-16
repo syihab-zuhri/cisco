@@ -5,6 +5,7 @@ import {
   Controls,
   MiniMap,
   type Connection,
+  type Edge,
   BackgroundVariant,
   ConnectionMode,
   useReactFlow,
@@ -56,6 +57,40 @@ export function TopologyCanvas() {
     setActiveConfigModalNodeId,
     activePackets,
   } = useAppStore();
+
+  const isValidConnection = (connection: Connection | Edge): boolean => {
+    if (!connection.source || !connection.target || !connection.sourceHandle || !connection.targetHandle) {
+      return false;
+    }
+    if (connection.source === connection.target) return false;
+    if (useAppStore.getState().activeLabId) return false;
+
+    const state = useAppStore.getState();
+    const sNode = state.nodes.find((n) => n.id === connection.source);
+    const tNode = state.nodes.find((n) => n.id === connection.target);
+    if (!sNode || !tNode) return false;
+
+    const sPort = sNode.data.ports.find((p) => p.id === connection.sourceHandle);
+    const tPort = tNode.data.ports.find((p) => p.id === connection.targetHandle);
+    if (!sPort || !tPort) return false;
+
+    if (sPort.kind === 'wireless' || tPort.kind === 'wireless') {
+      if (sPort.kind !== 'wireless' || tPort.kind !== 'wireless') return false;
+      const sIsAp = sNode.data.type === 'accessPoint';
+      const tIsAp = tNode.data.type === 'accessPoint';
+      return sIsAp !== tIsAp;
+    }
+
+    if (sPort.connectedEdgeId || tPort.connectedEdgeId) return false;
+    return !state.edges.some(
+      (e) =>
+        e.type !== 'wirelessLink' &&
+        ((e.source === connection.source && e.sourceHandle === connection.sourceHandle) ||
+          (e.target === connection.source && e.targetHandle === connection.sourceHandle) ||
+          (e.source === connection.target && e.sourceHandle === connection.targetHandle) ||
+          (e.target === connection.target && e.targetHandle === connection.targetHandle))
+    );
+  };
 
   const handleConnect = (params: Connection) => {
     if (!params.source || !params.target || !params.sourceHandle || !params.targetHandle) {
@@ -145,6 +180,7 @@ export function TopologyCanvas() {
         nodesConnectable={true}
         elementsSelectable={true}
         connectionMode={ConnectionMode.Loose}
+        isValidConnection={isValidConnection}
         onNodeClick={(_, node) => setSelectedNodeId(node.id)}
         onNodeDoubleClick={(_, node) => {
           if (node.type === 'deviceNode') setActiveConfigModalNodeId(node.id);

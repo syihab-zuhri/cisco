@@ -130,9 +130,8 @@ class ClassroomHub {
         const session = this.getSession();
         if (session && session.classCode === event.classCode) {
           session.activeExercises = event.exercises;
-          if (!session.activeExerciseId && event.exercises.length > 0) {
-            session.activeExerciseId = event.exercises[0].id;
-          }
+          session.activeExerciseId =
+            event.exercises && event.exercises.length > 0 ? event.exercises[0].id : null;
           this.saveSession(session);
         }
         if (event.exercises && event.exercises.length > 0) {
@@ -140,6 +139,9 @@ class ClassroomHub {
           if (!this.getActiveExercise()) {
             this.saveActiveExercise(event.exercises[0]);
           }
+        } else {
+          this.saveActiveExercises([]);
+          this.saveActiveExercise(null);
         }
         break;
       }
@@ -196,8 +198,12 @@ class ClassroomHub {
         const session = this.getSession();
         if (session && session.classCode === event.classCode) {
           session.status = 'closed';
+          session.activeExercises = [];
+          session.activeExerciseId = null;
           this.saveSession(session);
         }
+        this.saveActiveExercises([]);
+        this.saveActiveExercise(null);
         break;
       }
 
@@ -223,9 +229,13 @@ class ClassroomHub {
         this.saveSubmissions(event.submissions);
         if (event.activeExercise) {
           this.saveActiveExercise(event.activeExercise);
+        } else {
+          this.saveActiveExercise(null);
         }
         if (event.activeExercises && event.activeExercises.length > 0) {
           this.saveActiveExercises(event.activeExercises);
+        } else {
+          this.saveActiveExercises([]);
         }
         break;
     }
@@ -375,16 +385,13 @@ class ClassroomHub {
     const session = this.getSession();
     if (session && session.classCode === cleanCode) {
       session.activeExercises = frozenList;
-      if (!session.activeExerciseId && frozenList.length > 0) {
-        session.activeExerciseId = frozenList[0].id;
-      }
+      session.activeExerciseId = frozenList.length > 0 ? frozenList[0].id : null;
       this.saveSession(session);
     }
     if (frozenList.length > 0) {
       this.saveActiveExercise(frozenList[0]);
     } else {
-      const storage = getStorage();
-      storage.removeItem(STORAGE_KEY_ACTIVE_EXERCISE);
+      this.saveActiveExercise(null);
     }
     this.saveActiveExercises(frozenList);
 
@@ -441,7 +448,10 @@ class ClassroomHub {
   }
 
   public startExercises(classCode: string, exercises: Exercise[]): void {
-    if (!exercises || exercises.length === 0) return;
+    if (!exercises || exercises.length === 0) {
+      this.updateClassExercises(classCode, []);
+      return;
+    }
     const frozenList: Exercise[] = JSON.parse(JSON.stringify(exercises));
     const session = this.getSession();
     if (session) {
@@ -497,10 +507,24 @@ class ClassroomHub {
   }
 
   public closeClass(classCode: string): void {
-    this.setStatus(classCode, 'closed');
+    const cleanCode = classCode.trim().toUpperCase();
+    const session = this.getSession();
+    if (session && session.classCode === cleanCode) {
+      session.status = 'closed';
+      session.activeExercises = [];
+      session.activeExerciseId = null;
+      this.saveSession(session);
+    }
+    this.saveActiveExercises([]);
+    this.saveActiveExercise(null);
     this.broadcast({
       type: 'CLASS_CLOSED',
-      classCode: classCode.trim().toUpperCase(),
+      classCode: cleanCode,
+    });
+    this.broadcast({
+      type: 'EXERCISES_UPDATED',
+      classCode: cleanCode,
+      exercises: [],
     });
   }
 
@@ -641,6 +665,7 @@ class ClassroomHub {
   }
 
   public setLockedRole(role: 'teacher' | 'student' | null): void {
+    const prevRole = this.getLockedRole();
     try {
       if (typeof window !== 'undefined' && window.sessionStorage) {
         if (role) {
@@ -658,9 +683,18 @@ class ClassroomHub {
       if (role === 'teacher') {
         // Mode guru: lepas status sebagai siswa
         this.setCurrentParticipant(null);
+      } else if (role === 'student' && prevRole === 'teacher') {
+        // Keluar dari mode guru: bersihkan soal aktif
+        this.saveActiveExercises([]);
+        this.saveActiveExercise(null);
       }
     } else {
       memoryStore.removeItem(STORAGE_KEY_LOCKED_ROLE);
+      if (prevRole === 'teacher') {
+        // Keluar dari mode guru: bersihkan soal aktif
+        this.saveActiveExercises([]);
+        this.saveActiveExercise(null);
+      }
     }
     this.notifyListeners({ type: 'ROLE_CHANGED', role });
   }
@@ -672,19 +706,46 @@ class ClassroomHub {
   }
 
   public leaveClass(): void {
+    const role = this.getLockedRole();
+    if (role === 'teacher') {
+      const session = this.getSession();
+      if (session && session.status !== 'closed') {
+        this.closeClass(session.classCode);
+      } else {
+        this.saveActiveExercises([]);
+        this.saveActiveExercise(null);
+        this.broadcast({
+          type: 'EXERCISES_UPDATED',
+          classCode: session?.classCode || '',
+          exercises: [],
+        });
+      }
+    }
+    this.saveActiveExercises([]);
+    this.saveActiveExercise(null);
     this.setCurrentParticipant(null);
     this.setLockedRole(null);
   }
 
   public clearAll(): void {
+    const curSession = this.getSession();
     const storage = getStorage();
     storage.removeItem(STORAGE_KEY_SESSION);
     storage.removeItem(STORAGE_KEY_PARTICIPANTS);
     storage.removeItem(STORAGE_KEY_SUBMISSIONS);
     storage.removeItem(STORAGE_KEY_ACTIVE_EXERCISE);
     storage.removeItem(STORAGE_KEY_ACTIVE_EXERCISES);
+    this.saveActiveExercises([]);
+    this.saveActiveExercise(null);
     this.setCurrentParticipant(null);
     this.setLockedRole(null);
+    if (curSession) {
+      this.broadcast({
+        type: 'EXERCISES_UPDATED',
+        classCode: curSession.classCode,
+        exercises: [],
+      });
+    }
   }
 }
 

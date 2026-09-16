@@ -84,6 +84,14 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
   });
 
   const handleSelectRole = (role: 'teacher' | 'student') => {
+    if (role === 'student') {
+      // Switching to student: clear any lingering teacher active exercises
+      classroomHub.saveActiveExercises([]);
+      classroomHub.saveActiveExercise(null);
+      setSelectedExercise(null);
+      setActiveExercise(null);
+      setSelectedExamExerciseIds([]);
+    }
     classroomHub.setLockedRole(role);
     setLockedRole(role);
     if (role === 'teacher') {
@@ -94,17 +102,38 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
   };
 
   const handleSwitchRole = () => {
+    const isTeacher = lockedRole === 'teacher';
     requestConfirm({
       title: 'Ganti Peran Pengguna?',
       message:
-        lockedRole === 'teacher'
-          ? 'Anda akan keluar dari Mode Guru. Sesi administrasi guru pada perangkat ini akan dilepas.'
+        isTeacher
+          ? 'Anda akan keluar dari Mode Guru. Sesi administrasi guru pada perangkat ini akan dilepas dan seluruh soal aktif akan dibersihkan.'
           : 'Anda akan keluar dari Mode Siswa. Anda akan dikeluarkan dari sesi kelas siswa aktif saat ini.',
       confirmLabel: 'Ganti Peran',
       onConfirm: () => {
+        if (isTeacher) {
+          const curSess = session || classroomHub.getSession();
+          if (curSess && curSess.status !== 'closed') {
+            classroomHub.closeClass(curSess.classCode);
+          } else {
+            classroomHub.saveActiveExercises([]);
+            classroomHub.saveActiveExercise(null);
+            classroomHub.broadcast({
+              type: 'EXERCISES_UPDATED',
+              classCode: curSess?.classCode || '',
+              exercises: [],
+            });
+          }
+        }
         classroomHub.leaveClass();
+        setSession(null);
+        setParticipants([]);
+        setSubmissions({});
         setJoinedParticipant(null);
         setActiveExercise(null);
+        setSelectedExercise(null);
+        setSelectedExamExerciseIds([]);
+        setMyEvaluation(null);
         setLockedRole(null);
         pushToast('info', 'Silakan tentukan peran baru yang ingin Anda masuki.');
       },
@@ -205,10 +234,14 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
           break;
 
         case 'EXERCISES_UPDATED':
-          if (event.exercises.length > 0) {
+          if (event.exercises && event.exercises.length > 0) {
             setSelectedExercise(event.exercises[0]);
             setActiveExercise(event.exercises[0]);
             setSelectedExamExerciseIds(event.exercises.map((x) => x.id));
+          } else {
+            setSelectedExercise(null);
+            setActiveExercise(null);
+            setSelectedExamExerciseIds([]);
           }
           break;
 
@@ -247,6 +280,25 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
 
         case 'CLASS_CLOSED':
           setSession((prev) => (prev ? { ...prev, status: 'closed' } : null));
+          setSelectedExercise(null);
+          setActiveExercise(null);
+          setSelectedExamExerciseIds([]);
+          break;
+
+        case 'ROLE_CHANGED':
+          setLockedRole(event.role);
+          if (event.role !== 'teacher') {
+            setSelectedExercise(null);
+            setActiveExercise(null);
+            setSelectedExamExerciseIds([]);
+          }
+          break;
+
+        case 'PARTICIPANT_CHANGED':
+          setJoinedParticipant(event.participant);
+          if (!event.participant) {
+            setActiveExercise(null);
+          }
           break;
 
         case 'SYNC_RESPONSE':
@@ -256,9 +308,14 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
           if (event.activeExercise) {
             setSelectedExercise(event.activeExercise);
             setActiveExercise(event.activeExercise);
+          } else {
+            setSelectedExercise(null);
+            setActiveExercise(null);
           }
           if (event.activeExercises && event.activeExercises.length > 0) {
             setSelectedExamExerciseIds(event.activeExercises.map((x) => x.id));
+          } else {
+            setSelectedExamExerciseIds([]);
           }
           break;
       }
@@ -333,6 +390,26 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
       `Paket soal kelas berhasil diperbarui (${chosen.length} soal aktif disiarkan). Pengerjaan siswa tetap aman.`
     );
   };
+  // Handler Guru: Kosongkan / Tarik Soal Aktif dari Kelas
+  const handleClearActiveExercises = () => {
+    if (!session) return;
+    requestConfirm({
+      title: 'Kosongkan Soal Aktif Kelas?',
+      message:
+        'Soal aktif yang sedang disiarkan ke siswa akan ditiadakan. Siswa tidak akan melihat soal aktif sampai Anda menyiarkan soal baru.',
+      confirmLabel: 'Kosongkan Soal',
+      onConfirm: () => {
+        classroomHub.updateClassExercises(session.classCode, []);
+        classroomHub.saveActiveExercises([]);
+        classroomHub.saveActiveExercise(null);
+        setSelectedExamExerciseIds([]);
+        setSelectedExercise(null);
+        setActiveExercise(null);
+        pushToast('info', 'Seluruh soal aktif berhasil ditarik dan dikosongkan dari kelas.');
+      },
+    });
+  };
+
 
   // Handler Guru: Buat Kelas Baru
   const handleCreateClass = () => {
@@ -516,12 +593,18 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
   // Handler Guru: Tutup Kelas
   const handleCloseClass = () => {
     if (!session) return;
-    classroomHub.closeClass(session.classCode);
+    const code = session.classCode;
+    classroomHub.closeClass(code);
+    classroomHub.saveActiveExercises([]);
+    classroomHub.saveActiveExercise(null);
     setSession(null);
     setParticipants([]);
     setSubmissions({});
+    setSelectedExercise(null);
+    setActiveExercise(null);
+    setSelectedExamExerciseIds([]);
     classroomHub.clearAll();
-    pushToast('info', 'Sesi kelas telah diakhiri.');
+    pushToast('info', 'Sesi kelas telah diakhiri dan soal aktif dibersihkan.');
   };
 
   // Handler Siswa: Gabung Kelas
@@ -822,6 +905,16 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
                 >
                   <Sparkles className="h-3.5 w-3.5 text-amber-300" />
                   Siarkan Paket Ujian ({selectedExamExerciseIds.length} Soal)
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleClearActiveExercises}
+                  className="h-7 gap-1.5 text-xs text-rose-400 hover:text-rose-300 border-rose-500/40"
+                  title="Tarik atau kosongkan seluruh soal aktif dari kelas"
+                >
+                  <XCircle className="h-3.5 w-3.5" />
+                  Kosongkan Soal
                 </Button>
               </>
             )}

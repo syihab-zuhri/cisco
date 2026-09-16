@@ -1,4 +1,4 @@
-import type { Exercise, ExerciseTarget, Submission } from './types';
+import type { Exercise, ExerciseTarget, StarterTopology, Submission } from './types';
 import type { DeviceType } from '../../types/network';
 import { isTopologyJson, convertTopologyToExercise } from './topologyExerciseConverter';
 
@@ -13,7 +13,7 @@ export interface ParseExerciseResult {
 export interface ParseSubmissionResult {
   success: boolean;
   submission?: Submission;
-  topology?: { nodes: any[]; edges: any[] };
+  topology?: StarterTopology;
   error?: string;
 }
 
@@ -197,7 +197,7 @@ export function validateExercise(item: unknown, itemIndex: number = 0): { exerci
       starterTemplateId: typeof ex.starterTemplateId === 'string' ? ex.starterTemplateId : undefined,
       starterTopology:
         ex.starterTopology && typeof ex.starterTopology === 'object'
-          ? (ex.starterTopology as { nodes: any[]; edges: any[] })
+          ? (ex.starterTopology as StarterTopology)
           : undefined,
     },
   };
@@ -334,7 +334,7 @@ export function exportLabPackageFile(exercise: Exercise, defaultFilename?: strin
  */
 export function exportSubmissionPackageFile(
   submission: Submission,
-  topology: { nodes: any[]; edges: any[] },
+  topology: StarterTopology,
   defaultFilename?: string
 ): void {
   const payload = {
@@ -376,7 +376,7 @@ export function parseSubmissionJson(rawJson: string): ParseSubmissionResult {
       return {
         success: true,
         submission: data.submission as Submission,
-        topology: data.topology as { nodes: any[]; edges: any[] } | undefined,
+        topology: data.topology as StarterTopology | undefined,
       };
     }
 
@@ -385,7 +385,7 @@ export function parseSubmissionJson(rawJson: string): ParseSubmissionResult {
       return {
         success: true,
         submission: data as unknown as Submission,
-        topology: data.topology as { nodes: any[]; edges: any[] } | undefined,
+        topology: data.topology as StarterTopology | undefined,
       };
     }
 
