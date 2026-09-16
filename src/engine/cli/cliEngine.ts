@@ -151,6 +151,7 @@ export class CliSession {
       return [
         'Daftar perintah Cisco IOS yang didukung:',
         '  enable                  - Masuk ke privileged EXEC mode',
+        '  disable                 - Kembali ke user EXEC mode',
         '  configure terminal      - Masuk ke global configuration mode (alias: conf t)',
         '  hostname <name>         - Mengubah nama host perangkat',
         '  interface <id>[.subif]  - Konfigurasi port / sub-interface (alias: int)',
@@ -168,6 +169,7 @@ export class CliSession {
         '  show ip interface brief        - Status ringkas port (alias: sh ip int br)',
         '  show ip route / show vlan      - Tabel routing L3 / VLAN L2',
         '  show mac-address-table / show arp - Tabel MAC L2 / cache ARP',
+        '  show version / sh ver   - Menampilkan versi software sistem',
         '  ping <ip>                      - ICMP echo (5 paket, gaya Cisco IOS)',
         '  exit / end                     - Navigasi mode / keluar',
       ];
@@ -175,7 +177,7 @@ export class CliSession {
 
     switch (this.mode) {
       case 'user':
-        return this.handleUser(primary, lowerTokens, rawTokens);
+        return this.handleUser(primary, lowerTokens, rawTokens, cmd);
       case 'priv':
         return this.handlePriv(lowerTokens, rawTokens, cmd);
       case 'config':
@@ -188,7 +190,8 @@ export class CliSession {
   private async handleUser(
     primary: string,
     lowerTokens: string[],
-    rawTokens: string[]
+    rawTokens: string[],
+    cmd: string
   ): Promise<string[]> {
     if (primary === 'enable' || primary === 'en') {
       this.mode = 'priv';
@@ -204,6 +207,9 @@ export class CliSession {
       (lowerTokens[3] === 'brief' || lowerTokens[3] === 'br' || !lowerTokens[3])
     ) {
       return this.showIpInterfaceBrief();
+    }
+    if (cmd === 'show version' || cmd === 'sh ver' || cmd === 'show ver') {
+      return this.showVersion();
     }
     return this.invalid(`Perintah tidak dikenal di User mode. Coba "enable" atau "ping <ip>".`);
   }
@@ -222,6 +228,10 @@ export class CliSession {
       cmd === 'configure t'
     ) {
       this.mode = 'config';
+      return [];
+    }
+    if (cmd === 'disable') {
+      this.mode = 'user';
       return [];
     }
     if (
@@ -287,6 +297,9 @@ export class CliSession {
       }
       if (cmd === 'show arp' || cmd === 'sh arp') {
         return this.showArp();
+      }
+      if (cmd === 'show version' || cmd === 'sh ver' || cmd === 'show ver') {
+        return this.showVersion();
       }
     }
       if (
@@ -678,6 +691,32 @@ export class CliSession {
       this.deps.setPortConfig(this.currentInterface!, { portMode: 'access', vlanId });
       return [];
     }
+    // no switchport access vlan -> reset ke vlan 1
+    const isNoSw =
+      lowerTokens[0] === 'no' &&
+      (lowerTokens[1] === 'switchport' || lowerTokens[1] === 'sw');
+    if (
+      isNoSw &&
+      (lowerTokens[2] === 'access' || lowerTokens[2] === 'acc') &&
+      (lowerTokens[3] === 'vlan' || lowerTokens[3] === 'vl')
+    ) {
+      const dev = this.deps.getDevice();
+      if (dev.type !== 'switch') {
+        return this.invalid('Perintah switchport hanya berlaku pada Switch.');
+      }
+      this.deps.setPortConfig(this.currentInterface!, { portMode: 'access', vlanId: 1 });
+      return [];
+    }
+
+    // no switchport mode -> reset ke access mode
+    if (isNoSw && (lowerTokens[2] === 'mode' || lowerTokens[2] === 'mo')) {
+      const dev = this.deps.getDevice();
+      if (dev.type !== 'switch') {
+        return this.invalid('Perintah switchport hanya berlaku pada Switch.');
+      }
+      this.deps.setPortConfig(this.currentInterface!, { portMode: 'access' });
+      return [];
+    }
 
     // switchport trunk allowed vlan
     if (
@@ -892,5 +931,12 @@ export class CliSession {
       lines.push(`${p.name.padEnd(12)}1-4094`);
     }
     return lines;
+  }
+
+  private showVersion(): string[] {
+    return [
+      'Cisco IOS Software, C2900 Software (C2900-UNIVERSALK9-M), Version 15.1(4)M4',
+      'OpenPacket Simulated IOS Terminal v1.3.0',
+    ];
   }
 }

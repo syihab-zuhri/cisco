@@ -626,6 +626,19 @@ describe('Comprehensive System Audit & Verification', () => {
 
       await session.handle('exit');
       expect(session.prompt()).toBe('SW1#');
+
+      // disable drops to user mode
+      await session.handle('disable');
+      expect(session.prompt()).toBe('SW1>');
+
+      // show version works in user mode
+      const verOutUser = await session.handle('show version');
+      expect(verOutUser.join('\n')).toContain('Cisco IOS Software');
+
+      // sh ver works in priv mode
+      await session.handle('enable');
+      const verOutPriv = await session.handle('sh ver');
+      expect(verOutPriv.join('\n')).toContain('Version 15.1');
     });
 
     it('CLI command parity enhancements: sh int tr, sh ip int without brief, show running, and clear mac-table', async () => {
@@ -664,6 +677,43 @@ describe('Comprehensive System Audit & Verification', () => {
       // clear mac-table
       await session.handle('clear mac-table');
       expect(macTableCleared).toBe(true);
+    });
+    it('CLI switchport management: switchport access vlan, no switchport access vlan, and no switchport mode', async () => {
+      const sw: DeviceData = {
+        id: 'sw-1', label: 'SW1', type: 'switch',
+        ports: [
+          { id: 'fa0/1', name: 'fa0/1', status: 'up', portMode: 'access', vlanId: 1, macAddress: '00:50:79:00:00:01' },
+        ],
+      };
+      const session = new CliSession({
+        getDevice: () => sw,
+        setHostname: () => {},
+        setPortConfig: (portId, updates) => {
+          const p = sw.ports.find((pr) => pr.id === portId);
+          if (p) Object.assign(p, updates);
+        },
+        requestPing: async () => ({ success: true, outputLines: [] }),
+      });
+
+      await session.handle('enable');
+      await session.handle('conf t');
+      await session.handle('int fa0/1');
+
+      // switchport access vlan 20
+      await session.handle('switchport access vlan 20');
+      expect(sw.ports[0].vlanId).toBe(20);
+
+      // no switchport access vlan resets to vlan 1
+      await session.handle('no switchport access vlan');
+      expect(sw.ports[0].vlanId).toBe(1);
+
+      // switchport mode trunk
+      await session.handle('switchport mode trunk');
+      expect(sw.ports[0].portMode).toBe('trunk');
+
+      // no switchport mode resets to access
+      await session.handle('no switchport mode');
+      expect(sw.ports[0].portMode).toBe('access');
     });
 
     it('CLI findPort resolves shorthand aliases (f0/0, g0/0) and sub-interfaces (f0/0.10, gi0/0.20)', async () => {

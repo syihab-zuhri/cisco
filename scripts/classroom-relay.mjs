@@ -92,9 +92,24 @@ const server = createServer((req, res) => {
               if (event.exercises && event.exercises.length > 0) {
                 room.activeExercises = event.exercises;
                 room.activeExercise = event.exercises[0] || event.exercise || null;
+                if (room.session) {
+                  room.session.activeExerciseId = room.activeExercise?.id || null;
+                  room.session.activeExercises = room.activeExercises;
+                }
               } else if (event.exercise) {
                 room.activeExercises = [event.exercise];
                 room.activeExercise = event.exercise;
+                if (room.session) {
+                  room.session.activeExerciseId = event.exercise.id;
+                  room.session.activeExercises = [event.exercise];
+                }
+              } else {
+                room.activeExercises = [];
+                room.activeExercise = null;
+                if (room.session) {
+                  room.session.activeExerciseId = null;
+                  room.session.activeExercises = [];
+                }
               }
               break;
             case 'SUBMISSION_RECEIVED':
@@ -114,6 +129,8 @@ const server = createServer((req, res) => {
               break;
             case 'CLASS_CLOSED':
               if (room.session) room.session.status = 'closed';
+              room.activeExercises = [];
+              room.activeExercise = null;
               break;
           }
         }
