@@ -83,15 +83,15 @@ export function ClassroomStudentHUD() {
         setEvaluationsByExerciseId({});
         setIsEvaluating(false);
         setSession(null);
-        pushToast('info', 'Anda telah keluar dari ruang kelas.');
+        pushToast('info', 'Berhasil keluar dari Mode Siswa.');
       };
 
       if (confirm) {
         requestConfirm({
-          title: 'Keluar dari Kelas?',
+          title: 'Keluar Mode Siswa?',
           message:
-            'Anda akan keluar dari sesi praktikum kelas ini. Anda dapat bergabung kembali kapan saja menggunakan kode kelas.',
-          confirmLabel: 'Keluar Kelas',
+            'Keluar Mode Siswa? Anda akan keluar dari peran siswa dan sesi praktikum kelas.',
+          confirmLabel: 'Keluar Mode Siswa',
           onConfirm: doLeave,
         });
       } else {
@@ -200,7 +200,7 @@ export function ClassroomStudentHUD() {
           break;
 
         case 'ROLE_CHANGED':
-          if (event.role === 'teacher') {
+          if (event.role !== 'student') {
             setParticipant(null);
             setActiveExercises([]);
             setSelectedExerciseIndex(0);

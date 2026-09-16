@@ -377,24 +377,20 @@ describe('Classroom Feature Suite', () => {
       expect(classroomHub.getLockedRole()).toBeNull();
     });
 
-    it('penutupan modal saat mode guru aktif tanpa sesi kelas aktif membersihkan mode guru dan bank soal', () => {
+    it('penutupan modal saat mode guru aktif tanpa sesi kelas aktif mempertahankan mode guru dan bank soal', () => {
       classroomHub.setLockedRole('teacher');
       saveExercises([...MOCK_EXERCISES]);
       expect(loadExercises().length).toBeGreaterThan(0);
       expect(classroomHub.getSession()).toBeNull();
 
-      // Simulasi penutupan modal oleh guru (handleModalClose / purgeAllTeacherData)
-      const role = classroomHub.getLockedRole();
-      if (role === 'teacher') {
-        const curSess = classroomHub.getSession();
-        const code = curSess?.classCode || '';
-        classroomHub.closeClass(code);
-        classroomHub.saveActiveExercises([]);
-        classroomHub.saveActiveExercise(null);
-        clearExercisesStorage();
-        classroomHub.leaveClass();
-        classroomHub.setLockedRole(null);
-      }
+      // Simulasi penutupan modal oleh guru (handleModalClose hanya memanggil onClose(), tidak purge)
+      // Peran dan bank soal tetap aktif
+      expect(classroomHub.getLockedRole()).toBe('teacher');
+      expect(loadExercises().length).toBe(MOCK_EXERCISES.length);
+
+      // Data HANYA dibersihkan saat menekan "Keluar Mode Guru" (handleExitTeacherMode)
+      classroomHub.leaveClass();
+      classroomHub.setLockedRole(null);
 
       expect(loadExercises()).toEqual([]);
       expect(classroomHub.getLockedRole()).toBeNull();
@@ -402,7 +398,7 @@ describe('Classroom Feature Suite', () => {
       expect(classroomHub.getActiveExercise()).toBeNull();
     });
 
-    it('penutupan modal saat mode guru aktif dengan sesi kelas aktif selalu menutup kelas dan membersihkan seluruh soal dari memori dan storage', () => {
+    it('penutupan modal saat mode guru aktif dengan sesi kelas aktif mempertahankan sesi, peran, dan bank soal di memori dan storage', () => {
       classroomHub.setLockedRole('teacher');
       saveExercises([...MOCK_EXERCISES]);
       classroomHub.createClass('Kelas Ujian Modal', 'MODAL-99', undefined, MOCK_EXERCISES);
@@ -411,18 +407,23 @@ describe('Classroom Feature Suite', () => {
       expect(loadExercises().length).toBeGreaterThan(0);
       expect(classroomHub.getSession()?.status).toBe('open');
 
-      // Guru menutup modal saat kelas aktif (handleModalClose / purgeAllTeacherData)
-      const role = classroomHub.getLockedRole();
-      if (role === 'teacher') {
-        const curSess = classroomHub.getSession();
-        const code = (curSess?.classCode || '').trim();
-        classroomHub.closeClass(code);
-        classroomHub.saveActiveExercises([]);
-        classroomHub.saveActiveExercise(null);
-        clearExercisesStorage();
-        classroomHub.leaveClass();
-        classroomHub.setLockedRole(null);
-      }
+      // Guru menutup modal saat kelas aktif (handleModalClose hanya memanggil onClose(), tidak purge)
+      // Sesi, peran, dan soal tetap aktif agar guru dapat melihat/membangun topologi di kanvas
+      expect(classroomHub.getLockedRole()).toBe('teacher');
+      expect(classroomHub.getSession()?.status).toBe('open');
+      expect(loadExercises().length).toBe(MOCK_EXERCISES.length);
+      expect(classroomHub.getActiveExercises().length).toBe(MOCK_EXERCISES.length);
+      expect(classroomHub.getActiveExercise()).not.toBeNull();
+
+      // Sesi dan data HANYA dihentikan & dibersihkan saat menekan "Keluar Mode Guru" (handleExitTeacherMode)
+      const curSess = classroomHub.getSession();
+      const code = (curSess?.classCode || '').trim();
+      classroomHub.closeClass(code);
+      classroomHub.saveActiveExercises([]);
+      classroomHub.saveActiveExercise(null);
+      clearExercisesStorage();
+      classroomHub.leaveClass();
+      classroomHub.setLockedRole(null);
 
       expect(loadExercises()).toEqual([]);
       expect(classroomHub.getActiveExercises()).toEqual([]);
@@ -563,30 +564,48 @@ describe('Classroom Feature Suite', () => {
       expect(loadExercises()).toEqual([]);
     });
 
-    it('invarian pembukaan modal tanpa sesi aktif: bank soal tetap kosong [] dan storage dibersihkan', () => {
-      // Simulasikan ada data legacy
+    it('invarian modal: penutupan dan pembukaan kembali modal tetap mempertahankan bank soal dan peran yang aktif', () => {
+      // Guru berada di mode guru dan telah menyiapkan bank soal
+      classroomHub.setLockedRole('teacher');
       saveExercises([...MOCK_EXERCISES]);
-      expect(loadExercises().length).toBeGreaterThan(0);
+      expect(loadExercises().length).toBe(MOCK_EXERCISES.length);
 
-      // Simulasikan logika ClassroomModal saat isOpen dan !existingSession
-      const existingSession = classroomHub.getSession();
-      expect(existingSession).toBeNull();
+      // Menutup modal (isOpen = false) dan membukanya kembali (isOpen = true) tidak membersihkan bank soal
+      const existingRole = classroomHub.getLockedRole();
+      expect(existingRole).toBe('teacher');
+      const loaded = loadExercises();
+      expect(loaded.length).toBe(MOCK_EXERCISES.length);
 
-      let exercises: Exercise[] = ['dummy' as unknown as Exercise];
-      let selectedExercise: Exercise | null = 'dummy' as unknown as Exercise;
-      let selectedExamExerciseIds: string[] = ['ex-1'];
-
-      if (!existingSession) {
-        clearExercisesStorage();
-        exercises = [];
-        selectedExercise = null;
-        selectedExamExerciseIds = [];
-      }
-
-      expect(exercises).toEqual([]);
-      expect(selectedExercise).toBeNull();
-      expect(selectedExamExerciseIds).toEqual([]);
+      // Pembersihan HANYA terjadi saat aksi eksplisit keluar mode guru (handleExitTeacherMode)
+      classroomHub.leaveClass();
+      classroomHub.setLockedRole(null);
       expect(loadExercises()).toEqual([]);
+      expect(classroomHub.getLockedRole()).toBeNull();
+    });
+
+    it('invarian siswa: penutupan modal mempertahankan sesi dan peran, keluar mode siswa membersihkan sesi dan kembali ke role gate', () => {
+      classroomHub.setLockedRole('teacher');
+      classroomHub.createClass('Kelas Siswa Test', 'STU-99', undefined, MOCK_EXERCISES);
+
+      // Siswa bergabung
+      classroomHub.setLockedRole('student');
+      const participant = classroomHub.joinClass('STU-99', 'Budi');
+      expect(participant).not.toBeNull();
+      expect(classroomHub.getCurrentParticipant()).toEqual(participant);
+      expect(classroomHub.getLockedRole()).toBe('student');
+
+      // Penutupan modal oleh siswa (handleModalClose): peran dan partisipan TETAP dipertahankan
+      expect(classroomHub.getCurrentParticipant()).toEqual(participant);
+      expect(classroomHub.getLockedRole()).toBe('student');
+
+      // Saat siswa menekan "Keluar Mode Siswa" (handleExitStudentMode):
+      classroomHub.leaveClass();
+      classroomHub.setLockedRole(null);
+
+      expect(classroomHub.getCurrentParticipant()).toBeNull();
+      expect(classroomHub.getLockedRole()).toBeNull();
+      expect(classroomHub.getActiveExercises()).toEqual([]);
+      expect(classroomHub.getActiveExercise()).toBeNull();
     });
   });
 

@@ -20,7 +20,6 @@ import {
   Plus,
   Pencil,
   Trash2,
-  ArrowLeftRight,
   RefreshCw,
   BookOpen,
   CheckCheck,
@@ -163,40 +162,12 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
     setLockedRole(null);
   };
 
-  const handleSwitchRole = () => {
-    const isTeacher = lockedRole === 'teacher' || classroomHub.getLockedRole() === 'teacher';
-    requestConfirm({
-      title: 'Ganti Peran Pengguna?',
-      message:
-        isTeacher
-          ? 'Anda akan keluar dari Mode Guru. Sesi administrasi guru pada perangkat ini akan dilepas dan seluruh bank soal serta soal aktif akan sepenuhnya dibersihkan.'
-          : 'Anda akan keluar dari Mode Siswa. Anda akan dikeluarkan dari sesi kelas siswa aktif saat ini.',
-      confirmLabel: 'Ganti Peran',
-      onConfirm: () => {
-        if (isTeacher) {
-          purgeAllTeacherData();
-        } else {
-          classroomHub.leaveClass();
-          classroomHub.setLockedRole(null);
-          setLockedRole(null);
-          setSession(null);
-          setParticipants([]);
-          setSubmissions({});
-          setJoinedParticipant(null);
-          setMyEvaluation(null);
-          setActiveExercise(null);
-        }
-        pushToast('info', 'Silakan tentukan peran baru yang ingin Anda masuki.');
-      },
-    });
-  };
-
   // Handler Guru: Keluar Mode Guru
   const handleExitTeacherMode = () => {
     requestConfirm({
       title: 'Keluar Mode Guru?',
       message:
-        'Anda akan keluar dari Mode Guru. Sesi kelas (jika aktif) akan ditutup, bank soal serta soal aktif akan sepenuhnya dihapus dari perangkat ini.',
+        'Keluar Mode Guru? Sesi kelas (jika aktif) akan dihentikan, seluruh bank soal serta soal aktif akan sepenuhnya dihapus dari perangkat ini.',
       confirmLabel: 'Keluar Mode Guru',
       onConfirm: () => {
         purgeAllTeacherData();
@@ -205,62 +176,73 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
     });
   };
 
-  // Handler tutup modal: jika peran guru aktif, keluar mode guru dan bersihkan seluruh soal & sesi
+  // Handler Siswa: Keluar Mode Siswa
+  const handleExitStudentMode = () => {
+    requestConfirm({
+      title: 'Keluar Mode Siswa?',
+      message: 'Keluar Mode Siswa? Anda akan keluar dari peran siswa dan sesi praktikum kelas.',
+      confirmLabel: 'Keluar Mode Siswa',
+      onConfirm: () => {
+        classroomHub.leaveClass();
+        classroomHub.setLockedRole(null);
+        setLockedRole(null);
+        setJoinedParticipant(null);
+        setActiveExercise(null);
+        setSession(null);
+        setParticipants([]);
+        setSubmissions({});
+        setMyEvaluation(null);
+        pushToast('info', 'Berhasil keluar dari Mode Siswa.');
+      },
+    });
+  };
+
+  // Handler tutup modal: menutup modal tanpa menghapus sesi atau peran aktif
   const handleModalClose = () => {
-    const role = lockedRole || classroomHub.getLockedRole();
-    if (role === 'teacher') {
-      purgeAllTeacherData();
-    }
     onClose();
   };
 
-  // Inisialisasi state dari storage saat modal dibuka atau dibersihkan saat ditutup
+  // Inisialisasi state dari storage saat modal dibuka
   useEffect(() => {
-    if (!isOpen) {
-      const role = classroomHub.getLockedRole() || lockedRole;
-      if (role === 'teacher') {
-        purgeAllTeacherData();
-      }
-      return;
+    if (!isOpen) return;
+
+    const role = classroomHub.getLockedRole();
+    if (role) {
+      setLockedRole(role);
     }
+
     const existingSession = classroomHub.getSession();
     if (existingSession) {
       setSession(existingSession);
       setParticipants(classroomHub.getParticipants());
       setSubmissions(classroomHub.getSubmissions());
-      const loaded = loadExercises();
-      setExercises(loaded);
-      const activeEx = classroomHub.getActiveExercise();
-      if (activeEx) {
-        setSelectedExercise(activeEx);
-        setActiveExercise(activeEx);
-      } else {
-        setSelectedExercise(loaded[0] || null);
-      }
-      const activeList = classroomHub.getActiveExercises();
-      if (activeList && activeList.length > 0) {
-        setSelectedExamExerciseIds(activeList.map((x) => x.id));
-      }
       void classroomHub.syncWithServer(existingSession.classCode);
-    } else {
-      const role = classroomHub.getLockedRole();
-      setLockedRole(role);
-      clearExercisesStorage();
-      setExercises([]);
-      setSelectedExercise(null);
-      setSelectedExamExerciseIds([]);
+    }
+
+    const curParticipant = classroomHub.getCurrentParticipant();
+    if (curParticipant) {
+      setJoinedParticipant(curParticipant);
+    }
+
+    const activeEx = classroomHub.getActiveExercise();
+    if (activeEx) {
+      setSelectedExercise(activeEx);
+      setActiveExercise(activeEx);
+    }
+
+    const activeList = classroomHub.getActiveExercises();
+    if (activeList && activeList.length > 0) {
+      setSelectedExamExerciseIds(activeList.map((x) => x.id));
+    }
+
+    const loaded = loadExercises();
+    if (loaded.length > 0) {
+      setExercises(loaded);
+      if (!activeEx) {
+        setSelectedExercise((prev) => prev || loaded[0]);
+      }
     }
   }, [isOpen]);
-
-  // Cleanup saat komponen unmount: jika peran guru aktif, bersihkan seluruh data guru
-  useEffect(() => {
-    return () => {
-      const role = classroomHub.getLockedRole();
-      if (role === 'teacher') {
-        purgeAllTeacherData();
-      }
-    };
-  }, []);
 
   // Polling server relay setiap 2 detik selama modal aktif agar daftar peserta dan event sinkron lintas perangkat
   useEffect(() => {
@@ -1284,36 +1266,24 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
               </div>
             </div>
 
-            {/* Status Peran / Aksi Ganti Peran */}
+            {/* Status Peran */}
             {lockedRole ? (
-              <div className="flex items-center gap-2 shrink-0">
-                <Badge
-                  variant="outline"
-                  className="flex items-center gap-1.5 py-1 px-2.5 text-xs font-semibold"
-                >
-                  {lockedRole === 'teacher' ? (
-                    <>
-                      <GraduationCap className="h-3.5 w-3.5 text-primary" />
-                      <span>Mode Guru Aktif</span>
-                    </>
-                  ) : (
-                    <>
-                      <Users className="h-3.5 w-3.5 text-sky-400" />
-                      <span>Mode Siswa Aktif</span>
-                    </>
-                  )}
-                </Badge>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleSwitchRole}
-                  className="h-7 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-                  title="Keluar dari peran saat ini untuk berganti peran"
-                >
-                  <ArrowLeftRight className="h-3 w-3" />
-                  Ganti Peran
-                </Button>
-              </div>
+              <Badge
+                variant="outline"
+                className="flex items-center gap-1.5 py-1 px-2.5 text-xs font-semibold shrink-0"
+              >
+                {lockedRole === 'teacher' ? (
+                  <>
+                    <GraduationCap className="h-3.5 w-3.5 text-primary" />
+                    <span>Mode Guru Aktif</span>
+                  </>
+                ) : (
+                  <>
+                    <Users className="h-3.5 w-3.5 text-sky-400" />
+                    <span>Mode Siswa Aktif</span>
+                  </>
+                )}
+              </Badge>
             ) : (
               <Badge variant="secondary" className="text-xs text-muted-foreground shrink-0">
                 Pilih Peran Anda
@@ -1821,11 +1791,11 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
                       </Button>
                       <Button
                         type="button"
-                        variant="ghost"
-                        onClick={handleSwitchRole}
-                        className="gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                        variant="outline"
+                        onClick={handleExitStudentMode}
+                        className="gap-1.5 text-xs text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive font-medium"
                       >
-                        <ArrowLeftRight className="h-3.5 w-3.5" />
+                        <LogOut className="h-3.5 w-3.5" />
                         Keluar Mode Siswa
                       </Button>
                     </div>
@@ -1855,22 +1825,32 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
                       </div>
                     </div>
 
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        classroomHub.setCurrentParticipant(null);
-                        setJoinedParticipant(null);
-                        setActiveExercise(null);
-                        pushToast('info', 'Anda telah keluar dari ruang kelas.');
-                      }}
-                      className="gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-                    >
-                      <LogOut className="h-3.5 w-3.5" />
-                      Keluar Kelas
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          classroomHub.setCurrentParticipant(null);
+                          setJoinedParticipant(null);
+                          setActiveExercise(null);
+                          pushToast('info', 'Anda telah keluar dari ruang kelas.');
+                        }}
+                        className="gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                      >
+                        <LogOut className="h-3.5 w-3.5" />
+                        Keluar Kelas
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleExitStudentMode}
+                        className="gap-1.5 text-xs text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive font-medium"
+                      >
+                        <LogOut className="h-3.5 w-3.5" />
+                        Keluar Mode Siswa
+                      </Button>
+                    </div>
                   </div>
-
                   {/* Soal Aktif */}
                   {activeExercise ? (
                     <Card className="flex flex-col gap-4 p-5">
