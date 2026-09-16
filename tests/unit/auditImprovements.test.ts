@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { CliSession, type CliSessionDeps } from '../../src/engine/cli/cliEngine';
 import { useAppStore } from '../../src/store/useAppStore';
+import { classroomHub } from '../../src/features/classroom/classroomHub';
 import type { DeviceData, RoutingEntry } from '../../src/types/network';
 
 describe('Audit Improvements: Cisco IOS CLI Extensions & Port Status Parity', () => {
@@ -319,6 +320,59 @@ describe('Audit Improvements: Cisco IOS CLI Extensions & Port Status Parity', ()
       store.updatePortConfig(routerNode.id, 'fa0/0', { status: 'up' });
       const finalRouter = useAppStore.getState().nodes.find((n) => n.id === routerNode.id)!;
       expect(finalRouter.data.ports[0].status).toBe('up');
+    });
+  });
+
+  describe('Classroom Role Switching & Template Lock Parity', () => {
+    it('mengunci mode siswa dan membuka kembali saat ganti peran ke guru atau keluar kelas', async () => {
+      classroomHub.clearAll();
+
+      // Awal: Tidak ada peran, siswa tidak aktif -> template terbuka
+      expect(classroomHub.isStudentActive()).toBe(false);
+
+      let lastEventRole: string | null | undefined;
+      const unsub = classroomHub.subscribe((ev) => {
+        if (ev.type === 'ROLE_CHANGED') {
+          lastEventRole = ev.role;
+        }
+      });
+
+      // 1. Masuk ke Mode Siswa -> isStudentActive = true (template terkunci)
+      classroomHub.setLockedRole('student');
+      expect(classroomHub.getLockedRole()).toBe('student');
+      expect(classroomHub.isStudentActive()).toBe(true);
+
+      await Promise.resolve();
+      expect(lastEventRole).toBe('student');
+
+      // 2. Ganti peran ke Guru -> isStudentActive = false (template terbuka kembali)
+      classroomHub.setLockedRole('teacher');
+      expect(classroomHub.getLockedRole()).toBe('teacher');
+      expect(classroomHub.isStudentActive()).toBe(false);
+
+      await Promise.resolve();
+      expect(lastEventRole).toBe('teacher');
+
+      // 3. Masuk lagi ke Mode Siswa dan join participant
+      classroomHub.setLockedRole('student');
+      classroomHub.setCurrentParticipant({
+        id: 'p-1',
+        nickname: 'Budi',
+        joinedAt: Date.now(),
+        status: 'in_progress',
+      });
+      expect(classroomHub.isStudentActive()).toBe(true);
+
+      // 4. Keluar dari mode siswa via leaveClass() -> isStudentActive = false (template terbuka)
+      classroomHub.leaveClass();
+      expect(classroomHub.getLockedRole()).toBeNull();
+      expect(classroomHub.getCurrentParticipant()).toBeNull();
+      expect(classroomHub.isStudentActive()).toBe(false);
+
+      await Promise.resolve();
+      expect(lastEventRole).toBeNull();
+
+      unsub();
     });
   });
 });

@@ -88,4 +88,6 @@ export type ClassroomEvent =
       submissions: Record<string, Submission>;
       activeExercise: Exercise | null;
       activeExercises?: Exercise[];
-    };
+    }
+  | { type: 'ROLE_CHANGED'; role: 'teacher' | 'student' | null }
+  | { type: 'PARTICIPANT_CHANGED'; participant: Participant | null };

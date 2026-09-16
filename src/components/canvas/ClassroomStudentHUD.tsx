@@ -68,8 +68,7 @@ export function ClassroomStudentHUD() {
   const handleLeaveClass = useCallback(
     (confirm = true) => {
       const doLeave = () => {
-        classroomHub.setCurrentParticipant(null);
-        classroomHub.setLockedRole(null);
+        classroomHub.leaveClass();
         setParticipant(null);
         setEvaluationsByExerciseId({});
         pushToast('info', 'Anda telah keluar dari ruang kelas.');

@@ -54,26 +54,35 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
   const reactFlow = useReactFlow();
   const [activeTab, setActiveTab] = useState<'devices' | 'templates'>('devices');
   const [isStudentInClass, setIsStudentInClass] = useState<boolean>(() => {
-    return (
-      classroomHub.getCurrentParticipant() !== null ||
-      classroomHub.getLockedRole() === 'student'
-    );
+    return classroomHub.isStudentActive();
   });
 
   useEffect(() => {
     const checkStatus = () => {
-      const inClass =
-        classroomHub.getCurrentParticipant() !== null ||
-        classroomHub.getLockedRole() === 'student';
+      const inClass = classroomHub.isStudentActive();
       setIsStudentInClass(inClass);
-      if (inClass && activeTab === 'templates') {
-        setActiveTab('devices');
+      if (inClass) {
+        setActiveTab((curr) => (curr === 'templates' ? 'devices' : curr));
       }
     };
     const unsub = classroomHub.subscribe(checkStatus);
     checkStatus();
-    return unsub;
-  }, [activeTab]);
+
+    const onStorage = (e: StorageEvent) => {
+      if (
+        e.key === 'openpacket_locked_role' ||
+        e.key === 'openpacket_current_participant'
+      ) {
+        checkStatus();
+      }
+    };
+    window.addEventListener('storage', onStorage);
+
+    return () => {
+      unsub();
+      window.removeEventListener('storage', onStorage);
+    };
+  }, []);
 
   // Titik tengah viewport kanvas + offset kaskade 28px per node yang menumpuk,
   // sehingga perangkat/anotasi sebelumnya tetap terlihat sebagian.

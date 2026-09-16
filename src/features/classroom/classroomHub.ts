@@ -230,7 +230,10 @@ class ClassroomHub {
         break;
     }
 
-    // Panggil seluruh listener lokal secara asinkron (microtask) agar React menyelesaikan siklus render saat ini
+    this.notifyListeners(event);
+  }
+
+  public notifyListeners(event: ClassroomEvent): void {
     queueMicrotask(() => {
       this.listeners.forEach((listener) => {
         try {
@@ -620,6 +623,7 @@ class ClassroomHub {
     } else {
       memoryStore.removeItem(STORAGE_KEY_CURRENT_PARTICIPANT);
     }
+    this.notifyListeners({ type: 'PARTICIPANT_CHANGED', participant });
   }
 
   public getLockedRole(): 'teacher' | 'student' | null {
@@ -658,6 +662,18 @@ class ClassroomHub {
     } else {
       memoryStore.removeItem(STORAGE_KEY_LOCKED_ROLE);
     }
+    this.notifyListeners({ type: 'ROLE_CHANGED', role });
+  }
+
+  public isStudentActive(): boolean {
+    const role = this.getLockedRole();
+    if (role === 'teacher') return false;
+    return role === 'student' || this.getCurrentParticipant() !== null;
+  }
+
+  public leaveClass(): void {
+    this.setCurrentParticipant(null);
+    this.setLockedRole(null);
   }
 
   public clearAll(): void {

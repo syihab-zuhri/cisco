@@ -102,12 +102,9 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
           : 'Anda akan keluar dari Mode Siswa. Anda akan dikeluarkan dari sesi kelas siswa aktif saat ini.',
       confirmLabel: 'Ganti Peran',
       onConfirm: () => {
-        if (lockedRole === 'student') {
-          classroomHub.setCurrentParticipant(null);
-          setJoinedParticipant(null);
-          setActiveExercise(null);
-        }
-        classroomHub.setLockedRole(null);
+        classroomHub.leaveClass();
+        setJoinedParticipant(null);
+        setActiveExercise(null);
         setLockedRole(null);
         pushToast('info', 'Silakan tentukan peran baru yang ingin Anda masuki.');
       },
@@ -1556,16 +1553,27 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
                   </div>
 
                   <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => oplabInputRef.current?.click()}
-                      className="gap-2 text-xs text-amber-400 hover:text-amber-300"
-                      title="Buka file paket praktikum tugas mandiri (.oplab atau .json)"
-                    >
-                      <Upload className="h-4 w-4" />
-                      Buka Tugas Mandiri (.oplab)
-                    </Button>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => oplabInputRef.current?.click()}
+                        className="gap-2 text-xs text-amber-400 hover:text-amber-300"
+                        title="Buka file paket praktikum tugas mandiri (.oplab atau .json)"
+                      >
+                        <Upload className="h-4 w-4" />
+                        Buka Tugas Mandiri (.oplab)
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={handleSwitchRole}
+                        className="gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                      >
+                        <ArrowLeftRight className="h-3.5 w-3.5" />
+                        Keluar Mode Siswa
+                      </Button>
+                    </div>
 
                     <Button onClick={handleJoinClass} className="gap-2">
                       <Users className="h-4 w-4" />
@@ -1595,7 +1603,12 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => setJoinedParticipant(null)}
+                      onClick={() => {
+                        classroomHub.setCurrentParticipant(null);
+                        setJoinedParticipant(null);
+                        setActiveExercise(null);
+                        pushToast('info', 'Anda telah keluar dari ruang kelas.');
+                      }}
                       className="gap-1.5 text-xs text-muted-foreground hover:text-foreground"
                     >
                       <LogOut className="h-3.5 w-3.5" />
