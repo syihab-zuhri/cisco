@@ -27,6 +27,9 @@ import {
   Zap,
   Square,
   X,
+  Lock,
+  Users,
+  ArrowLeftRight,
 } from 'lucide-react';
 import {
   Dialog,
@@ -50,6 +53,7 @@ type SectionId =
   | 'protocols'
   | 'simmode'
   | 'cli'
+  | 'classroom'
   | 'build'
   | 'architecture';
 
@@ -72,6 +76,7 @@ const NAV_GROUPS: Array<{ group: string; items: Array<{ id: SectionId; label: st
   {
     group: 'Lanjutan',
     items: [
+      { id: 'classroom', label: 'Ruang Kelas & Lab Ujian', icon: <GraduationCap className="h-4 w-4 text-amber-400" /> },
       { id: 'build', label: 'Build & Porting', icon: <Download className="h-4 w-4 text-emerald-400" /> },
       { id: 'architecture', label: 'Arsitektur & Keamanan', icon: <Cpu className="h-4 w-4 text-purple-400" /> },
     ],
@@ -87,7 +92,7 @@ const SEARCH_INDEX: Array<{ section: SectionId; label: string; keywords: string;
   { section: 'devices', label: 'PC / Laptop / Server', keywords: 'end device host klien' },
   { section: 'devices', label: 'Switch / Hub / Access Point', keywords: 'l2 cam repeater wifi ssid' },
   { section: 'devices', label: 'Router & Cloud Internet', keywords: 'router l3 gateway cloud 8.8.8.8 wan' },
-  { section: 'devices', label: 'Aturan kabel & asosiasi WiFi', keywords: 'port singularity kabel 1-to-1 radio nirkabel ssid vlan' },
+  { section: 'devices', label: 'Aturan kabel, port UP/DOWN & WiFi', keywords: 'port singularity status administratif up down no shutdown kabel 1-to-1 radio nirkabel ssid vlan' },
   { section: 'protocols', label: 'ARP (RFC 826)', keywords: 'arp broadcast mac cache rfc 826', accordion: 'arp' },
   { section: 'protocols', label: 'CAM Table Switch', keywords: 'cam mac learning switch', accordion: 'cam' },
   { section: 'protocols', label: 'Subnetting bitwise (RFC 791)', keywords: 'subnet mask bitwise gateway rfc 791', accordion: 'subnet' },
@@ -100,8 +105,10 @@ const SEARCH_INDEX: Array<{ section: SectionId; label: string; keywords: string;
   { section: 'simmode', label: 'Step Mode & Timeline', keywords: 'step mode timeline event simulasi jeda' },
   { section: 'simmode', label: 'PDU Inspector', keywords: 'pdu inspector header l2 l3 l4 ethernet ipv4' },
   { section: 'simmode', label: 'Table Viewer (CAM/ARP/Routing/NAT)', keywords: 'tabel viewer cam arp routing nat' },
-  { section: 'cli', label: '10 perintah P0 + alias', keywords: 'cli perintah ios enable configure ping show' },
-  { section: 'build', label: 'Menjalankan lokal', keywords: 'dev lokal npm install' },
+  { section: 'cli', label: 'Perintah Cisco IOS (Routing, VLAN, Sub-if)', keywords: 'cli perintah ios enable configure ping show ip route switchport access trunk encapsulation dot1q sh run wr write memory vlan' },
+  { section: 'classroom', label: 'Ruang Kelas (Mode Guru & Siswa)', keywords: 'kelas classroom guru siswa student teacher ujian soal kuis lab template gembok terkunci ganti peran' },
+  { section: 'classroom', label: 'Proteksi Ujian & Kunci Template', keywords: 'template terkunci gembok kuning mode siswa buka kunci ganti peran keluar kelas' },
+  { section: 'build', label: 'Menjalankan lokal & Relay Kelas', keywords: 'dev lokal npm install relay preview server' },
   { section: 'build', label: 'Web statis / Vercel / Pages', keywords: 'web statis vercel netlify pages' },
   { section: 'build', label: 'Desktop Windows (.exe Tauri)', keywords: 'tauri desktop exe installer windows' },
   { section: 'build', label: 'Android (Capacitor)', keywords: 'android capacitor apk mobile' },
@@ -223,11 +230,20 @@ const CLI_ROWS: Array<{ mode: string; modeColor: string; cmd: string; desc: stri
   { mode: 'Privileged (#)', modeColor: 'text-amber-400', cmd: 'ping <ip>', desc: 'ICMP 5 echo via engine penuh — output gaya Cisco (!!!!!)' },
   { mode: 'Privileged (#)', modeColor: 'text-amber-400', cmd: 'show ip interface brief (sh ip int br)', desc: 'Status ringkas semua interface' },
   { mode: 'Privileged (#)', modeColor: 'text-amber-400', cmd: 'show ip route', desc: 'Tabel routing (C connected, S static, R rip)' },
+  { mode: 'Privileged (#)', modeColor: 'text-amber-400', cmd: 'show running-config (sh run)', desc: 'Tampilkan konfigurasi aktif lengkap (hostname, port, route, sub-if)' },
+  { mode: 'Privileged (#)', modeColor: 'text-amber-400', cmd: 'write memory (wr / copy run start)', desc: 'Simpan running-config ke memori perangkat' },
+  { mode: 'Privileged (#)', modeColor: 'text-amber-400', cmd: 'show vlan brief (sh vlan)', desc: 'Tampilkan tabel VLAN dan port access pada Switch' },
   { mode: 'Privileged (#)', modeColor: 'text-amber-400', cmd: 'show mac-address-table · show arp', desc: 'Ekstensi: CAM table & cache ARP' },
   { mode: 'Config (config)#', modeColor: 'text-purple-400', cmd: 'hostname <nama>', desc: 'Ubah hostname (tersinkron ke GUI)' },
-  { mode: 'Config (config)#', modeColor: 'text-purple-400', cmd: 'interface <id> (int)', desc: 'Masuk konfigurasi port, contoh: int fa0/0' },
-  { mode: 'Config-if', modeColor: 'text-emerald-400', cmd: 'ip address <ip> <mask>', desc: 'IPv4 + mask (divalidasi ala IOS)' },
-  { mode: 'Config-if', modeColor: 'text-emerald-400', cmd: 'no shutdown (no shut) · shutdown', desc: 'Naikkan / turunkan interface' },
+  { mode: 'Config (config)#', modeColor: 'text-purple-400', cmd: 'ip route <net> <mask|/cidr> <nextHop>', desc: 'Tambah static route (hapus: no ip route ...)' },
+  { mode: 'Config (config)#', modeColor: 'text-purple-400', cmd: 'ip default-gateway <ip>', desc: 'Atur gateway default switch L2 (hapus: no ip default-gateway)' },
+  { mode: 'Config (config)#', modeColor: 'text-purple-400', cmd: 'interface <id> (int)', desc: 'Masuk konfigurasi port fisik, contoh: int fa0/0' },
+  { mode: 'Config (config)#', modeColor: 'text-purple-400', cmd: 'interface <id>.<subif>', desc: 'Masuk/buat sub-interface router, contoh: int fa0/0.10' },
+  { mode: 'Config-if', modeColor: 'text-emerald-400', cmd: 'ip address <ip> <mask|/cidr>', desc: 'IPv4 + subnet mask port (hapus: no ip address)' },
+  { mode: 'Config-if', modeColor: 'text-emerald-400', cmd: 'no shutdown (no shut) · shutdown', desc: 'Naikkan / turunkan status administratif port' },
+  { mode: 'Config-if (Switch)', modeColor: 'text-emerald-400', cmd: 'switchport mode <access|trunk>', desc: 'Set mode port access atau trunk 802.1Q' },
+  { mode: 'Config-if (Switch)', modeColor: 'text-emerald-400', cmd: 'switchport access vlan <vlanId>', desc: 'Tetapkan nomor VLAN pada port mode access' },
+  { mode: 'Config-subif (Router)', modeColor: 'text-cyan-400', cmd: 'encapsulation dot1q <vlanId>', desc: 'Enkapsulasi IEEE 802.1Q untuk Router-on-a-stick' },
   { mode: 'Semua mode', modeColor: 'text-muted-foreground', cmd: 'exit / end', desc: 'Navigasi antar mode (end → langsung #)' },
 ];
 
@@ -627,12 +643,16 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
                 </div>
 
                 <Card>
-                  <div className="mb-2 text-xs font-bold">Aturan penyambungan</div>
+                  <div className="mb-2 text-xs font-bold">Aturan penyambungan &amp; Status Port</div>
                   <ul className="flex flex-col gap-1.5 list-inside list-disc text-xs leading-relaxed text-muted-foreground">
                     <li><b>Port Singularity</b>: satu port ethernet hanya satu kabel; melepas kabel menurunkan kedua port ke DOWN.</li>
                     <li><b>Radio WiFi 1-ke-N</b>: satu radio AP melayani banyak klien; tiap klien hanya satu AP (SSID harus sama persis).</li>
                     <li><b>Drag-to-connect</b>: tarik dari titik port ke port tujuan — kabel ethernet atau asosiasi WiFi terdeteksi otomatis.</li>
                     <li><b>VLAN</b>: port switch access hanya bicara dengan port se-VLAN; trunk membawa semuanya.</li>
+                    <li>
+                      <b>Status Administratif Port (UP vs ADMIN DOWN)</b>: Port Router secara realistis berstatus <code>administratively down</code> saat baru dibuat.
+                      Mencolokkan kabel ke router tidak langsung meng-UP-kan port sampai Anda mengaktifkannya via perintah CLI <code>no shutdown</code> atau toggle switch <b>Status Administratif</b> pada modal konfigurasi perangkat. Port Switch dan Host otomatis UP saat kabel terpasang.
+                    </li>
                   </ul>
                 </Card>
 
@@ -736,7 +756,7 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
                 <SectionTitle
                   icon={<Terminal className="h-5 w-5 text-green-400" />}
                   title="Terminal Cisco IOS"
-                  subtitle="Klik ikon terminal pada hover perangkat. Sepuluh perintah P0 kanonik + alias."
+                  subtitle="Klik ikon terminal pada hover perangkat atau tombol Terminal CLI. Perintah Cisco IOS kanonik + konfigurasi L2/L3 lengkap."
                 />
                 <div className="overflow-hidden rounded-xl border">
                   <table className="w-full text-left text-xs">
@@ -769,6 +789,101 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
               </div>
             )}
 
+            {/* ============ RUANG KELAS & LAB UJIAN ============ */}
+            {activeSection === 'classroom' && (
+              <div className="flex flex-col gap-4">
+                <SectionTitle
+                  icon={<GraduationCap className="h-5 w-5 text-amber-400" />}
+                  title="Ruang Kelas & Lab Ujian"
+                  subtitle="Platform evaluasi praktikum: sesi kelas guru, pengerjaan siswa, proteksi anti-cheat template, dan evaluasi otomatis."
+                />
+
+                <Card>
+                  <div className="mb-2 flex items-center justify-between">
+                    <h4 className="text-xs font-bold uppercase tracking-wide text-amber-300">
+                      Prinsip Independensi Peran (Role Isolation)
+                    </h4>
+                    <span className="rounded border border-amber-800 bg-amber-950/70 px-2 py-0.5 text-[10px] text-amber-400">
+                      Multi-Role
+                    </span>
+                  </div>
+                  <p className="text-xs leading-relaxed text-foreground/90">
+                    Untuk menjaga keaslian proses ujian dan mencegah kecurangan, satu perangkat komputer atau peramban hanya dapat memegang <b>satu peran aktif</b> (sebagai <b>Guru</b> atau sebagai <b>Siswa</b>) dalam satu waktu.
+                  </p>
+                </Card>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <Card className="border-sky-800/40 bg-sky-950/20">
+                    <div className="mb-2 flex items-center gap-2 font-bold text-sky-300 text-xs">
+                      <Users className="h-4 w-4" />
+                      Mode Guru (Pengajar)
+                    </div>
+                    <ul className="flex flex-col gap-1.5 list-inside list-disc text-xs leading-relaxed text-muted-foreground">
+                      <li><b>Buat Sesi Kelas</b>: Menghasilkan kode kelas unik (contoh: <code>NET-5021</code>) untuk dibagikan ke siswa.</li>
+                      <li><b>Pilih &amp; Rancang Soal</b>: Pilih tantangan dari bank soal bawaan atau buat soal kustom dengan target IP, link kabel, reachability, dan VLAN.</li>
+                      <li><b>Siarkan Soal &amp; Topologi Awal</b>: Distribusikan instruksi soal dan starter topology ke seluruh layar siswa secara real-time.</li>
+                      <li><b>Pantau Live Submisi</b>: Awasi daftar siswa yang bergabung, nilai skor otomatis (0–100), dan detail checklist kelulusan tiap target.</li>
+                    </ul>
+                  </Card>
+
+                  <Card className="border-emerald-800/40 bg-emerald-950/20">
+                    <div className="mb-2 flex items-center gap-2 font-bold text-emerald-300 text-xs">
+                      <GraduationCap className="h-4 w-4" />
+                      Mode Siswa (Peserta)
+                    </div>
+                    <ul className="flex flex-col gap-1.5 list-inside list-disc text-xs leading-relaxed text-muted-foreground">
+                      <li><b>Gabung Kelas</b>: Masukkan kode kelas dan nama/nickname Anda.</li>
+                      <li><b>Classroom Student HUD</b>: Panel mengambang di pojok kanan-bawah kanvas menampilkan instruksi tugas aktif, target konfigurasi, dan tombol aksi.</li>
+                      <li><b>Self-Check Mandiri</b>: Siswa dapat menguji validitas jaringan kapan saja sebelum mengumpulkan tugas.</li>
+                      <li><b>Submit Jawaban</b>: Kirim konfigurasi topologi ke guru dengan satu klik setelah semua target tercapai.</li>
+                    </ul>
+                  </Card>
+                </div>
+
+                <Card className="border-amber-800/50 bg-amber-950/25">
+                  <div className="mb-2 flex items-center gap-2 text-xs font-bold text-amber-300">
+                    <Lock className="h-4 w-4 text-amber-400" />
+                    Proteksi Ujian: Sistem Kunci Template Jaringan (Anti-Cheat)
+                  </div>
+                  <p className="text-xs leading-relaxed text-foreground/90 mb-3">
+                    Saat berada dalam <b>Mode Siswa</b> atau sedang mengikuti kelas praktikum aktif, tab <b>Template</b> pada palet perangkat sebelah kiri akan otomatis <b>terkunci</b> (<span className="inline-flex items-center gap-1 font-mono text-[11px] text-amber-300"><Lock className="inline h-3 w-3" /> Template</span>).
+                  </p>
+                  <ul className="flex flex-col gap-1.5 list-inside list-disc text-xs leading-relaxed text-muted-foreground">
+                    <li><b>Mencegah Jalan Pintas</b>: Siswa diwajibkan menyusun dan menghubungkan perangkat dari nol sesuai spesifikasi soal ujian, bukan dengan memuat topologi template yang sudah jadi.</li>
+                    <li><b>Cara Membuka Kunci Template</b>:
+                      <ul className="mt-1 ml-4 list-disc space-y-1 text-foreground/90">
+                        <li>Buka modal <b>Kelas</b> di toolbar atas.</li>
+                        <li>Tekan tombol <span className="inline-flex items-center gap-1 font-semibold text-foreground"><ArrowLeftRight className="h-3 w-3" /> Ganti Peran</span> pada header modal atau tombol <b>"Keluar Mode Siswa"</b> / <b>"Keluar Kelas"</b>.</li>
+                        <li>Beralih ke <b>Mode Guru</b> atau kembali ke mode normal: tab Template akan <b>langsung terbuka kembali secara reaktif</b> tanpa perlu me-refresh halaman!</li>
+                      </ul>
+                    </li>
+                  </ul>
+                </Card>
+
+                <Card>
+                  <div className="mb-2 flex items-center justify-between">
+                    <h4 className="text-xs font-bold uppercase tracking-wide text-cyan-300">
+                      Relay Server Mandiri &amp; Mode Offline
+                    </h4>
+                    <span className="rounded border border-cyan-800 bg-cyan-950/70 px-2 py-0.5 text-[10px] text-cyan-400">
+                      100% Offline LAN
+                    </span>
+                  </div>
+                  <p className="text-xs leading-relaxed text-muted-foreground mb-2">
+                    OpenPacket mendukung sinkronisasi real-time antar-laptop di lab komputer sekolah tanpa memerlukan akses internet ke cloud luar:
+                  </p>
+                  <CodeBlock color="text-cyan-300">{`# Jalankan server relay kelas mandiri di laptop guru / lab:
+npm run relay         # Server relay aktif di port 5174 / 5173
+
+# Atau jalankan mode preview produksi dengan relay bawaan:
+npm run preview       # Frontend + Relay aktif di port 4173`}</CodeBlock>
+                  <p className="mt-2 text-[11px] text-muted-foreground">
+                    Laptop siswa cukup membuka alamat IP lokal laptop guru (contoh: <code>http://192.168.1.10:5173</code>) dan memasukkan kode kelas yang sama.
+                  </p>
+                </Card>
+              </div>
+            )}
+
             {/* ============ BUILD & PORTING ============ */}
             {activeSection === 'build' && (
               <div className="flex flex-col gap-4">
@@ -787,7 +902,9 @@ cd cisco && npm install
 npm run dev          # http://localhost:5173
 
 npm run type-check   # tsc strict, 0 error
-npm test             # unit test (70)
+npm test             # unit test (168 test, 16 files lulus)
+npm run relay        # server relay kelas mandiri lokal (port 5174)
+npm run preview      # preview build produksi + relay (port 4173)
 npm run e2e          # E2E Playwright (Edge/Chromium)`}</CodeBlock>
                 </Card>
                 <Card>
