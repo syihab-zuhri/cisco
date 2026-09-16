@@ -7,6 +7,7 @@ import {
   ipToNumber,
   numberToIp,
   isSameSubnet,
+  normalizeInterfaceName,
 } from '../../utils/ipUtils';
 
 export type CliMode = 'user' | 'priv' | 'config' | 'config-if';
@@ -79,23 +80,11 @@ export class CliSession {
 
   private findPort(identifier: string) {
     const device = this.deps.getDevice();
-    const clean = identifier.toLowerCase().replace(/\s+/g, '');
+    const clean = normalizeInterfaceName(identifier);
     const direct = device.ports.find((p) => {
-      const pId = p.id.toLowerCase().replace(/\s+/g, '');
-      const pName = p.name.toLowerCase().replace(/\s+/g, '');
       return (
-        pId === clean ||
-        pName === clean ||
-        pId.replace(/^fastethernet/, 'fa') === clean ||
-        pName.replace(/^fastethernet/, 'fa') === clean ||
-        pId.replace(/^gigabitethernet/, 'gi') === clean ||
-        pName.replace(/^gigabitethernet/, 'gi') === clean ||
-        clean.replace(/^fastethernet/, 'fa') === pId ||
-        clean.replace(/^fastethernet/, 'fa') === pName ||
-        clean.replace(/^gigabitethernet/, 'gi') === pId ||
-        clean.replace(/^gigabitethernet/, 'gi') === pName ||
-        clean.replace(/^f(\d)/, 'fa$1') === pId ||
-        clean.replace(/^g(\d)/, 'gi$1') === pId
+        normalizeInterfaceName(p.id) === clean ||
+        normalizeInterfaceName(p.name) === clean
       );
     });
     if (direct) return direct;
@@ -103,17 +92,12 @@ export class CliSession {
     // Cek sub-interface (contoh: fa0/0.10)
     for (const p of device.ports) {
       for (const s of p.subInterfaces ?? []) {
-        const sId = `${p.id}.${s.vlanId}`.toLowerCase().replace(/\s+/g, '');
-        const sName = `${p.name}.${s.vlanId}`.toLowerCase().replace(/\s+/g, '');
-        if (
-          sId === clean ||
-          sName === clean ||
-          sId.replace(/^fastethernet/, 'fa') === clean ||
-          sName.replace(/^fastethernet/, 'fa') === clean
-        ) {
+        const sId = normalizeInterfaceName(`${p.id}.${s.vlanId}`);
+        const sName = normalizeInterfaceName(`${p.name}.${s.vlanId}`);
+        if (sId === clean || sName === clean) {
           return {
-            id: sId,
-            name: sName,
+            id: `${p.id}.${s.vlanId}`,
+            name: `${p.name}.${s.vlanId}`,
             status: p.status,
             kind: p.kind,
             ipAddress: s.ipAddress,
@@ -244,7 +228,9 @@ export class CliSession {
       cmd === 'show running-config' ||
       cmd === 'sh run' ||
       cmd === 'show run' ||
-      cmd === 'sh running-config'
+      cmd === 'sh running-config' ||
+      cmd === 'show running' ||
+      cmd === 'sh running'
     ) {
       return this.showRunningConfig();
     }
@@ -279,7 +265,7 @@ export class CliSession {
       (lowerTokens[0] === 'show' || lowerTokens[0] === 'sh') &&
       lowerTokens[1] === 'ip' &&
       (lowerTokens[2] === 'interface' || lowerTokens[2] === 'int') &&
-      (lowerTokens[3] === 'brief' || lowerTokens[3] === 'br')
+      (lowerTokens[3] === 'brief' || lowerTokens[3] === 'br' || !lowerTokens[3])
     ) {
       return this.showIpInterfaceBrief();
     }
@@ -287,7 +273,7 @@ export class CliSession {
     if (lowerTokens[0] === 'show' || lowerTokens[0] === 'sh') {
       if (
         (lowerTokens[1] === 'interfaces' || lowerTokens[1] === 'interface' || lowerTokens[1] === 'int') &&
-        lowerTokens[2] === 'trunk'
+        (lowerTokens[2] === 'trunk' || lowerTokens[2] === 'tr')
       ) {
         return this.showInterfacesTrunk();
       }
@@ -308,7 +294,9 @@ export class CliSession {
         cmd === 'clear mac-address-table dynamic' ||
         cmd === 'clear mac address-table' ||
         cmd === 'clear mac address-table dynamic' ||
-        cmd === 'clear mac'
+        cmd === 'clear mac' ||
+        cmd === 'clear mac-table' ||
+        cmd === 'clear mac-address'
       ) {
         const dev = this.deps.getDevice();
         if (dev.type !== 'switch') {

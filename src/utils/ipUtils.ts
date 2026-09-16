@@ -119,3 +119,18 @@ export function isPrivateIp(ip: string): boolean {
   if (a >= 224) return true;
   return false;
 }
+
+/**
+ * Normalisasi nama antarmuka jaringan (Cisco IOS alias parity).
+ * Mengubah "FastEthernet 0/0", "fastethernet0/0", "f0/0", "fa 0/0" menjadi "fa0/0"
+ * dan "GigabitEthernet 0/1", "gigabitethernet0/1", "gi 0/1", "g0/1" menjadi "gi0/1".
+ */
+export function normalizeInterfaceName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/\s+/g, '')
+    .replace(/^fastethernet/, 'fa')
+    .replace(/^gigabitethernet/, 'gi')
+    .replace(/^f(\d)/, 'fa$1')
+    .replace(/^g(\d)/, 'gi$1');
+}

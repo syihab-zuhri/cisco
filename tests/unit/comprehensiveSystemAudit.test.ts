@@ -337,6 +337,86 @@ describe('Comprehensive System Audit & Verification', () => {
       const deNatHop = plan.events.find((e) => e.pdu?.note?.includes('NAT: dst dikembalikan'));
       expect(deNatHop).toBeDefined();
     });
+
+    it('Directly attached static route with GigabitEthernet alias (gi0/0 vs GigabitEthernet 0/0) resolves correctly', () => {
+      const router: DeviceData = {
+        id: 'r-1',
+        label: 'R1',
+        type: 'router',
+        ports: [
+          { id: 'gi0/0', name: 'GigabitEthernet 0/0', status: 'up', ipAddress: '10.1.1.1', subnetMask: '255.255.255.0', macAddress: '00:50:79:00:00:R1' },
+        ],
+        routes: [
+          { network: '172.16.0.0', subnetMask: '255.255.0.0', nextHop: 'GigabitEthernet 0/0', interfaceId: 'gi0/0', source: 'static' },
+        ],
+      };
+      const pc: DeviceData = {
+        id: 'pc-1',
+        label: 'PC1',
+        type: 'pc',
+        ports: [
+          { id: 'fa0', name: 'FastEthernet 0', status: 'up', ipAddress: '172.16.1.10', subnetMask: '255.255.0.0', macAddress: '00:50:79:00:00:P1' },
+        ],
+      };
+      const links: TopologyLink[] = [
+        { sourceNodeId: 'r-1', sourcePortId: 'gi0/0', targetNodeId: 'pc-1', targetPortId: 'fa0' },
+      ];
+      const engine = new HeadlessSimulationEngine();
+      engine.setTopology([router, pc], links);
+      const plan = engine.planPing('r-1', '172.16.1.10');
+      expect(plan.summary.success).toBe(true);
+      expect(plan.summary.received).toBe(1);
+    });
+
+    it('Layer 2 MAC preservation: Ethernet frame src/dst MAC is preserved across intermediate switches', () => {
+      const pc1: DeviceData = {
+        id: 'pc-1', label: 'PC1', type: 'pc',
+        ports: [{ id: 'fa0', name: 'fa0', status: 'up', ipAddress: '192.168.1.10', subnetMask: '255.255.255.0', macAddress: '00:50:79:00:00:10' }],
+      };
+      const sw1: DeviceData = {
+        id: 'sw-1', label: 'SW1', type: 'switch',
+        ports: [
+          { id: 'fa0/1', name: 'fa0/1', status: 'up', macAddress: '00:50:79:00:00:S1' },
+          { id: 'fa0/2', name: 'fa0/2', status: 'up', macAddress: '00:50:79:00:00:S2' },
+        ],
+      };
+      const sw2: DeviceData = {
+        id: 'sw-2', label: 'SW2', type: 'switch',
+        ports: [
+          { id: 'fa0/1', name: 'fa0/1', status: 'up', macAddress: '00:50:79:00:00:S3' },
+          { id: 'fa0/2', name: 'fa0/2', status: 'up', macAddress: '00:50:79:00:00:S4' },
+        ],
+      };
+      const pc2: DeviceData = {
+        id: 'pc-2', label: 'PC2', type: 'pc',
+        ports: [{ id: 'fa0', name: 'fa0', status: 'up', ipAddress: '192.168.1.20', subnetMask: '255.255.255.0', macAddress: '00:50:79:00:00:20' }],
+      };
+      const links: TopologyLink[] = [
+        { sourceNodeId: 'pc-1', sourcePortId: 'fa0', targetNodeId: 'sw-1', targetPortId: 'fa0/1' },
+        { sourceNodeId: 'sw-1', sourcePortId: 'fa0/2', targetNodeId: 'sw-2', targetPortId: 'fa0/1' },
+        { sourceNodeId: 'sw-2', sourcePortId: 'fa0/2', targetNodeId: 'pc-2', targetPortId: 'fa0' },
+      ];
+      const engine = new HeadlessSimulationEngine();
+      engine.setTopology([pc1, sw1, sw2, pc2], links);
+      const plan = engine.planPing('pc-1', '192.168.1.20');
+      expect(plan.summary.success).toBe(true);
+
+      // Check all ICMP_REQ hops: srcMac must stay PC1 MAC, dstMac must stay PC2 MAC across all 3 hops
+      const icmpReqs = plan.events.filter((e) => e.kind === 'ICMP_REQ');
+      expect(icmpReqs).toHaveLength(3);
+      for (const req of icmpReqs) {
+        expect(req.pdu?.frame.srcMac).toBe('00:50:79:00:00:10');
+        expect(req.pdu?.frame.dstMac).toBe('00:50:79:00:00:20');
+      }
+
+      // Check all ICMP_REP hops: srcMac must stay PC2 MAC, dstMac must stay PC1 MAC across all 3 hops
+      const icmpReps = plan.events.filter((e) => e.kind === 'ICMP_REP');
+      expect(icmpReps).toHaveLength(3);
+      for (const rep of icmpReps) {
+        expect(rep.pdu?.frame.srcMac).toBe('00:50:79:00:00:20');
+        expect(rep.pdu?.frame.dstMac).toBe('00:50:79:00:00:10');
+      }
+    });
   });
 
   describe('2. Store & Canvas Invariants (INV-003, Admin Down, Deletion Cleanup)', () => {
@@ -546,6 +626,82 @@ describe('Comprehensive System Audit & Verification', () => {
 
       await session.handle('exit');
       expect(session.prompt()).toBe('SW1#');
+    });
+
+    it('CLI command parity enhancements: sh int tr, sh ip int without brief, show running, and clear mac-table', async () => {
+      let macTableCleared = false;
+      const sw: DeviceData = {
+        id: 'sw-1', label: 'SW1', type: 'switch',
+        ports: [
+          { id: 'fa0/1', name: 'fa0/1', status: 'up', portMode: 'trunk', macAddress: '00:50:79:00:00:01' },
+          { id: 'fa0/2', name: 'fa0/2', status: 'up', ipAddress: '192.168.1.2', subnetMask: '255.255.255.0', macAddress: '00:50:79:00:00:02' },
+        ],
+      };
+      const session = new CliSession({
+        getDevice: () => sw,
+        setHostname: () => {},
+        setPortConfig: () => {},
+        requestPing: async () => ({ success: true, outputLines: [] }),
+        clearMacTable: () => { macTableCleared = true; },
+      });
+
+      await session.handle('enable');
+
+      // sh int tr (alias for show interfaces trunk)
+      const trunkOut = await session.handle('sh int tr');
+      expect(trunkOut.join('\n')).toContain('fa0/1');
+      expect(trunkOut.join('\n')).toContain('802.1q');
+
+      // sh ip int (without brief in priv mode)
+      const ipIntOut = await session.handle('sh ip int');
+      expect(ipIntOut.join('\n')).toContain('192.168.1.2');
+
+      // show running (alias for show running-config)
+      const runOut = await session.handle('show running');
+      expect(runOut.join('\n')).toContain('hostname SW1');
+      expect(runOut.join('\n')).toContain('switchport mode trunk');
+
+      // clear mac-table
+      await session.handle('clear mac-table');
+      expect(macTableCleared).toBe(true);
+    });
+
+    it('CLI findPort resolves shorthand aliases (f0/0, g0/0) and sub-interfaces (f0/0.10, gi0/0.20)', async () => {
+      const router: DeviceData = {
+        id: 'r-1', label: 'R1', type: 'router',
+        ports: [
+          {
+            id: 'fa0/0', name: 'FastEthernet 0/0', status: 'up', macAddress: '00:50:79:00:00:01',
+            subInterfaces: [{ vlanId: 10, ipAddress: '10.0.10.1', subnetMask: '255.255.255.0' }],
+          },
+          {
+            id: 'gi0/0', name: 'GigabitEthernet 0/0', status: 'up', macAddress: '00:50:79:00:00:02',
+            subInterfaces: [{ vlanId: 20, ipAddress: '10.0.20.1', subnetMask: '255.255.255.0' }],
+          },
+        ],
+      };
+
+      const session = new CliSession({
+        getDevice: () => router,
+        setHostname: () => {},
+        setPortConfig: () => {},
+        requestPing: async () => ({ success: true, outputLines: [] }),
+      });
+
+      await session.handle('enable');
+      await session.handle('conf t');
+
+      // Navigate to f0/0.10 using shorthand
+      await session.handle('int f0/0.10');
+      expect(session.prompt()).toBe('R1(config-subif)#');
+      expect(session.currentInterface).toBe('fa0/0');
+      expect(session.currentSubInterface?.vlanId).toBe(10);
+
+      // Navigate to g0/0.20 using shorthand
+      await session.handle('int g0/0.20');
+      expect(session.prompt()).toBe('R1(config-subif)#');
+      expect(session.currentInterface).toBe('gi0/0');
+      expect(session.currentSubInterface?.vlanId).toBe(20);
     });
   });
 

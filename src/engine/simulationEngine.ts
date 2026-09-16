@@ -5,7 +5,7 @@ import {
   isL2Intermediate,
   learnsCam,
 } from '../types/network';
-import { isValidIp, isPrivateIp, isSameSubnet, prefixLength, ipToNumber, numberToIp, networkAddress } from '../utils/ipUtils';
+import { isValidIp, isPrivateIp, isSameSubnet, prefixLength, ipToNumber, numberToIp, networkAddress, normalizeInterfaceName } from '../utils/ipUtils';
 import { type WorkerUIMessage } from '../types/ipc';
 import {
   type ArpPacket,
@@ -727,36 +727,21 @@ export class HeadlessSimulationEngine {
           let vlanId: number | undefined;
 
           if (isDirectlyAttached) {
-            const targetRef = (r.interfaceId || r.nextHop || '').toLowerCase().trim();
-            const cleanTarget = targetRef.replace(/\s+/g, '');
+            const targetRef = (r.interfaceId || r.nextHop || '').trim();
+            const cleanTarget = normalizeInterfaceName(targetRef);
             egress = dev.ports.find(
-              (p) => {
-                const pId = p.id.toLowerCase().replace(/\s+/g, '');
-                const pName = p.name.toLowerCase().replace(/\s+/g, '');
-                return (
-                  pId === cleanTarget ||
-                  pName === cleanTarget ||
-                  pId.replace(/^fastethernet/, 'fa') === cleanTarget ||
-                  pName.replace(/^fastethernet/, 'fa') === cleanTarget ||
-                  cleanTarget.replace(/^fastethernet/, 'fa') === pId ||
-                  cleanTarget.replace(/^fastethernet/, 'fa') === pName
-                ) && p.status === 'up';
-              }
+              (p) =>
+                (normalizeInterfaceName(p.id) === cleanTarget ||
+                  normalizeInterfaceName(p.name) === cleanTarget) &&
+                p.status === 'up'
             );
             if (!egress) {
               for (const p of dev.ports) {
                 if (p.status !== 'up') continue;
                 const sub = p.subInterfaces?.find((s) => {
-                  const sId = `${p.id}.${s.vlanId}`.toLowerCase().replace(/\s+/g, '');
-                  const sName = `${p.name}.${s.vlanId}`.toLowerCase().replace(/\s+/g, '');
-                  return (
-                    sId === cleanTarget ||
-                    sName === cleanTarget ||
-                    sId.replace(/^fastethernet/, 'fa') === cleanTarget ||
-                    sName.replace(/^fastethernet/, 'fa') === cleanTarget ||
-                    cleanTarget.replace(/^fastethernet/, 'fa') === sId ||
-                    cleanTarget.replace(/^fastethernet/, 'fa') === sName
-                  );
+                  const sId = normalizeInterfaceName(`${p.id}.${s.vlanId}`);
+                  const sName = normalizeInterfaceName(`${p.name}.${s.vlanId}`);
+                  return sId === cleanTarget || sName === cleanTarget;
                 });
                 if (sub) {
                   egress = p;
@@ -796,13 +781,11 @@ export class HeadlessSimulationEngine {
               }
             }
             if (!egress && r.interfaceId) {
-              const cleanIf = r.interfaceId.toLowerCase().replace(/\s+/g, '');
+              const cleanIf = normalizeInterfaceName(r.interfaceId);
               egress = dev.ports.find(
                 (p) =>
-                  (p.id.toLowerCase().replace(/\s+/g, '') === cleanIf ||
-                    p.name.toLowerCase().replace(/\s+/g, '') === cleanIf ||
-                    p.id.toLowerCase().replace(/\s+/g, '').replace(/^fastethernet/, 'fa') === cleanIf ||
-                    p.name.toLowerCase().replace(/\s+/g, '').replace(/^fastethernet/, 'fa') === cleanIf) &&
+                  (normalizeInterfaceName(p.id) === cleanIf ||
+                    normalizeInterfaceName(p.name) === cleanIf) &&
                   p.status === 'up'
               );
             }
