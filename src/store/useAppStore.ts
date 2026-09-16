@@ -464,21 +464,25 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
     const edgeId = `edge-${sourceNodeId}-${sourcePortId}-${targetNodeId}-${targetPortId}`;
 
-    // Update port states to Link UP
+    // Update port states to Link UP (pertahankan status admin down pada router hingga diaktifkan)
+    const sStatus: 'up' | 'down' =
+      sourceNode.data.type === 'router' && sPort.status === 'down' ? 'down' : 'up';
+    const tStatus: 'up' | 'down' =
+      targetNode.data.type === 'router' && tPort.status === 'down' ? 'down' : 'up';
+
     get().updatePortConfig(sourceNodeId, sourcePortId, {
-      status: 'up',
+      status: sStatus,
       connectedEdgeId: edgeId,
       connectedToNodeId: targetNodeId,
       connectedToPortId: targetPortId,
     });
 
     get().updatePortConfig(targetNodeId, targetPortId, {
-      status: 'up',
+      status: tStatus,
       connectedEdgeId: edgeId,
       connectedToNodeId: sourceNodeId,
       connectedToPortId: sourcePortId,
     });
-
     const newEdge: Edge = {
       id: edgeId,
       source: sourceNodeId,
@@ -498,6 +502,18 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       'INFO',
       `Kabel terhubung: ${sourceNode.data.label} (${sPort.name}) <--> ${targetNode.data.label} (${tPort.name})`
     );
+    if (sStatus === 'down') {
+      get().addSimulationLog(
+        'INFO',
+        `Catatan: Port ${sourceNode.data.label} (${sPort.name}) masih berstatus administratively DOWN. Aktifkan via CLI (no shutdown) atau modal konfigurasi.`
+      );
+    }
+    if (tStatus === 'down') {
+      get().addSimulationLog(
+        'INFO',
+        `Catatan: Port ${targetNode.data.label} (${tPort.name}) masih berstatus administratively DOWN. Aktifkan via CLI (no shutdown) atau modal konfigurasi.`
+      );
+    }
     return true;
   },
 

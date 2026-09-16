@@ -37,6 +37,7 @@ import {
 } from '@/components/ui/select';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Separator } from '@/components/ui/separator';
+import { Switch } from '@/components/ui/switch';
 
 export function DeviceConfigModal() {
   const activeConfigModalNodeId = useAppStore((s) => s.activeConfigModalNodeId);
@@ -66,6 +67,7 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
 
   const [ipAddress, setIpAddress] = useState<string>(selectedPort?.ipAddress || '');
   const [subnetMask, setSubnetMask] = useState<string>(selectedPort?.subnetMask || '255.255.255.0');
+  const [portStatus, setPortStatus] = useState<'up' | 'down'>(selectedPort?.status ?? 'down');
   const [ssid, setSsid] = useState<string>(selectedPort?.ssid || '');
   const [defaultGateway, setDefaultGateway] = useState<string>(device.defaultGateway || '');
   const [label, setLabel] = useState<string>(device.label);
@@ -102,8 +104,8 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
     const p = device.ports.find((pr) => pr.id === portId);
     setIpAddress(p?.ipAddress || '');
     setSubnetMask(p?.subnetMask || '255.255.255.0');
+    setPortStatus(p?.status ?? 'down');
     setSsid(p?.ssid || '');
-    setDhcpClient(p?.dhcpEnabled ?? false);
     setNatEnabled(p?.natEnabled ?? false);
     setPortVlan(p?.vlanId ?? 1);
     setPortMode(p?.portMode ?? 'access');
@@ -223,7 +225,7 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
     if (selectedPort) {
       if (isWirelessPort) {
         // Simpan SSID lalu sinkronkan asosiasi WiFi
-        updatePortConfig(device.id, selectedPort.id, { ssid: ssid.trim() });
+        updatePortConfig(device.id, selectedPort.id, { ssid: ssid.trim(), status: portStatus });
         if (device.type === 'accessPoint') {
           revalidateWirelessClients();
           addSimulationLog('INFO', `${label}: SSID radio diubah menjadi "${ssid.trim()}".`);
@@ -234,6 +236,7 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
         // Router: NAT per port + pool DHCP per interface + sub-interface VLAN
         updatePortConfig(device.id, selectedPort.id, {
           natEnabled,
+          status: portStatus,
           subInterfaces: subIfs.length > 0 ? subIfs : undefined,
         });
         const pools = { ...(device.dhcpPools ?? {}) };
@@ -255,6 +258,7 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
         );
       } else {
         updatePortConfig(device.id, selectedPort.id, {
+          status: portStatus,
           dhcpEnabled: dhcpClient,
           ipAddress: dhcpClient ? undefined : ipAddress.trim() || undefined,
           subnetMask: dhcpClient ? undefined : subnetMask.trim() || undefined,
@@ -355,12 +359,21 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
                 <span className="font-mono text-foreground">{selectedPort.macAddress}</span>
               </div>
               <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">Link Status:</span>
-                <span className={`font-mono font-semibold uppercase ${selectedPort.status === 'up' ? 'text-emerald-400' : 'text-amber-500'}`}>
-                  {selectedPort.status}
-                </span>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-muted-foreground">Status Port (Admin):</span>
+                  <span className={`font-mono text-[11px] font-semibold uppercase ${portStatus === 'up' ? 'text-emerald-400' : 'text-amber-500'}`}>
+                    {portStatus === 'up' ? 'UP' : 'ADMIN DOWN'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-muted-foreground">{portStatus === 'up' ? 'Aktif' : 'Mati'}</span>
+                  <Switch
+                    id="cfg-port-status"
+                    checked={portStatus === 'up'}
+                    onCheckedChange={(checked) => setPortStatus(checked ? 'up' : 'down')}
+                  />
+                </div>
               </div>
-
               {isWirelessPort ? (
                 /* Konfigurasi port nirkabel: SSID */
                 <>

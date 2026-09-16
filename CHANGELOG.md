@@ -10,6 +10,31 @@
 > **Supersedes:** None  
 
 ---
+## [2026-09-16] — Version 2.3.0 (Cisco IOS CLI Parity, Port Administrative Toggle, Code Splitting & Production Classroom Relay)
+
+### Added & Improved
+- **Parity Perintah Cisco IOS Lengkap pada Terminal CLI (`cliEngine.ts`, `DeviceCliModal.tsx`)**:
+  - **Routing Statis:** Penambahan perintah `ip route <network> <mask|prefix> <next-hop>` dan `no ip route` untuk konfigurasi tabel routing langsung via CLI terminal.
+  - **Konfigurasi Switchport & VLAN:** Penambahan perintah `switchport mode {access|trunk}`, `switchport access vlan <vlanId>`, dan `switchport trunk allowed vlan`.
+  - **Sub-interface & 802.1Q (Router-on-a-stick):** Dukungan navigasi interface bertitik (`interface fa0/0.10`), prompt `hostname(config-subif)#`, perintah `encapsulation dot1q <vlanId>`, serta penetapan IP sub-interface.
+  - **Inspeksi & Simpan Konfigurasi:** Dukungan perintah `show running-config` (alias `sh run`), `write memory` (alias `wr`), dan `show vlan brief` (alias `sh vlan`).
+  - **Default Gateway:** Dukungan perintah `ip default-gateway <ip>` dan `no ip default-gateway`.
+- **Toggle Status Administratif Port di GUI & Penanganan Port Router (`DeviceConfigModal.tsx`, `useAppStore.ts`)**:
+  - Penambahan tombol `<Switch>` interaktif pada form konfigurasi port untuk menyetel status administratif port (`UP` vs `ADMIN DOWN`).
+  - Penyesuaian `connectPorts`: kabel yang dicolokkan ke port router tidak lagi memaksa status port menjadi `UP` jika port router berstatus `administratively down`, mendidik siswa tentang fungsi perintah `no shutdown`.
+- **Code Splitting & Optimasi Ukuran Bundel (`App.tsx`)**:
+  - Penerapan `React.lazy()` dan `<Suspense>` pada modal berat (`DeviceConfigModal`, `DeviceCliModal`, `DocumentationModal`, `ClassroomModal`, `LabModal`).
+  - Memangkas ukuran bundel produksi `index.js` dari **1,012 kB** menjadi **557 kB** (~45% penurunan ukuran aset muat awal).
+- **Relay Kelas Realtime Mandiri & Mode Preview (`vite.config.ts`, `scripts/classroom-relay.mjs`, `package.json`)**:
+  - Integrasi `configurePreviewServer` pada `vite.config.ts` sehingga relay kelas berfungsi pada mode `npm run preview`.
+  - Skrip relay mandiri tanpa dependensi luar `scripts/classroom-relay.mjs` yang dapat dijalankan dengan `npm run relay` untuk server lokal di lab sekolah.
+- **Sinkronisasi Versi Desktop Tauri (`tauri.conf.json`, `Cargo.toml`)**:
+  - Sinkronisasi nomor versi Tauri dan Cargo ke `2.2.2` / `2.3.0`.
+- **Rangkaian Pengujian Unit Komprehensif (`tests/unit/auditImprovements.test.ts`)**:
+  - 14 test baru yang memvalidasi seluruh fungsionalitas CLI baru, persistensi rute statis, sub-interface, running-config, dan status port router (total 167 unit test lulus 100%).
+
+---
+
 
 ## [2026-09-15] — Version 2.2.2 (Mobile Documentation UI/UX Overhaul & Topic Selector Bar)
 

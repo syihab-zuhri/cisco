@@ -65,6 +65,41 @@ export function DeviceCliModal() {
         });
         return { success: result.success, outputLines: result.outputLines };
       },
+      addStaticRoute: (route) => {
+        useAppStore.getState().addStaticRoute(deviceId, route);
+      },
+      removeStaticRoute: (index) => {
+        useAppStore.getState().removeStaticRoute(deviceId, index);
+      },
+      setDefaultGateway: (gw) => {
+        useAppStore.getState().updateDeviceConfig(deviceId, { defaultGateway: gw });
+      },
+      saveConfig: () => {
+        const label = useAppStore.getState().nodes.find((n) => n.id === deviceId)?.data.label ?? deviceId;
+        useAppStore.getState().pushToast('success', `Konfigurasi ${label} berhasil disimpan ke NVRAM.`);
+      },
+      setSubInterfaceConfig: (parentPortId, vlanId, updates) => {
+        const dev = useAppStore.getState().nodes.find((n) => n.id === deviceId)?.data;
+        if (!dev) return;
+        const port = dev.ports.find((p) => p.id === parentPortId);
+        if (!port) return;
+        const subInterfaces = [...(port.subInterfaces ?? [])];
+        const idx = subInterfaces.findIndex((s) => s.vlanId === vlanId);
+        if (idx >= 0) {
+          subInterfaces[idx] = {
+            ...subInterfaces[idx],
+            ...(updates.ipAddress !== undefined ? { ipAddress: updates.ipAddress } : {}),
+            ...(updates.subnetMask !== undefined ? { subnetMask: updates.subnetMask } : {}),
+          };
+        } else {
+          subInterfaces.push({
+            vlanId,
+            ipAddress: updates.ipAddress ?? '',
+            subnetMask: updates.subnetMask ?? '255.255.255.0',
+          });
+        }
+        useAppStore.getState().updatePortConfig(deviceId, parentPortId, { subInterfaces });
+      },
     });
     setSession(cliSession);
     setHistory([

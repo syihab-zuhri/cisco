@@ -1,6 +1,6 @@
 [package]
 name = "openpacket"
-version = "1.0.0"
+version = "2.3.0"
 description = "OpenPacket - Lightweight Educational Network Simulator"
 authors = ["OpenPacket Team"]
 edition = "2021"
