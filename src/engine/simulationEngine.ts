@@ -636,7 +636,15 @@ export class HeadlessSimulationEngine {
     );
     if (nonLocal && dev.type === 'router') {
       const natPorts = candidates.filter((p) => p.natEnabled && p.ipAddress);
-      if (natPorts.length > 0) candidates = natPorts;
+      if (natPorts.length > 0) {
+        candidates = natPorts;
+      } else {
+        const nextHop = this.resolveNextHopIp(dev, candidates[0], targetIp);
+        if (!('error' in nextHop)) {
+          const egress = candidates.find((p) => p.id === nextHop.egressPortId);
+          if (egress) return egress;
+        }
+      }
     }
     return (
       candidates.find(

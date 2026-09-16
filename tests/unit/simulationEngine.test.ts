@@ -1001,4 +1001,42 @@ describe('VLAN 802.1Q, router-on-a-stick & RIPv2 (v1.2.0 fase 3)', () => {
     expect(after.ttl).toBe(126);
     expect(after.rttMs).toBe(2);
   });
+
+  it('L3 Routing: multi-interface router sources ping from egress interface based on routing table', async () => {
+    const r1: DeviceData = {
+      id: 'r-1',
+      label: 'R1',
+      type: 'router',
+      ports: [
+        { id: 'fa0/0', name: 'LAN', status: 'up', ipAddress: '192.168.1.1', subnetMask: '255.255.255.0', macAddress: '00:50:79:R1:01' },
+        { id: 'fa0/1', name: 'WAN', status: 'up', ipAddress: '10.0.0.1', subnetMask: '255.255.255.252', macAddress: '00:50:79:R1:02' },
+      ],
+      routes: [
+        { network: '172.16.0.0', subnetMask: '255.255.255.0', nextHop: '10.0.0.2', interfaceId: 'fa0/1', source: 'static' },
+      ],
+      arpTable: {},
+    };
+    const r2: DeviceData = {
+      id: 'r-2',
+      label: 'R2',
+      type: 'router',
+      ports: [
+        { id: 'fa0/0', name: 'WAN', status: 'up', ipAddress: '10.0.0.2', subnetMask: '255.255.255.252', macAddress: '00:50:79:R2:01' },
+        { id: 'fa0/1', name: 'LAN2', status: 'up', ipAddress: '172.16.0.1', subnetMask: '255.255.255.0', macAddress: '00:50:79:R2:02' },
+      ],
+      routes: [],
+      arpTable: {},
+    };
+    const links = [
+      { sourceNodeId: 'r-1', sourcePortId: 'fa0/1', targetNodeId: 'r-2', targetPortId: 'fa0/0' },
+    ];
+    const engine = new HeadlessSimulationEngine();
+    engine.setTopology([r1, r2], links);
+
+    const plan = engine.planPing('r-1', '172.16.0.1');
+    expect(plan.summary.success).toBe(true);
+    // Harus bersumber dari 10.0.0.1 (interface egress WAN), bukan 192.168.1.1 (LAN fa0/0)
+    const startLog = plan.events.find((e) => e.message.includes('Memulai PING'));
+    expect(startLog?.message).toContain('10.0.0.1');
+  });
 });
