@@ -81,6 +81,7 @@ export function ClassroomStudentHUD() {
         setActiveExercises([]);
         setSelectedExerciseIndex(0);
         setEvaluationsByExerciseId({});
+        setIsEvaluating(false);
         setSession(null);
         pushToast('info', 'Anda telah keluar dari ruang kelas.');
       };
@@ -111,6 +112,15 @@ export function ClassroomStudentHUD() {
 
         case 'SYNC_RESPONSE':
           setSession(event.session);
+          if (!event.session || event.session.status === 'closed') {
+            setActiveExercises([]);
+            setSelectedExerciseIndex(0);
+            setEvaluationsByExerciseId({});
+            setIsEvaluating(false);
+            setSession(null);
+            handleLeaveClass(false);
+            break;
+          }
           if (event.activeExercises && event.activeExercises.length > 0) {
             setActiveExercises(event.activeExercises);
             setSelectedExerciseIndex((prev) => (prev >= event.activeExercises!.length ? 0 : prev));
@@ -121,6 +131,7 @@ export function ClassroomStudentHUD() {
             setActiveExercises([]);
             setSelectedExerciseIndex(0);
             setEvaluationsByExerciseId({});
+            setIsEvaluating(false);
           }
           break;
 
@@ -182,6 +193,7 @@ export function ClassroomStudentHUD() {
             setActiveExercises([]);
             setSelectedExerciseIndex(0);
             setEvaluationsByExerciseId({});
+            setIsEvaluating(false);
             setSession(null);
             handleLeaveClass(false);
           }

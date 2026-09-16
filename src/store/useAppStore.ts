@@ -454,6 +454,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         }),
       edges: state.edges.filter((e) => e.source !== nodeId && e.target !== nodeId),
       selectedNodeId: state.selectedNodeId === nodeId ? null : state.selectedNodeId,
+      activeConfigModalNodeId: state.activeConfigModalNodeId === nodeId ? null : state.activeConfigModalNodeId,
+      activeCliModalNodeId: state.activeCliModalNodeId === nodeId ? null : state.activeCliModalNodeId,
     }));
     get().addSimulationLog('INFO', `Perangkat ${node?.data.label ?? nodeId} dihapus.`);
   },
@@ -476,19 +478,31 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       const targetPort = targetNode?.data.ports.find((p) => p.id === portId);
       const oldIp = targetPort?.ipAddress;
       const ipChanged = updates.ipAddress && updates.ipAddress !== oldIp;
+      const oldMac = targetPort?.macAddress;
+      const macChanged = updates.macAddress && updates.macAddress !== oldMac;
 
       return {
         nodes: state.nodes.map((node) => {
           let arpTable = node.data.arpTable;
+          let macTable = node.data.macTable;
+          let changed = false;
           // Invalidate stale ARP entries on other devices when IP changes (Bug 8 / INV-006)
           if (ipChanged && arpTable && oldIp && arpTable[oldIp]) {
             const nextArp = { ...arpTable };
             delete nextArp[oldIp];
             arpTable = nextArp;
+            changed = true;
+          }
+          // Invalidate stale MAC entries in switches when port MAC changes
+          if (macChanged && macTable && oldMac && macTable[oldMac]) {
+            const nextMac = { ...macTable };
+            delete nextMac[oldMac];
+            macTable = nextMac;
+            changed = true;
           }
           if (node.id !== nodeId) {
-            return arpTable !== node.data.arpTable
-              ? { ...node, data: { ...node.data, arpTable } }
+            return changed
+              ? { ...node, data: { ...node.data, arpTable, macTable } }
               : node;
           }
           return {
@@ -496,6 +510,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
             data: {
               ...node.data,
               arpTable,
+              macTable,
               ports: node.data.ports.map((port) =>
                 port.id === portId ? { ...port, ...updates } : port
               ),

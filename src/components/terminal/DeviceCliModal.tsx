@@ -50,7 +50,15 @@ export function DeviceCliModal() {
     const cliSession = new CliSession({
       getDevice: () => {
         const current = useAppStore.getState().nodes.find((n) => n.id === deviceId);
-        return current!.data;
+        if (!current) {
+          return {
+            id: deviceId,
+            label: 'Unknown',
+            type: 'router',
+            ports: [],
+          };
+        }
+        return current.data;
       },
       setHostname: (name) => {
         useAppStore.getState().updateDeviceConfig(deviceId, { label: name });
@@ -151,6 +159,9 @@ export function DeviceCliModal() {
       if (lines.length > 0) {
         setHistory((prev) => [...prev, ...lines]);
       }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setHistory((prev) => [...prev, `% Unhandled CLI exception: ${message}`]);
     } finally {
       setIsBusy(false);
     }

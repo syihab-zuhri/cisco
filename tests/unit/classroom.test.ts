@@ -225,6 +225,64 @@ describe('Classroom Feature Suite', () => {
 
       unsub();
     });
+
+    it('menghapus soal terakhir berhasil dan menyisakan daftar kosong serta membersihkan storage', () => {
+      saveExercises([DEFAULT_EXERCISES[0]]);
+      expect(loadExercises().length).toBe(1);
+
+      // Simulasi guru menghapus soal terakhir
+      const currentList = loadExercises();
+      const exIdToDelete = currentList[0].id;
+      const updated = currentList.filter((x) => x.id !== exIdToDelete);
+      saveExercises(updated);
+
+      expect(updated).toEqual([]);
+      expect(loadExercises()).toEqual([]);
+    });
+
+    it('guru keluar dari Mode Guru sepenuhnya membersihkan soal dari memori dan storage', () => {
+      classroomHub.setLockedRole('teacher');
+      saveExercises([...DEFAULT_EXERCISES]);
+      classroomHub.saveActiveExercises([...DEFAULT_EXERCISES]);
+      classroomHub.saveActiveExercise(DEFAULT_EXERCISES[0]);
+
+      expect(loadExercises().length).toBeGreaterThan(0);
+      expect(classroomHub.getActiveExercises().length).toBeGreaterThan(0);
+      expect(classroomHub.getActiveExercise()).not.toBeNull();
+
+      clearExercisesStorage();
+      classroomHub.saveActiveExercises([]);
+      classroomHub.saveActiveExercise(null);
+      classroomHub.leaveClass();
+      classroomHub.setLockedRole(null);
+
+      expect(loadExercises()).toEqual([]);
+      expect(classroomHub.getActiveExercises()).toEqual([]);
+      expect(classroomHub.getActiveExercise()).toBeNull();
+      expect(classroomHub.getLockedRole()).toBeNull();
+    });
+
+    it('penutupan modal tanpa sesi kelas aktif membersihkan mode guru dan bank soal', () => {
+      classroomHub.setLockedRole('teacher');
+      saveExercises([...DEFAULT_EXERCISES]);
+      expect(loadExercises().length).toBeGreaterThan(0);
+      expect(classroomHub.getSession()).toBeNull();
+
+      const curSess = classroomHub.getSession();
+      const role = classroomHub.getLockedRole();
+      if (role === 'teacher' && (!curSess || curSess.status === 'closed')) {
+        clearExercisesStorage();
+        classroomHub.saveActiveExercises([]);
+        classroomHub.saveActiveExercise(null);
+        classroomHub.leaveClass();
+        classroomHub.setLockedRole(null);
+      }
+
+      expect(loadExercises()).toEqual([]);
+      expect(classroomHub.getLockedRole()).toBeNull();
+      expect(classroomHub.getActiveExercises()).toEqual([]);
+      expect(classroomHub.getActiveExercise()).toBeNull();
+    });
   });
 
   describe('Exercise Evaluator', () => {

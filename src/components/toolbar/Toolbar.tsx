@@ -105,7 +105,7 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs, onOpenClassroom
   }, [nodes, pingSource]);
 
   const pingableNodes = nodes.filter((n) =>
-    n.data.ports.some((p) => p.ipAddress)
+    n.data?.ports?.some((p) => p.ipAddress)
   );
 
   const handleExportJson = () => {
@@ -165,6 +165,7 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs, onOpenClassroom
       }
     };
     reader.readAsText(file);
+    e.target.value = '';
   };
 
   const handleExecutePing = () => {

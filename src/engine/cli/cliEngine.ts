@@ -88,9 +88,14 @@ export class CliSession {
         pName === clean ||
         pId.replace(/^fastethernet/, 'fa') === clean ||
         pName.replace(/^fastethernet/, 'fa') === clean ||
+        pId.replace(/^gigabitethernet/, 'gi') === clean ||
+        pName.replace(/^gigabitethernet/, 'gi') === clean ||
         clean.replace(/^fastethernet/, 'fa') === pId ||
         clean.replace(/^fastethernet/, 'fa') === pName ||
-        clean.replace(/^f(\d)/, 'fa$1') === pId
+        clean.replace(/^gigabitethernet/, 'gi') === pId ||
+        clean.replace(/^gigabitethernet/, 'gi') === pName ||
+        clean.replace(/^f(\d)/, 'fa$1') === pId ||
+        clean.replace(/^g(\d)/, 'gi$1') === pId
       );
     });
     if (direct) return direct;
@@ -132,7 +137,7 @@ export class CliSession {
     const cmd = lowerTokens.join(' ');
 
     // --- Navigasi mode ---
-    if (primary === 'exit') {
+    if (primary === 'exit' || primary === 'quit') {
       if (this.mode === 'config-if') {
         this.mode = 'config';
         this.currentInterface = null;
@@ -141,6 +146,8 @@ export class CliSession {
         this.mode = 'priv';
       } else if (this.mode === 'priv') {
         this.mode = 'user';
+        this.closeRequested = true;
+      } else if (this.mode === 'user') {
         this.closeRequested = true;
       }
       return [];
@@ -264,6 +271,12 @@ export class CliSession {
 
     if (lowerTokens[0] === 'show' || lowerTokens[0] === 'sh') {
       if (
+        (lowerTokens[1] === 'interfaces' || lowerTokens[1] === 'interface' || lowerTokens[1] === 'int') &&
+        lowerTokens[2] === 'trunk'
+      ) {
+        return this.showInterfacesTrunk();
+      }
+      if (
         (lowerTokens[1] === 'ip' && (lowerTokens[2] === 'route' || lowerTokens[2] === 'ro'))
       ) {
         return this.showIpRoute();
@@ -350,6 +363,7 @@ export class CliSession {
     }
     for (const s of device.ports) {
       for (const sub of s.subInterfaces ?? []) {
+        if (!sub.ipAddress || !sub.subnetMask) continue;
         const network = networkAddress(sub.ipAddress, sub.subnetMask);
         lines.push(`C       ${network}/${prefixLength(sub.subnetMask)} is directly connected, ${s.name}.${sub.vlanId}`);
       }
@@ -408,7 +422,6 @@ export class CliSession {
   }
 
   private async handleConfig(lowerTokens: string[], rawTokens: string[]): Promise<string[]> {
-    const cmd = lowerTokens.join(' ');
     if (lowerTokens[0] === 'do' && lowerTokens.length > 1) {
       return this.handlePriv(
         lowerTokens.slice(1),
@@ -489,10 +502,18 @@ export class CliSession {
         return this.invalid('IP routing hanya dapat dikonfigurasi pada router.');
       }
       const net = rawTokens[3];
-      const mask = rawTokens[4];
+      const maskOrPrefix = rawTokens[4];
       const nextHop = rawTokens[5];
-      if (!net || !mask) {
+      if (!net || !maskOrPrefix) {
         return this.invalid('Incomplete command. Format: no ip route <network> <subnet-mask> [next-hop]');
+      }
+      let mask = maskOrPrefix;
+      if (mask.startsWith('/') || /^\d+$/.test(mask)) {
+        const prefix = parseInt(mask.replace('/', ''), 10);
+        if (prefix >= 0 && prefix <= 32) {
+          const maskNum = prefix === 0 ? 0 : (~((1 << (32 - prefix)) - 1)) >>> 0;
+          mask = numberToIp(maskNum);
+        }
       }
       const routes = dev.routes ?? [];
       const idx = routes.findIndex((r) => r.network === net && r.subnetMask === mask && (!nextHop || r.nextHop === nextHop));
@@ -500,10 +521,10 @@ export class CliSession {
         this.deps.removeStaticRoute?.(idx);
         return [];
       }
-      return this.invalid(`Route ${net}/${mask} tidak ditemukan.`);
+      return this.invalid(`Route ${net}/${maskOrPrefix} tidak ditemukan.`);
     }
 
-    // ip default-gateway <ip>
+    // ip default-gateway <ip> / no ip default-gateway [ip]
     if (lowerTokens[0] === 'ip' && lowerTokens[1] === 'default-gateway') {
       const gw = rawTokens[2];
       if (!gw) {
@@ -516,7 +537,7 @@ export class CliSession {
       return [];
     }
 
-    if (cmd === 'no ip default-gateway') {
+    if (lowerTokens[0] === 'no' && lowerTokens[1] === 'ip' && lowerTokens[2] === 'default-gateway') {
       this.deps.setDefaultGateway?.(undefined);
       return [];
     }
@@ -528,6 +549,10 @@ export class CliSession {
     rawTokens: string[],
     cmd: string
   ): Promise<string[]> {
+    if (!this.currentInterface) {
+      this.mode = 'config';
+      return this.invalid('Tidak ada antarmuka yang dipilih.');
+    }
     if (lowerTokens[0] === 'do' && lowerTokens.length > 1) {
       return this.handlePriv(
         lowerTokens.slice(1),
@@ -603,13 +628,15 @@ export class CliSession {
     }
 
 
+    const isSw = lowerTokens[0] === 'switchport' || lowerTokens[0] === 'sw';
     // switchport mode {access|trunk}
-    if (lowerTokens[0] === 'switchport' && lowerTokens[1] === 'mode') {
+    if (isSw && (lowerTokens[1] === 'mode' || lowerTokens[1] === 'mo')) {
       const dev = this.deps.getDevice();
       if (dev.type !== 'switch') {
         return this.invalid('Perintah switchport hanya berlaku pada Switch.');
       }
-      const mode = lowerTokens[2];
+      const rawMode = lowerTokens[2];
+      const mode = rawMode === 'access' || rawMode === 'acc' ? 'access' : rawMode === 'trunk' || rawMode === 'tr' ? 'trunk' : rawMode;
       if (mode !== 'access' && mode !== 'trunk') {
         return this.invalid('Format tidak valid. Pilihan: switchport mode access | switchport mode trunk');
       }
@@ -618,7 +645,7 @@ export class CliSession {
     }
 
     // switchport access vlan <vlanId>
-    if (lowerTokens[0] === 'switchport' && lowerTokens[1] === 'access' && lowerTokens[2] === 'vlan') {
+    if (isSw && (lowerTokens[1] === 'access' || lowerTokens[1] === 'acc') && (lowerTokens[2] === 'vlan' || lowerTokens[2] === 'vl')) {
       const dev = this.deps.getDevice();
       if (dev.type !== 'switch') {
         return this.invalid('Perintah switchport hanya berlaku pada Switch.');
@@ -633,10 +660,8 @@ export class CliSession {
 
     // switchport trunk allowed vlan
     if (
-      lowerTokens[0] === 'switchport' &&
-      lowerTokens[1] === 'trunk' &&
-      lowerTokens[2] === 'allowed' &&
-      lowerTokens[3] === 'vlan'
+      isSw &&
+      (lowerTokens[1] === 'trunk' || lowerTokens[1] === 'tr')
     ) {
       const dev = this.deps.getDevice();
       if (dev.type !== 'switch') {
@@ -647,7 +672,7 @@ export class CliSession {
     }
 
     // encapsulation dot1q <vlanId>
-    if (lowerTokens[0] === 'encapsulation' && (lowerTokens[1] === 'dot1q' || lowerTokens[1] === 'dot1Q')) {
+    if ((lowerTokens[0] === 'encapsulation' || lowerTokens[0] === 'encap') && lowerTokens[1] === 'dot1q') {
       const vlanId = parseInt(rawTokens[2], 10);
       if (isNaN(vlanId) || vlanId < 1 || vlanId > 4094) {
         return this.invalid(`Invalid VLAN ID "${rawTokens[2]}". Rentang valid: 1-4094.`);
@@ -818,6 +843,32 @@ export class CliSession {
       const name = v === 1 ? 'default' : `VLAN${String(v).padStart(4, '0')}`;
       const ports = (vlanMap.get(v) ?? []).join(', ');
       lines.push(`${String(v).padEnd(5)}${name.padEnd(33)}active    ${ports}`);
+    }
+    return lines;
+  }
+
+  private showInterfacesTrunk(): string[] {
+    const device = this.deps.getDevice();
+    if (device.type !== 'switch') {
+      return this.invalid('Perintah show interfaces trunk hanya berlaku pada Switch.');
+    }
+    const lines = [
+      'Port        Mode         Encapsulation  Status        Native vlan',
+      '=================================================================',
+    ];
+    const trunks = device.ports.filter((p) => p.portMode === 'trunk');
+    if (trunks.length === 0) {
+      lines.push('(Tidak ada port trunk yang aktif)');
+      return lines;
+    }
+    for (const p of trunks) {
+      lines.push(
+        `${p.name.padEnd(12)}on           802.1q         ${p.status.padEnd(14)}1`
+      );
+    }
+    lines.push('', 'Port        Vlans allowed on trunk', '----------------------------------');
+    for (const p of trunks) {
+      lines.push(`${p.name.padEnd(12)}1-4094`);
     }
     return lines;
   }

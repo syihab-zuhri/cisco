@@ -13,7 +13,7 @@ import {
   Terminal,
 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
-import { isValidIp, isValidSubnetMask, networkAddress, ipToNumber, prefixLength, isSameSubnet } from '../../utils/ipUtils';
+import { isValidIp, isValidSubnetMask, isValidMac, normalizeMac, networkAddress, ipToNumber, prefixLength, isSameSubnet } from '../../utils/ipUtils';
 import { type DeviceData } from '../../types/network';
 import { requestDhcp, requestRip } from '../../hooks/useSimulationEngine';
 import {
@@ -69,6 +69,7 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
   const [subnetMask, setSubnetMask] = useState<string>(selectedPort?.subnetMask || '255.255.255.0');
   const [portStatus, setPortStatus] = useState<'up' | 'down'>(selectedPort?.status ?? 'down');
   const [ssid, setSsid] = useState<string>(selectedPort?.ssid || '');
+  const [macAddress, setMacAddress] = useState<string>(selectedPort?.macAddress || '');
   const [defaultGateway, setDefaultGateway] = useState<string>(device.defaultGateway || '');
   const [label, setLabel] = useState<string>(device.label);
   const [errorMsg, setErrorMsg] = useState<string>('');
@@ -106,6 +107,8 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
     setSubnetMask(p?.subnetMask || '255.255.255.0');
     setPortStatus(p?.status ?? 'down');
     setSsid(p?.ssid || '');
+    setMacAddress(p?.macAddress || '');
+    setDhcpClient(p?.dhcpEnabled ?? false);
     setNatEnabled(p?.natEnabled ?? false);
     setPortVlan(p?.vlanId ?? 1);
     setPortMode(p?.portMode ?? 'access');
@@ -169,6 +172,23 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
       }
     }
 
+    if (macAddress.trim() && !isValidMac(macAddress.trim())) {
+      setErrorMsg('Format MAC Address tidak valid! Contoh: 00:50:79:66:68:01');
+      return;
+    }
+
+    if (device.type === 'router' && natEnabled && !ipAddress.trim()) {
+      setErrorMsg('Interface dengan NAT aktif wajib memiliki IPv4 Address (IP Publik/WAN)!');
+      return;
+    }
+
+    if (device.type === 'switch' && portMode === 'access') {
+      if (!portVlan || portVlan < 1 || portVlan > 4094 || !Number.isInteger(portVlan)) {
+        setErrorMsg('VLAN ID harus berupa bilangan bulat antara 1 dan 4094!');
+        return;
+      }
+    }
+
     if (defaultGateway.trim()) {
       if (!isValidIp(defaultGateway.trim())) {
         setErrorMsg('Format Default Gateway tidak valid!');
@@ -194,6 +214,30 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
       // BUG-3: startIp wajib berada di dalam network pool (hindari alokasi lintas subnet)
       if (networkAddress(poolStartIp.trim(), poolMask.trim()) !== networkAddress(poolNetwork.trim(), poolMask.trim())) {
         setErrorMsg('Pool DHCP: Start IP berada di luar network pool!');
+        return;
+      }
+      const pNet = networkAddress(poolNetwork.trim(), poolMask.trim());
+      const pNetNum = ipToNumber(pNet);
+      const pMaskNum = ipToNumber(poolMask.trim());
+      const pBcastNum = (pNetNum | (~pMaskNum >>> 0)) >>> 0;
+      const pStartNum = ipToNumber(poolStartIp.trim());
+      if (pStartNum <= pNetNum || pStartNum >= pBcastNum) {
+        setErrorMsg('Pool DHCP: Start IP tidak boleh berupa network atau broadcast address!');
+        return;
+      }
+      const routerIps = new Set<string>();
+      if (ipAddress.trim()) routerIps.add(ipAddress.trim());
+      for (const p of device.ports) {
+        if (p.id !== selectedPortId && p.ipAddress) routerIps.add(p.ipAddress);
+        for (const s of p.subInterfaces ?? []) {
+          if (s.ipAddress) routerIps.add(s.ipAddress);
+        }
+      }
+      for (const s of subIfs) {
+        if (s.ipAddress) routerIps.add(s.ipAddress);
+      }
+      if (routerIps.has(poolStartIp.trim())) {
+        setErrorMsg(`Pool DHCP: Start IP (${poolStartIp.trim()}) bertabrakan dengan IP antarmuka router sendiri!`);
         return;
       }
     }
@@ -223,9 +267,14 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
     });
 
     if (selectedPort) {
+      const formattedMac = macAddress.trim() ? normalizeMac(macAddress.trim()) : undefined;
       if (isWirelessPort) {
         // Simpan SSID lalu sinkronkan asosiasi WiFi
-        updatePortConfig(device.id, selectedPort.id, { ssid: ssid.trim(), status: portStatus });
+        updatePortConfig(device.id, selectedPort.id, {
+          ssid: ssid.trim(),
+          status: portStatus,
+          ...(formattedMac ? { macAddress: formattedMac } : {}),
+        });
         if (device.type === 'accessPoint') {
           revalidateWirelessClients();
           addSimulationLog('INFO', `${label}: SSID radio diubah menjadi "${ssid.trim()}".`);
@@ -240,6 +289,7 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
           subInterfaces: subIfs.length > 0 ? subIfs : undefined,
           ipAddress: ipAddress.trim() || undefined,
           subnetMask: subnetMask.trim() || undefined,
+          ...(formattedMac ? { macAddress: formattedMac } : {}),
         });
         const pools = { ...(device.dhcpPools ?? {}) };
         pools[selectedPort.id] = {
@@ -261,6 +311,7 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
           ipAddress: dhcpClient ? undefined : ipAddress.trim() || undefined,
           subnetMask: dhcpClient ? undefined : subnetMask.trim() || undefined,
           ...(device.type === 'switch' ? { vlanId: portVlan, portMode } : {}),
+          ...(formattedMac ? { macAddress: formattedMac } : {}),
         });
         if (dhcpClient) {
           addSimulationLog('INFO', `Meminta IP via DHCP pada ${selectedPort.name}...`);
@@ -352,9 +403,18 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
                 <span className="text-muted-foreground">Port Name:</span>
                 <span className="font-mono font-semibold text-emerald-400">{selectedPort.name}</span>
               </div>
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">MAC Address:</span>
-                <span className="font-mono text-foreground">{selectedPort.macAddress}</span>
+              <div className="flex flex-col gap-1 text-xs">
+                <Label htmlFor="cfg-mac" className="text-xs text-muted-foreground">
+                  MAC Address
+                </Label>
+                <Input
+                  id="cfg-mac"
+                  type="text"
+                  value={macAddress}
+                  onChange={(e) => setMacAddress(e.target.value)}
+                  className="font-mono text-xs h-7"
+                  placeholder="00:50:79:AA:BB:CC"
+                />
               </div>
               <div className="flex items-center justify-between text-xs">
                 <div className="flex flex-col gap-0.5">
@@ -607,8 +667,20 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
                 className="mt-2 text-sky-300"
                 onClick={() => {
                   const vlan = Number(subVlan);
-                  if (!vlan || vlan < 1 || vlan > 4094 || !isValidIp(subIp) || !isValidSubnetMask(subMask)) {
-                    setErrorMsg('Sub-interface: VLAN/IP/mask tidak valid!');
+                  if (!vlan || vlan < 1 || vlan > 4094 || !Number.isInteger(vlan) || !isValidIp(subIp) || !isValidSubnetMask(subMask)) {
+                    setErrorMsg('Sub-interface: VLAN (1-4094)/IP/mask tidak valid!');
+                    return;
+                  }
+                  if (subIfs.some((s) => s.vlanId === vlan)) {
+                    setErrorMsg(`Sub-interface VLAN ${vlan} sudah ada pada antarmuka ini!`);
+                    return;
+                  }
+                  if (ipAddress.trim() && subIp.trim() === ipAddress.trim()) {
+                    setErrorMsg(`Sub-interface VLAN ${vlan}: IP bertabrakan dengan IP antarmuka fisik (${ipAddress.trim()})!`);
+                    return;
+                  }
+                  if (subIfs.some((s) => s.ipAddress === subIp.trim())) {
+                    setErrorMsg(`Sub-interface VLAN ${vlan}: IP bertabrakan dengan sub-interface lain!`);
                     return;
                   }
                   const net = networkAddress(subIp.trim(), subMask.trim());

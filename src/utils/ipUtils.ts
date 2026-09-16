@@ -14,6 +14,23 @@ export function generateMacAddress(): string {
   return `00:50:79:${toHex(b1)}:${toHex(b2)}:${toHex(b3)}`;
 }
 
+export function isValidMac(mac: string): boolean {
+  if (!mac || typeof mac !== 'string') return false;
+  const trimmed = mac.trim();
+  // Format standard XX:XX:XX:XX:XX:XX atau XX-XX-XX-XX-XX-XX
+  const colonHyphenRegex = /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/;
+  // Format Cisco XXXX.XXXX.XXXX
+  const ciscoRegex = /^[0-9A-Fa-f]{4}\.[0-9A-Fa-f]{4}\.[0-9A-Fa-f]{4}$/;
+  return colonHyphenRegex.test(trimmed) || ciscoRegex.test(trimmed);
+}
+
+export function normalizeMac(mac: string): string {
+  const clean = mac.trim().replace(/[:-]/g, '').replace(/\./g, '');
+  if (clean.length !== 12) return mac.trim();
+  const parts = clean.match(/.{1,2}/g);
+  return parts ? parts.join(':').toUpperCase() : mac.trim();
+}
+
 export function isValidIp(ip: string): boolean {
   if (!ip || typeof ip !== 'string') return false;
   const parts = ip.trim().split('.');

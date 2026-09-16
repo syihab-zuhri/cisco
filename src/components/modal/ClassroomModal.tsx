@@ -113,42 +113,36 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
           : 'Anda akan keluar dari Mode Siswa. Anda akan dikeluarkan dari sesi kelas siswa aktif saat ini.',
       confirmLabel: 'Ganti Peran',
       onConfirm: () => {
+        const curSess = session || classroomHub.getSession();
         if (isTeacher) {
-          const curSess = session || classroomHub.getSession();
           if (curSess && curSess.status !== 'closed') {
             classroomHub.closeClass(curSess.classCode);
-          } else {
-            classroomHub.saveActiveExercises([]);
-            classroomHub.saveActiveExercise(null);
-            classroomHub.broadcast({
-              type: 'CLASS_CLOSED',
-              classCode: curSess?.classCode || '',
-            });
-            classroomHub.broadcast({
-              type: 'EXERCISES_UPDATED',
-              classCode: curSess?.classCode || '',
-              exercises: [],
-            });
           }
-          clearExercisesStorage();
-          setExercises([]);
-          setSelectedExercise(null);
-          setActiveExercise(null);
-          setSelectedExamExerciseIds([]);
+          classroomHub.broadcast({
+            type: 'EXERCISES_UPDATED',
+            classCode: curSess?.classCode || '',
+            exercises: [],
+          });
+          classroomHub.broadcast({
+            type: 'CLASS_CLOSED',
+            classCode: curSess?.classCode || '',
+          });
         }
-        classroomHub.leaveClass();
         clearExercisesStorage();
         setExercises([]);
         setSelectedExercise(null);
         setActiveExercise(null);
         setSelectedExamExerciseIds([]);
+        classroomHub.saveActiveExercises([]);
+        classroomHub.saveActiveExercise(null);
+        classroomHub.leaveClass();
+        classroomHub.setLockedRole(null);
+        setLockedRole(null);
         setSession(null);
         setParticipants([]);
         setSubmissions({});
         setJoinedParticipant(null);
         setMyEvaluation(null);
-        classroomHub.setLockedRole(null);
-        setLockedRole(null);
         pushToast('info', 'Silakan tentukan peran baru yang ingin Anda masuki.');
       },
     });
@@ -165,32 +159,31 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
         const curSess = session || classroomHub.getSession();
         if (curSess && curSess.status !== 'closed') {
           classroomHub.closeClass(curSess.classCode);
-        } else {
-          classroomHub.saveActiveExercises([]);
-          classroomHub.saveActiveExercise(null);
-          classroomHub.broadcast({
-            type: 'CLASS_CLOSED',
-            classCode: curSess?.classCode || '',
-          });
-          classroomHub.broadcast({
-            type: 'EXERCISES_UPDATED',
-            classCode: curSess?.classCode || '',
-            exercises: [],
-          });
         }
         clearExercisesStorage();
-        classroomHub.leaveClass();
         setExercises([]);
         setSelectedExercise(null);
         setActiveExercise(null);
         setSelectedExamExerciseIds([]);
+        classroomHub.saveActiveExercises([]);
+        classroomHub.saveActiveExercise(null);
+        classroomHub.leaveClass();
+        classroomHub.setLockedRole(null);
+        setLockedRole(null);
+        classroomHub.broadcast({
+          type: 'EXERCISES_UPDATED',
+          classCode: curSess?.classCode || '',
+          exercises: [],
+        });
+        classroomHub.broadcast({
+          type: 'CLASS_CLOSED',
+          classCode: curSess?.classCode || '',
+        });
         setSession(null);
         setParticipants([]);
         setSubmissions({});
         setJoinedParticipant(null);
         setMyEvaluation(null);
-        classroomHub.setLockedRole(null);
-        setLockedRole(null);
         pushToast('info', 'Berhasil keluar dari Mode Guru. Seluruh soal dan sesi telah dibersihkan.');
       },
     });
@@ -201,16 +194,25 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
     const curSess = session || classroomHub.getSession();
     const role = lockedRole || classroomHub.getLockedRole();
     if (role === 'teacher' && (!curSess || curSess.status === 'closed')) {
-      classroomHub.saveActiveExercises([]);
-      classroomHub.saveActiveExercise(null);
       clearExercisesStorage();
-      classroomHub.leaveClass();
-      classroomHub.setLockedRole(null);
-      setLockedRole(null);
       setExercises([]);
       setSelectedExercise(null);
       setActiveExercise(null);
       setSelectedExamExerciseIds([]);
+      classroomHub.saveActiveExercises([]);
+      classroomHub.saveActiveExercise(null);
+      classroomHub.leaveClass();
+      classroomHub.setLockedRole(null);
+      setLockedRole(null);
+      classroomHub.broadcast({
+        type: 'EXERCISES_UPDATED',
+        classCode: curSess?.classCode || '',
+        exercises: [],
+      });
+      classroomHub.broadcast({
+        type: 'CLASS_CLOSED',
+        classCode: curSess?.classCode || '',
+      });
       setSession(null);
     }
     onClose();
@@ -259,18 +261,27 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
   useEffect(() => {
     if (!isOpen) {
       const curSess = classroomHub.getSession();
-      const role = classroomHub.getLockedRole();
+      const role = classroomHub.getLockedRole() || lockedRole;
       if (role === 'teacher' && (!curSess || curSess.status === 'closed')) {
-        classroomHub.saveActiveExercises([]);
-        classroomHub.saveActiveExercise(null);
         clearExercisesStorage();
-        classroomHub.leaveClass();
-        classroomHub.setLockedRole(null);
-        setLockedRole(null);
         setExercises([]);
         setSelectedExercise(null);
         setActiveExercise(null);
         setSelectedExamExerciseIds([]);
+        classroomHub.saveActiveExercises([]);
+        classroomHub.saveActiveExercise(null);
+        classroomHub.leaveClass();
+        classroomHub.setLockedRole(null);
+        setLockedRole(null);
+        classroomHub.broadcast({
+          type: 'EXERCISES_UPDATED',
+          classCode: curSess?.classCode || '',
+          exercises: [],
+        });
+        classroomHub.broadcast({
+          type: 'CLASS_CLOSED',
+          classCode: curSess?.classCode || '',
+        });
         setSession(null);
       }
       return;
@@ -527,7 +538,10 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
         clearExercisesStorage();
         setExercises([]);
         setSelectedExercise(null);
+        setActiveExercise(null);
         setSelectedExamExerciseIds([]);
+        classroomHub.saveActiveExercises([]);
+        classroomHub.saveActiveExercise(null);
         pushToast('info', 'Seluruh soal di Bank Soal berhasil dikosongkan.');
       },
     });
@@ -662,7 +676,12 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
     saveExercises(updated);
     setSelectedExamExerciseIds((prev) => prev.filter((id) => id !== exId));
     if (selectedExercise?.id === exId) {
-      setSelectedExercise(updated[0] || null);
+      setSelectedExercise(updated.length > 0 ? updated[0] : null);
+    }
+    if (updated.length === 0) {
+      clearExercisesStorage();
+      setSelectedExercise(null);
+      setSelectedExamExerciseIds([]);
     }
     pushToast('info', 'Soal telah dihapus dari bank soal.');
   };
@@ -1112,8 +1131,8 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
               variant="outline"
               onClick={handleClearExerciseBank}
               disabled={exercises.length === 0}
-              className="h-7 gap-1 text-[11px] text-rose-400 hover:text-rose-300 border-rose-500/40 disabled:opacity-40"
-              title="Kosongkan seluruh soal yang ada di Bank Soal"
+              className="h-7 gap-1 text-[11px] text-rose-500 hover:text-rose-400 hover:bg-rose-500/10 border-rose-500/50 font-semibold disabled:opacity-40"
+              title="Kosongkan seluruh bank soal praktikum"
             >
               <Trash2 className="h-3 w-3" />
               Kosongkan Bank Soal
@@ -1259,17 +1278,15 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
                     >
                       <Download className="h-3 w-3" />
                     </Button>
-                    {exercises.length > 1 && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={(e) => handleDeleteExercise(e, ex.id)}
-                        title="Hapus Soal"
-                        className="h-6 w-6 p-0 text-muted-foreground hover:text-rose-400"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    )}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={(e) => handleDeleteExercise(e, ex.id)}
+                      title="Hapus Soal"
+                      className="h-6 w-6 p-0 text-muted-foreground hover:text-rose-400"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
                   </div>
                 </div>
               </div>
