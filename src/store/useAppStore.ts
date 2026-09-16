@@ -901,22 +901,30 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
                 },
               };
             } else if (eff.type === 'ROUTE_LEARN') {
-              const routes = [...(node.data.routes ?? [])];
+              let routes = [...(node.data.routes ?? [])];
               const idx = routes.findIndex(
-                (r) => r.network === eff.network && r.subnetMask === eff.subnetMask
+                (r) => r.network === eff.network && r.subnetMask === eff.subnetMask && r.source === 'rip'
               );
-              const nextRoute = {
-                network: eff.network,
-                subnetMask: eff.subnetMask,
-                nextHop: eff.nextHop,
-                interfaceId: eff.interfaceId,
-                metric: eff.metric,
-                source: 'rip' as const,
-              };
-              if (idx >= 0) {
-                if ((routes[idx].metric ?? 99) > eff.metric) routes[idx] = nextRoute;
+              if (eff.metric >= 16) {
+                if (idx >= 0) {
+                  routes = routes.filter((_, i) => i !== idx);
+                }
               } else {
-                routes.push(nextRoute);
+                const nextRoute = {
+                  network: eff.network,
+                  subnetMask: eff.subnetMask,
+                  nextHop: eff.nextHop,
+                  interfaceId: eff.interfaceId,
+                  metric: eff.metric,
+                  source: 'rip' as const,
+                };
+                if (idx >= 0) {
+                  if ((routes[idx].metric ?? 99) >= eff.metric || routes[idx].nextHop === eff.nextHop) {
+                    routes[idx] = nextRoute;
+                  }
+                } else {
+                  routes.push(nextRoute);
+                }
               }
               return { ...node, data: { ...node.data, routes } };
             }

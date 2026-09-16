@@ -103,132 +103,14 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
     }
   };
 
-  const handleSwitchRole = () => {
-    const isTeacher = lockedRole === 'teacher' || classroomHub.getLockedRole() === 'teacher';
-    requestConfirm({
-      title: 'Ganti Peran Pengguna?',
-      message:
-        isTeacher
-          ? 'Anda akan keluar dari Mode Guru. Sesi administrasi guru pada perangkat ini akan dilepas dan seluruh bank soal serta soal aktif akan sepenuhnya dibersihkan.'
-          : 'Anda akan keluar dari Mode Siswa. Anda akan dikeluarkan dari sesi kelas siswa aktif saat ini.',
-      confirmLabel: 'Ganti Peran',
-      onConfirm: () => {
-        const curSess = session || classroomHub.getSession();
-        if (isTeacher) {
-          if (curSess && curSess.status !== 'closed') {
-            classroomHub.closeClass(curSess.classCode);
-          }
-          classroomHub.broadcast({
-            type: 'EXERCISES_UPDATED',
-            classCode: curSess?.classCode || '',
-            exercises: [],
-          });
-          classroomHub.broadcast({
-            type: 'CLASS_CLOSED',
-            classCode: curSess?.classCode || '',
-          });
-        }
-        clearExercisesStorage();
-        setExercises([]);
-        setSelectedExercise(null);
-        setActiveExercise(null);
-        setSelectedExamExerciseIds([]);
-        classroomHub.saveActiveExercises([]);
-        classroomHub.saveActiveExercise(null);
-        classroomHub.leaveClass();
-        classroomHub.setLockedRole(null);
-        setLockedRole(null);
-        setSession(null);
-        setParticipants([]);
-        setSubmissions({});
-        setJoinedParticipant(null);
-        setMyEvaluation(null);
-        pushToast('info', 'Silakan tentukan peran baru yang ingin Anda masuki.');
-      },
-    });
-  };
-
-  // Handler Guru: Keluar Mode Guru
-  const handleExitTeacherMode = () => {
-    requestConfirm({
-      title: 'Keluar Mode Guru?',
-      message:
-        'Anda akan keluar dari Mode Guru. Sesi kelas (jika aktif) akan ditutup, bank soal serta soal aktif akan sepenuhnya dihapus dari perangkat ini.',
-      confirmLabel: 'Keluar Mode Guru',
-      onConfirm: () => {
-        const curSess = session || classroomHub.getSession();
-        if (curSess && curSess.status !== 'closed') {
-          classroomHub.closeClass(curSess.classCode);
-        }
-        clearExercisesStorage();
-        setExercises([]);
-        setSelectedExercise(null);
-        setActiveExercise(null);
-        setSelectedExamExerciseIds([]);
-        classroomHub.saveActiveExercises([]);
-        classroomHub.saveActiveExercise(null);
-        classroomHub.leaveClass();
-        classroomHub.setLockedRole(null);
-        setLockedRole(null);
-        classroomHub.broadcast({
-          type: 'EXERCISES_UPDATED',
-          classCode: curSess?.classCode || '',
-          exercises: [],
-        });
-        classroomHub.broadcast({
-          type: 'CLASS_CLOSED',
-          classCode: curSess?.classCode || '',
-        });
-        setSession(null);
-        setParticipants([]);
-        setSubmissions({});
-        setJoinedParticipant(null);
-        setMyEvaluation(null);
-        pushToast('info', 'Berhasil keluar dari Mode Guru. Seluruh soal dan sesi telah dibersihkan.');
-      },
-    });
-  };
-
-  // Handler tutup modal: jika peran guru aktif dan tidak ada sesi kelas yang sedang berjalan, keluar mode guru dan bersihkan soal
-  const handleModalClose = () => {
-    const curSess = session || classroomHub.getSession();
-    const role = lockedRole || classroomHub.getLockedRole();
-    if (role === 'teacher' && (!curSess || curSess.status === 'closed')) {
-      clearExercisesStorage();
-      setExercises([]);
-      setSelectedExercise(null);
-      setActiveExercise(null);
-      setSelectedExamExerciseIds([]);
-      classroomHub.saveActiveExercises([]);
-      classroomHub.saveActiveExercise(null);
-      classroomHub.leaveClass();
-      classroomHub.setLockedRole(null);
-      setLockedRole(null);
-      classroomHub.broadcast({
-        type: 'EXERCISES_UPDATED',
-        classCode: curSess?.classCode || '',
-        exercises: [],
-      });
-      classroomHub.broadcast({
-        type: 'CLASS_CLOSED',
-        classCode: curSess?.classCode || '',
-      });
-      setSession(null);
-    }
-    onClose();
-  };
-
   // Teacher State
   const [session, setSession] = useState<ClassSession | null>(null);
   const [classTitle, setClassTitle] = useState('Praktikum Jaringan Komputer');
   const [customCode, setCustomCode] = useState('');
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [submissions, setSubmissions] = useState<Record<string, Submission>>({});
-  const [exercises, setExercises] = useState<Exercise[]>(() => loadExercises());
-  const [selectedExercise, setSelectedExercise] = useState<Exercise | null>(() => {
-    const list = loadExercises();
-    return list[0] || null;
-  });
+  const [exercises, setExercises] = useState<Exercise[]>([]);
+  const [selectedExercise, setSelectedExercise] = useState<Exercise | null>(null);
   const [reviewedSubmission, setReviewedSubmission] = useState<Submission | null>(null);
   const [isCopiedCode, setIsCopiedCode] = useState(false);
   const copyTimerRef = useRef<number | null>(null);
@@ -248,41 +130,96 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
   const [isEvaluating, setIsEvaluating] = useState(false);
 
   // Seleksi Multi-Soal untuk Paket Ujian
-  const [selectedExamExerciseIds, setSelectedExamExerciseIds] = useState<string[]>(() => {
-    const sess = classroomHub.getSession();
-    if (sess?.activeExercises && sess.activeExercises.length > 0) {
-      return sess.activeExercises.map((x) => x.id);
+  const [selectedExamExerciseIds, setSelectedExamExerciseIds] = useState<string[]>([]);
+
+  // Helper eliminasi total seluruh data guru, soal, dan storage
+  const purgeAllTeacherData = () => {
+    const curSess = session || classroomHub.getSession();
+    const code = (curSess?.classCode || '').trim();
+    classroomHub.closeClass(code);
+    classroomHub.saveActiveExercises([]);
+    classroomHub.saveActiveExercise(null);
+    clearExercisesStorage();
+    setExercises([]);
+    setSelectedExercise(null);
+    setActiveExercise(null);
+    setSelectedExamExerciseIds([]);
+    setSession(null);
+    setParticipants([]);
+    setSubmissions({});
+    setJoinedParticipant(null);
+    setMyEvaluation(null);
+    classroomHub.broadcast({
+      type: 'CLASS_CLOSED',
+      classCode: code,
+    });
+    classroomHub.broadcast({
+      type: 'EXERCISES_UPDATED',
+      classCode: code,
+      exercises: [],
+    });
+    classroomHub.leaveClass();
+    classroomHub.setLockedRole(null);
+    setLockedRole(null);
+  };
+
+  const handleSwitchRole = () => {
+    const isTeacher = lockedRole === 'teacher' || classroomHub.getLockedRole() === 'teacher';
+    requestConfirm({
+      title: 'Ganti Peran Pengguna?',
+      message:
+        isTeacher
+          ? 'Anda akan keluar dari Mode Guru. Sesi administrasi guru pada perangkat ini akan dilepas dan seluruh bank soal serta soal aktif akan sepenuhnya dibersihkan.'
+          : 'Anda akan keluar dari Mode Siswa. Anda akan dikeluarkan dari sesi kelas siswa aktif saat ini.',
+      confirmLabel: 'Ganti Peran',
+      onConfirm: () => {
+        if (isTeacher) {
+          purgeAllTeacherData();
+        } else {
+          classroomHub.leaveClass();
+          classroomHub.setLockedRole(null);
+          setLockedRole(null);
+          setSession(null);
+          setParticipants([]);
+          setSubmissions({});
+          setJoinedParticipant(null);
+          setMyEvaluation(null);
+          setActiveExercise(null);
+        }
+        pushToast('info', 'Silakan tentukan peran baru yang ingin Anda masuki.');
+      },
+    });
+  };
+
+  // Handler Guru: Keluar Mode Guru
+  const handleExitTeacherMode = () => {
+    requestConfirm({
+      title: 'Keluar Mode Guru?',
+      message:
+        'Anda akan keluar dari Mode Guru. Sesi kelas (jika aktif) akan ditutup, bank soal serta soal aktif akan sepenuhnya dihapus dari perangkat ini.',
+      confirmLabel: 'Keluar Mode Guru',
+      onConfirm: () => {
+        purgeAllTeacherData();
+        pushToast('info', 'Berhasil keluar dari Mode Guru. Seluruh soal dan sesi telah dibersihkan.');
+      },
+    });
+  };
+
+  // Handler tutup modal: jika peran guru aktif, keluar mode guru dan bersihkan seluruh soal & sesi
+  const handleModalClose = () => {
+    const role = lockedRole || classroomHub.getLockedRole();
+    if (role === 'teacher') {
+      purgeAllTeacherData();
     }
-    const exList = loadExercises();
-    return exList.length > 0 ? [exList[0].id] : [];
-  });
+    onClose();
+  };
 
   // Inisialisasi state dari storage saat modal dibuka atau dibersihkan saat ditutup
   useEffect(() => {
     if (!isOpen) {
-      const curSess = classroomHub.getSession();
       const role = classroomHub.getLockedRole() || lockedRole;
-      if (role === 'teacher' && (!curSess || curSess.status === 'closed')) {
-        clearExercisesStorage();
-        setExercises([]);
-        setSelectedExercise(null);
-        setActiveExercise(null);
-        setSelectedExamExerciseIds([]);
-        classroomHub.saveActiveExercises([]);
-        classroomHub.saveActiveExercise(null);
-        classroomHub.leaveClass();
-        classroomHub.setLockedRole(null);
-        setLockedRole(null);
-        classroomHub.broadcast({
-          type: 'EXERCISES_UPDATED',
-          classCode: curSess?.classCode || '',
-          exercises: [],
-        });
-        classroomHub.broadcast({
-          type: 'CLASS_CLOSED',
-          classCode: curSess?.classCode || '',
-        });
-        setSession(null);
+      if (role === 'teacher') {
+        purgeAllTeacherData();
       }
       return;
     }
@@ -291,10 +228,14 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
       setSession(existingSession);
       setParticipants(classroomHub.getParticipants());
       setSubmissions(classroomHub.getSubmissions());
+      const loaded = loadExercises();
+      setExercises(loaded);
       const activeEx = classroomHub.getActiveExercise();
       if (activeEx) {
         setSelectedExercise(activeEx);
         setActiveExercise(activeEx);
+      } else {
+        setSelectedExercise(loaded[0] || null);
       }
       const activeList = classroomHub.getActiveExercises();
       if (activeList && activeList.length > 0) {
@@ -542,6 +483,14 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
         setSelectedExamExerciseIds([]);
         classroomHub.saveActiveExercises([]);
         classroomHub.saveActiveExercise(null);
+        const curSess = session || classroomHub.getSession();
+        if (curSess) {
+          classroomHub.broadcast({
+            type: 'EXERCISES_UPDATED',
+            classCode: curSess.classCode,
+            exercises: [],
+          });
+        }
         pushToast('info', 'Seluruh soal di Bank Soal berhasil dikosongkan.');
       },
     });
@@ -735,21 +684,7 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
 
   // Handler Guru: Tutup Kelas
   const handleCloseClass = () => {
-    if (!session) return;
-    const code = session.classCode;
-    classroomHub.closeClass(code);
-    classroomHub.saveActiveExercises([]);
-    classroomHub.saveActiveExercise(null);
-    clearExercisesStorage();
-    setExercises([]);
-    setSession(null);
-    setParticipants([]);
-    setSubmissions({});
-    setSelectedExercise(null);
-    setActiveExercise(null);
-    setSelectedExamExerciseIds([]);
-    setMyEvaluation(null);
-    classroomHub.clearAll();
+    purgeAllTeacherData();
     pushToast('info', 'Sesi kelas telah diakhiri dan seluruh soal telah dibersihkan.');
   };
 

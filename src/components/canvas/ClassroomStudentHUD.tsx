@@ -494,11 +494,10 @@ export function ClassroomStudentHUD() {
     }
   };
 
-  // Jika siswa belum bergabung, jangan tampilkan HUD
-  if (!participant) {
+  // Jika siswa belum bergabung atau sesi kelas ditutup, jangan tampilkan HUD
+  if (!participant || !session || session.status === 'closed') {
     return null;
   }
-
   // Posisi dinamis: jika PDU Inspector terbuka di kanan, geser HUD ke kirinya pada layar lebar agar tidak bertumpukan
   const positionClass = inspectorOpen
     ? 'right-2 sm:right-4 md:right-[336px]'

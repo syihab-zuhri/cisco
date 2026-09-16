@@ -178,7 +178,8 @@ describe('Classroom Feature Suite', () => {
       expect(loadExercises()).toEqual([]);
     });
 
-    it('loadExercises() mengembalikan array kosong secara default tanpa auto-seed', () => {
+    it('loadExercises() mengembalikan array kosong [] secara default tanpa auto-seed', () => {
+      expect(loadExercises()).toEqual([]);
       clearExercisesStorage();
       expect(loadExercises()).toEqual([]);
     });
@@ -262,18 +263,21 @@ describe('Classroom Feature Suite', () => {
       expect(classroomHub.getLockedRole()).toBeNull();
     });
 
-    it('penutupan modal tanpa sesi kelas aktif membersihkan mode guru dan bank soal', () => {
+    it('penutupan modal saat mode guru aktif tanpa sesi kelas aktif membersihkan mode guru dan bank soal', () => {
       classroomHub.setLockedRole('teacher');
       saveExercises([...DEFAULT_EXERCISES]);
       expect(loadExercises().length).toBeGreaterThan(0);
       expect(classroomHub.getSession()).toBeNull();
 
-      const curSess = classroomHub.getSession();
+      // Simulasi penutupan modal oleh guru (handleModalClose / purgeAllTeacherData)
       const role = classroomHub.getLockedRole();
-      if (role === 'teacher' && (!curSess || curSess.status === 'closed')) {
-        clearExercisesStorage();
+      if (role === 'teacher') {
+        const curSess = classroomHub.getSession();
+        const code = curSess?.classCode || '';
+        classroomHub.closeClass(code);
         classroomHub.saveActiveExercises([]);
         classroomHub.saveActiveExercise(null);
+        clearExercisesStorage();
         classroomHub.leaveClass();
         classroomHub.setLockedRole(null);
       }
@@ -282,6 +286,37 @@ describe('Classroom Feature Suite', () => {
       expect(classroomHub.getLockedRole()).toBeNull();
       expect(classroomHub.getActiveExercises()).toEqual([]);
       expect(classroomHub.getActiveExercise()).toBeNull();
+    });
+
+    it('penutupan modal saat mode guru aktif dengan sesi kelas aktif selalu menutup kelas dan membersihkan seluruh soal dari memori dan storage', () => {
+      classroomHub.setLockedRole('teacher');
+      saveExercises([...DEFAULT_EXERCISES]);
+      classroomHub.createClass('Kelas Ujian Modal', 'MODAL-99', undefined, DEFAULT_EXERCISES);
+      expect(classroomHub.getActiveExercises().length).toBeGreaterThan(0);
+      expect(classroomHub.getActiveExercise()).not.toBeNull();
+      expect(loadExercises().length).toBeGreaterThan(0);
+      expect(classroomHub.getSession()?.status).toBe('open');
+
+      // Guru menutup modal saat kelas aktif (handleModalClose / purgeAllTeacherData)
+      const role = classroomHub.getLockedRole();
+      if (role === 'teacher') {
+        const curSess = classroomHub.getSession();
+        const code = (curSess?.classCode || '').trim();
+        classroomHub.closeClass(code);
+        classroomHub.saveActiveExercises([]);
+        classroomHub.saveActiveExercise(null);
+        clearExercisesStorage();
+        classroomHub.leaveClass();
+        classroomHub.setLockedRole(null);
+      }
+
+      expect(loadExercises()).toEqual([]);
+      expect(classroomHub.getActiveExercises()).toEqual([]);
+      expect(classroomHub.getActiveExercise()).toBeNull();
+      expect(classroomHub.getLockedRole()).toBeNull();
+      expect(classroomHub.getSession()?.status).toBe('closed');
+      expect(classroomHub.getSession()?.activeExercises).toEqual([]);
+      expect(classroomHub.getSession()?.activeExerciseId).toBeNull();
     });
   });
 

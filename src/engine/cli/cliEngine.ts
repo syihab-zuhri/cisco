@@ -191,7 +191,7 @@ export class CliSession {
 
     switch (this.mode) {
       case 'user':
-        return this.handleUser(primary);
+        return this.handleUser(primary, lowerTokens, rawTokens);
       case 'priv':
         return this.handlePriv(lowerTokens, rawTokens, cmd);
       case 'config':
@@ -201,12 +201,27 @@ export class CliSession {
     }
   }
 
-  private handleUser(primary: string): string[] {
+  private async handleUser(
+    primary: string,
+    lowerTokens: string[],
+    rawTokens: string[]
+  ): Promise<string[]> {
     if (primary === 'enable' || primary === 'en') {
       this.mode = 'priv';
       return [];
     }
-    return this.invalid(`Perintah tidak dikenal di User mode. Coba "enable".`);
+    if (primary === 'ping') {
+      return this.handlePing(rawTokens);
+    }
+    if (
+      (lowerTokens[0] === 'show' || lowerTokens[0] === 'sh') &&
+      lowerTokens[1] === 'ip' &&
+      (lowerTokens[2] === 'interface' || lowerTokens[2] === 'int') &&
+      (lowerTokens[3] === 'brief' || lowerTokens[3] === 'br' || !lowerTokens[3])
+    ) {
+      return this.showIpInterfaceBrief();
+    }
+    return this.invalid(`Perintah tidak dikenal di User mode. Coba "enable" atau "ping <ip>".`);
   }
 
   private async handlePriv(
@@ -581,7 +596,7 @@ export class CliSession {
       return [];
     }
 
-    if (lowerTokens[0] === 'ip' && lowerTokens[1] === 'address') {
+    if (lowerTokens[0] === 'ip' && (lowerTokens[1] === 'address' || lowerTokens[1] === 'addr')) {
       const ip = rawTokens[2];
       const mask = rawTokens[3];
       if (!ip || !mask) {

@@ -115,6 +115,11 @@ export class HeadlessSimulationEngine {
           subInterfaces: p.subInterfaces ? p.subInterfaces.map((s) => ({ ...s })) : undefined,
         })),
         routes: n.routes ? n.routes.map((r) => ({ ...r })) : undefined,
+        dhcpPools: n.dhcpPools
+          ? Object.fromEntries(
+              Object.entries(n.dhcpPools).map(([k, v]) => [k, { ...v }])
+            )
+          : undefined,
         arpTable: { ...(n.arpTable || {}) },
         macTable: { ...(n.macTable || {}) },
         natTable: n.natTable ? n.natTable.map((nt) => ({ ...nt })) : undefined,
@@ -587,10 +592,12 @@ export class HeadlessSimulationEngine {
       if (matches.length > 1 && fromDevice) {
         // Jika ada duplikasi IP, utamakan host di broadcast domain L2 yang sama dari egress port
         const scope = this.broadcastPaths(fromDevice.id, egressPortId, vlanHint);
-        const local = matches.find((m) => scope.some((s) => s.dev.id === m.dev.id));
+        const local =
+          matches.find((m) => m.port.status === 'up' && scope.some((s) => s.dev.id === m.dev.id)) ??
+          matches.find((m) => scope.some((s) => s.dev.id === m.dev.id));
         if (local) return local;
       }
-      return matches[0];
+      return matches.find((m) => m.port.status === 'up') ?? matches[0];
     }
     // IP publik tersimulasi dimiliki oleh perangkat Cloud Internet
     if ((CLOUD_PUBLIC_IPS as readonly string[]).includes(ip)) {
@@ -1511,13 +1518,24 @@ export class HeadlessSimulationEngine {
       const arrivalPortId = path.at(-1)?.toPortId;
       const iface = dev.ports.find((p) => p.id === arrivalPortId);
       const pool = iface ? dev.dhcpPools?.[iface.id] : undefined;
+      const matchingSub = iface?.subInterfaces?.find(
+        (s) => pool && isSameSubnet(s.ipAddress, pool.network, pool.mask)
+      );
+      const effectiveIface = matchingSub
+        ? {
+            ...iface!,
+            ipAddress: matchingSub.ipAddress,
+            subnetMask: matchingSub.subnetMask,
+            vlanId: matchingSub.vlanId,
+          }
+        : iface;
       if (
-        iface &&
+        effectiveIface &&
         pool?.enabled &&
-        iface.ipAddress &&
-        isSameSubnet(iface.ipAddress, pool.network, pool.mask)
+        effectiveIface.ipAddress &&
+        isSameSubnet(effectiveIface.ipAddress, pool.network, pool.mask)
       ) {
-        chosen = { router: dev, iface, pool, path };
+        chosen = { router: dev, iface: effectiveIface, pool, path };
         break;
       }
     }
@@ -2065,8 +2083,9 @@ export class HeadlessSimulationEngine {
       };
     }
 
+    const isLoopback = targetIp.startsWith('127.');
     const sourcePort = this.chooseSourcePort(sourceDev, targetIp);
-    if (!sourcePort) {
+    if (!sourcePort && !isLoopback) {
       const msg = `${sourceDev.label}: Port belum memiliki konfigurasi IP/Subnet.`;
       this.record(ctx, 'ERROR', msg);
       return {
@@ -2074,7 +2093,7 @@ export class HeadlessSimulationEngine {
       };
     }
 
-    if (sourcePort.status !== 'up') {
+    if (sourcePort && sourcePort.status !== 'up' && !isLoopback) {
       const msg = `${sourceDev.label}: Kabel tidak terhubung (Link DOWN).`;
       this.record(ctx, 'ERROR', msg);
       return {
@@ -2082,18 +2101,26 @@ export class HeadlessSimulationEngine {
       };
     }
 
-    let effectiveSourcePort = sourcePort;
-    const matchingSubIf = sourcePort.subInterfaces?.find((s) =>
+    let effectiveSourcePort = sourcePort ?? {
+      id: 'lo0',
+      name: 'Loopback0',
+      status: 'up' as const,
+      kind: 'ethernet' as const,
+      macAddress: '00:00:00:00:00:00',
+      ipAddress: '127.0.0.1',
+      subnetMask: '255.0.0.0',
+    };
+    const matchingSubIf = sourcePort?.subInterfaces?.find((s) =>
       isSameSubnet(s.ipAddress, targetIp, s.subnetMask)
     );
-    if (matchingSubIf) {
+    if (matchingSubIf && sourcePort) {
       effectiveSourcePort = {
         ...sourcePort,
         ipAddress: matchingSubIf.ipAddress,
         subnetMask: matchingSubIf.subnetMask,
         vlanId: matchingSubIf.vlanId,
       };
-    } else if (!sourcePort.ipAddress && sourcePort.subInterfaces?.length) {
+    } else if (sourcePort && !sourcePort.ipAddress && sourcePort.subInterfaces?.length) {
       const subIf = sourcePort.subInterfaces[0];
       if (subIf) {
         effectiveSourcePort = {

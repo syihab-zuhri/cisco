@@ -483,5 +483,9 @@ export function clearExercisesStorage(): void {
   } catch {
     // Fallback if blocked
   }
-  memoryStore.removeItem(STORAGE_KEY_EXERCISES);
+  try {
+    memoryStore.removeItem(STORAGE_KEY_EXERCISES);
+  } catch {
+    // Fallback if blocked
+  }
 }
