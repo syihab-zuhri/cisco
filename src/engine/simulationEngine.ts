@@ -568,8 +568,19 @@ export class HeadlessSimulationEngine {
     for (const dev of this.devices.values()) {
       for (const port of dev.ports) {
         if (port.ipAddress === ip) matches.push({ dev, port });
-        // IP sub-interface (router-on-a-stick) dimiliki port fisiknya
-        if (port.subInterfaces?.some((s) => s.ipAddress === ip)) matches.push({ dev, port });
+        // IP sub-interface (router-on-a-stick): sintesis port agar membawa IP, mask, dan vlanId sub-interface
+        const matchingSub = port.subInterfaces?.find((s) => s.ipAddress === ip);
+        if (matchingSub) {
+          matches.push({
+            dev,
+            port: {
+              ...port,
+              ipAddress: matchingSub.ipAddress,
+              subnetMask: matchingSub.subnetMask,
+              vlanId: matchingSub.vlanId,
+            },
+          });
+        }
       }
     }
     if (matches.length > 0) {
@@ -672,47 +683,98 @@ export class HeadlessSimulationEngine {
         }
       }
       for (const r of dev.routes ?? []) {
+        // Skip rute RIP yang unreachable / poisoned (metric >= 16)
+        if (r.source === 'rip' && (r.metric ?? 1) >= 16) continue;
+
         const isDefault =
           r.network === '0.0.0.0' && (r.subnetMask === '0.0.0.0' || r.subnetMask === '0');
         if (isDefault || isSameSubnet(targetIp, r.network, r.subnetMask)) {
           const prefix = isDefault ? 0 : prefixLength(r.subnetMask);
-          const isDirectlyAttached = !r.nextHop || r.nextHop === '0.0.0.0' || r.nextHop.trim() === '';
+          const isDirectlyAttached =
+            !r.nextHop ||
+            !isValidIp(r.nextHop) ||
+            r.nextHop === '0.0.0.0' ||
+            r.nextHop.trim() === '' ||
+            r.nextHop.toLowerCase() === 'directly connected';
           const effectiveNextHop = isDirectlyAttached ? targetIp : r.nextHop;
-          let egress = isDirectlyAttached
-            ? dev.ports.find((p) => p.id === r.interfaceId) ??
-              dev.ports.find(
+
+          let egress: PhysicalPort | undefined;
+          let subIfIp: string | undefined;
+          let vlanId: number | undefined;
+
+          if (isDirectlyAttached) {
+            const targetRef = (r.interfaceId || r.nextHop || '').toLowerCase().trim();
+            egress = dev.ports.find(
+              (p) =>
+                (p.id.toLowerCase() === targetRef || p.name.toLowerCase() === targetRef) &&
+                p.status === 'up'
+            );
+            if (!egress) {
+              for (const p of dev.ports) {
+                if (p.status !== 'up') continue;
+                const sub = p.subInterfaces?.find(
+                  (s) =>
+                    `${p.id}.${s.vlanId}`.toLowerCase() === targetRef ||
+                    `${p.name}.${s.vlanId}`.toLowerCase() === targetRef
+                );
+                if (sub) {
+                  egress = p;
+                  subIfIp = sub.ipAddress;
+                  vlanId = sub.vlanId;
+                  break;
+                }
+              }
+            }
+            if (!egress) {
+              egress = dev.ports.find(
                 (p) =>
                   p.ipAddress &&
                   p.status === 'up' &&
                   isSameSubnet(p.ipAddress, targetIp, p.subnetMask ?? '255.255.255.0')
-              )
-            : dev.ports.find(
-                (p) =>
-                  p.ipAddress &&
-                  p.status === 'up' &&
-                  isSameSubnet(p.ipAddress, r.nextHop, p.subnetMask ?? '255.255.255.0')
               );
-          let subIfIp: string | undefined;
-          let vlanId: number | undefined;
-          if (!egress) {
-            for (const p of dev.ports) {
-              if (p.status !== 'up') continue;
-              const sub = p.subInterfaces?.find((s) =>
-                isSameSubnet(s.ipAddress, effectiveNextHop, s.subnetMask)
-              );
-              if (sub) {
-                egress = p;
-                subIfIp = sub.ipAddress;
-                vlanId = sub.vlanId;
-                break;
+            }
+          } else {
+            egress = dev.ports.find(
+              (p) =>
+                p.ipAddress &&
+                p.status === 'up' &&
+                isSameSubnet(p.ipAddress, r.nextHop, p.subnetMask ?? '255.255.255.0')
+            );
+            if (!egress) {
+              for (const p of dev.ports) {
+                if (p.status !== 'up') continue;
+                const sub = p.subInterfaces?.find((s) =>
+                  isSameSubnet(s.ipAddress, effectiveNextHop, s.subnetMask)
+                );
+                if (sub) {
+                  egress = p;
+                  subIfIp = sub.ipAddress;
+                  vlanId = sub.vlanId;
+                  break;
+                }
               }
             }
+            if (!egress && r.interfaceId) {
+              egress = dev.ports.find(
+                (p) =>
+                  (p.id === r.interfaceId || p.name.toLowerCase() === r.interfaceId.toLowerCase()) &&
+                  p.status === 'up'
+              );
+            }
           }
-          if (!egress) {
-            egress = dev.ports.find((p) => p.id === r.interfaceId);
+
+          // Rute tidak valid jika antarmuka egress tidak UP (port down / disconnect)
+          if (!egress || egress.status !== 'up') continue;
+
+          if (!best || prefix > best.prefix) {
+            best = {
+              nextHopIp: effectiveNextHop,
+              prefix,
+              portId: egress.id,
+              subIfIp,
+              vlanId: vlanId ?? egress.vlanId,
+            };
           }
-          if (!best || prefix > best.prefix)
-            best = { nextHopIp: effectiveNextHop, prefix, portId: egress?.id ?? r.interfaceId, subIfIp, vlanId };
         }
       }
       if (!best) {
@@ -1014,6 +1076,8 @@ export class HeadlessSimulationEngine {
             this.buildFramePdu(hop, 'ICMP_REQ', {
               packet,
               icmp,
+              srcMac: arpSender.port.macAddress,
+              dstMac: owner.port.macAddress,
               vlanId: next.vlanId ?? arpSender.port.vlanId,
               note: notes.length > 0 ? notes.join(' · ') : undefined,
             }),
@@ -1141,51 +1205,91 @@ export class HeadlessSimulationEngine {
   ): void {
     let ttlReply = INITIAL_TTL;
     let unNatted = !nat;
-    for (const hop of returnPath) {
-      const packet: IPv4Packet = {
-        srcIp: targetIp,
-        dstIp: unNatted ? source.port.ipAddress! : nat!.globalIp,
-        ttl: ttlReply,
-        protocol: 'ICMP',
-        id: ICMP_IDENTIFIER,
-      };
-      const icmp: IcmpPacket = {
-        type: 0,
-        code: 0,
-        identifier: ICMP_IDENTIFIER,
-        sequence: echoIndex + 1,
-        payloadBytes: ICMP_PAYLOAD_BYTES,
-      };
-      const note =
-        nat && unNatted && hop.fromNodeId === nat.routerId
-          ? `NAT: dst dikembalikan ke ${nat.insideIp}`
-          : undefined;
-      const fromPort = this.portOf(hop.fromNodeId, hop.fromPortId);
-      const toPort = this.portOf(hop.toNodeId, hop.toPortId);
-      this.recordHop(
-        ctx,
-        hop,
-        'ICMP_REP',
-        `ICMP Echo Reply: ${targetIp} -> ${source.port.ipAddress}`,
-        this.buildFramePdu(hop, 'ICMP_REP', {
-          packet,
-          icmp,
-          srcMac: fromPort?.macAddress,
-          dstMac: toPort?.macAddress,
-          vlanId: fromPort?.vlanId,
-          note,
-        })
-      );
-      if (fromPort?.macAddress) {
-        this.learnCamOnHop(ctx, hop, fromPort.macAddress, 'ICMP_REP', true);
+
+    // Segmentasi returnPath ke dalam segmen-segmen L2:
+    // Segmen dimulai di perangkat L3 (pengirim reply atau router transit)
+    // dan berakhir di perangkat L3 berikutnya (router transit atau host tujuan).
+    let segStart = 0;
+    while (segStart < returnPath.length) {
+      let segEnd = segStart;
+      while (
+        segEnd < returnPath.length - 1 &&
+        isL2Intermediate(this.devices.get(returnPath[segEnd].toNodeId)?.type ?? 'pc')
+      ) {
+        segEnd++;
       }
-      const arrivedDev = this.devices.get(hop.toNodeId);
-      if (arrivedDev?.type === 'router') {
-        ttlReply -= 1;
+
+      const firstHop = returnPath[segStart];
+      const lastHop = returnPath[segEnd];
+
+      const startPort = this.portOf(firstHop.fromNodeId, firstHop.fromPortId);
+      const endPort = this.portOf(lastHop.toNodeId, lastHop.toPortId);
+
+      const segSrcMac = startPort?.macAddress ?? '00:00:00:00:00:00';
+      const segDstMac = endPort?.macAddress ?? '00:00:00:00:00:00';
+
+      // Evaluasi VLAN ID pada segmen ini (utamakan sub-interface jika ada)
+      const sub =
+        startPort?.subInterfaces?.find(
+          (s) =>
+            isSameSubnet(s.ipAddress, targetIp, s.subnetMask) ||
+            isSameSubnet(s.ipAddress, source.port.ipAddress!, s.subnetMask)
+        ) ??
+        endPort?.subInterfaces?.find(
+          (s) =>
+            isSameSubnet(s.ipAddress, targetIp, s.subnetMask) ||
+            isSameSubnet(s.ipAddress, source.port.ipAddress!, s.subnetMask)
+        );
+      const segVlanId = sub?.vlanId ?? startPort?.vlanId ?? endPort?.vlanId;
+
+      for (let i = segStart; i <= segEnd; i++) {
+        const hop = returnPath[i];
+        const packet: IPv4Packet = {
+          srcIp: targetIp,
+          dstIp: unNatted ? source.port.ipAddress! : nat!.globalIp,
+          ttl: ttlReply,
+          protocol: 'ICMP',
+          id: ICMP_IDENTIFIER,
+        };
+        const icmp: IcmpPacket = {
+          type: 0,
+          code: 0,
+          identifier: ICMP_IDENTIFIER,
+          sequence: echoIndex + 1,
+          payloadBytes: ICMP_PAYLOAD_BYTES,
+        };
+        const note =
+          nat && unNatted && hop.fromNodeId === nat.routerId
+            ? `NAT: dst dikembalikan ke ${nat.insideIp}`
+            : undefined;
+
+        this.recordHop(
+          ctx,
+          hop,
+          'ICMP_REP',
+          `ICMP Echo Reply: ${targetIp} -> ${source.port.ipAddress}`,
+          this.buildFramePdu(hop, 'ICMP_REP', {
+            packet,
+            icmp,
+            srcMac: segSrcMac,
+            dstMac: segDstMac,
+            vlanId: segVlanId,
+            note,
+          })
+        );
+
+        this.learnCamOnHop(ctx, hop, segSrcMac, 'ICMP_REP', true);
+
+        const arrivedDev = this.devices.get(hop.toNodeId);
+        if (arrivedDev?.type === 'router') {
+          ttlReply -= 1;
+        }
+        if (nat && hop.toNodeId === nat.routerId) {
+          unNatted = true;
+        }
       }
-      if (nat && hop.toNodeId === nat.routerId) {
-        unNatted = true;
-      }
+
+      segStart = segEnd + 1;
     }
   }
 
@@ -1764,10 +1868,15 @@ export class HeadlessSimulationEngine {
                           protocol: 'RIP',
                           id: 0,
                         },
+                        srcMac: r.ports.find((p) => p.id === pr.portId)?.macAddress,
                         vlanId: pr.vlanId,
                         note: `RIPv2 poison reverse: ${route.network}/${route.mask} metric 16 via ${nextHopIp}`,
                       })
                     );
+                    const prPortMac = r.ports.find((p) => p.id === pr.portId)?.macAddress;
+                    if (prPortMac) {
+                      this.learnCamOnHop(ctx, hop, prPortMac, 'RIP_UPDATE', true);
+                    }
                     if (hop === path.at(-1)) {
                       event.effects = [
                         {
@@ -1816,9 +1925,15 @@ export class HeadlessSimulationEngine {
                       protocol: 'RIP',
                       id: 0,
                     },
+                    srcMac: r.ports.find((p) => p.id === pr.portId)?.macAddress,
+                    vlanId: pr.vlanId,
                     note: `RIPv2: ${route.network}/${route.mask} metric ${newMetric} via ${nextHopIp}`,
                   })
                 );
+                const ripSrcMac = r.ports.find((p) => p.id === pr.portId)?.macAddress;
+                if (ripSrcMac) {
+                  this.learnCamOnHop(ctx, hop, ripSrcMac, 'RIP_UPDATE', true);
+                }
                 if (hop === path.at(-1)) {
                   event.effects = [
                     {

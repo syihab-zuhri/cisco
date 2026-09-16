@@ -465,6 +465,20 @@ export function saveExercises(list: Exercise[]): void {
 
 export function clearExercisesStorage(): void {
   try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.removeItem(STORAGE_KEY_EXERCISES);
+    }
+  } catch {
+    // Fallback if blocked
+  }
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(STORAGE_KEY_EXERCISES);
+    }
+  } catch {
+    // Fallback if blocked
+  }
+  try {
     getStorage().removeItem(STORAGE_KEY_EXERCISES);
   } catch {
     // Fallback if blocked

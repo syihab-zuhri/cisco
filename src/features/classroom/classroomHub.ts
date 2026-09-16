@@ -129,7 +129,7 @@ class ClassroomHub {
 
       case 'EXERCISES_UPDATED': {
         const session = this.getSession();
-        if (session && session.classCode === event.classCode) {
+        if (session && (!event.classCode || session.classCode === event.classCode)) {
           session.activeExercises = event.exercises;
           session.activeExerciseId =
             event.exercises && event.exercises.length > 0 ? event.exercises[0].id : null;
@@ -197,7 +197,7 @@ class ClassroomHub {
 
       case 'CLASS_CLOSED': {
         const session = this.getSession();
-        if (session && session.classCode === event.classCode) {
+        if (session && (!event.classCode || session.classCode === event.classCode)) {
           session.status = 'closed';
           session.activeExercises = [];
           session.activeExerciseId = null;
@@ -205,6 +205,7 @@ class ClassroomHub {
         }
         this.saveActiveExercises([]);
         this.saveActiveExercise(null);
+        clearExercisesStorage();
         break;
       }
 
@@ -701,17 +702,29 @@ class ClassroomHub {
 
   private handleTeacherExitCleanup(): void {
     const session = this.getSession();
+    const classCode = session?.classCode || '';
     if (session && session.status !== 'closed') {
       this.closeClass(session.classCode);
+    } else {
+      if (session) {
+        session.status = 'closed';
+        session.activeExercises = [];
+        session.activeExerciseId = null;
+        this.saveSession(session);
+      }
+      this.saveActiveExercises([]);
+      this.saveActiveExercise(null);
+      clearExercisesStorage();
+      this.broadcast({
+        type: 'CLASS_CLOSED',
+        classCode,
+      });
+      this.broadcast({
+        type: 'EXERCISES_UPDATED',
+        classCode,
+        exercises: [],
+      });
     }
-    this.saveActiveExercises([]);
-    this.saveActiveExercise(null);
-    clearExercisesStorage();
-    this.broadcast({
-      type: 'EXERCISES_UPDATED',
-      classCode: session?.classCode || '',
-      exercises: [],
-    });
   }
 
   public isStudentActive(): boolean {
@@ -734,6 +747,7 @@ class ClassroomHub {
 
   public clearAll(): void {
     const curSession = this.getSession();
+    const classCode = curSession?.classCode || '';
     const storage = getStorage();
     storage.removeItem(STORAGE_KEY_SESSION);
     storage.removeItem(STORAGE_KEY_PARTICIPANTS);
@@ -745,17 +759,15 @@ class ClassroomHub {
     this.saveActiveExercise(null);
     this.setCurrentParticipant(null);
     this.setLockedRole(null);
-    if (curSession) {
-      this.broadcast({
-        type: 'CLASS_CLOSED',
-        classCode: curSession.classCode,
-      });
-      this.broadcast({
-        type: 'EXERCISES_UPDATED',
-        classCode: curSession.classCode,
-        exercises: [],
-      });
-    }
+    this.broadcast({
+      type: 'CLASS_CLOSED',
+      classCode,
+    });
+    this.broadcast({
+      type: 'EXERCISES_UPDATED',
+      classCode,
+      exercises: [],
+    });
   }
 }
 

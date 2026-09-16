@@ -177,6 +177,54 @@ describe('Classroom Feature Suite', () => {
       clearExercisesStorage();
       expect(loadExercises()).toEqual([]);
     });
+
+    it('loadExercises() mengembalikan array kosong secara default tanpa auto-seed', () => {
+      clearExercisesStorage();
+      expect(loadExercises()).toEqual([]);
+    });
+
+    it('guru keluar dari mode guru tanpa sesi kelas aktif tetap mengosongkan bank soal dan soal aktif', () => {
+      classroomHub.setLockedRole('teacher');
+      saveExercises([...DEFAULT_EXERCISES]);
+      classroomHub.saveActiveExercises([...DEFAULT_EXERCISES]);
+      classroomHub.saveActiveExercise(DEFAULT_EXERCISES[0]);
+      expect(loadExercises().length).toBeGreaterThan(0);
+      expect(classroomHub.getActiveExercises().length).toBeGreaterThan(0);
+
+      // Tidak ada sesi kelas yang dibuat (sesi null), guru langsung leaveClass
+      classroomHub.leaveClass();
+
+      expect(loadExercises()).toEqual([]);
+      expect(classroomHub.getActiveExercises()).toEqual([]);
+      expect(classroomHub.getActiveExercise()).toBeNull();
+      expect(classroomHub.getLockedRole()).toBeNull();
+    });
+
+    it('menyiarkan event CLASS_CLOSED dan EXERCISES_UPDATED (exercises: []) saat guru menutup kelas atau keluar peran', async () => {
+      let resolveClosed!: () => void;
+      const closedPromise = new Promise<void>((r) => { resolveClosed = r; });
+      let resolveUpdated!: () => void;
+      const updatedPromise = new Promise<void>((r) => { resolveUpdated = r; });
+      const unsub = classroomHub.subscribe((ev) => {
+        if (ev.type === 'CLASS_CLOSED') {
+          resolveClosed();
+        } else if (ev.type === 'EXERCISES_UPDATED' && (!ev.exercises || ev.exercises.length === 0)) {
+          resolveUpdated();
+        }
+      });
+
+      classroomHub.setLockedRole('teacher');
+      classroomHub.createClass('Kelas Broadcast', 'NET-BC1', undefined, DEFAULT_EXERCISES);
+
+      classroomHub.closeClass('NET-BC1');
+
+      await Promise.all([closedPromise, updatedPromise]);
+
+      expect(classroomHub.getActiveExercises()).toEqual([]);
+      expect(loadExercises()).toEqual([]);
+
+      unsub();
+    });
   });
 
   describe('Exercise Evaluator', () => {

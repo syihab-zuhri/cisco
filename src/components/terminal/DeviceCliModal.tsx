@@ -78,16 +78,18 @@ export function DeviceCliModal() {
         const label = useAppStore.getState().nodes.find((n) => n.id === deviceId)?.data.label ?? deviceId;
         useAppStore.getState().pushToast('success', `Konfigurasi ${label} berhasil disimpan ke NVRAM.`);
       },
-      setSubInterfaceConfig: (parentPortId, vlanId, updates) => {
+      setSubInterfaceConfig: (parentPortId, vlanId, updates, oldVlanId) => {
         const dev = useAppStore.getState().nodes.find((n) => n.id === deviceId)?.data;
         if (!dev) return;
         const port = dev.ports.find((p) => p.id === parentPortId);
         if (!port) return;
         const subInterfaces = [...(port.subInterfaces ?? [])];
-        const idx = subInterfaces.findIndex((s) => s.vlanId === vlanId);
+        const searchVlan = oldVlanId ?? vlanId;
+        const idx = subInterfaces.findIndex((s) => s.vlanId === searchVlan);
         if (idx >= 0) {
           subInterfaces[idx] = {
             ...subInterfaces[idx],
+            vlanId,
             ...('ipAddress' in updates ? { ipAddress: updates.ipAddress ?? '' } : {}),
             ...('subnetMask' in updates ? { subnetMask: updates.subnetMask ?? '' } : {}),
           };

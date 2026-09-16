@@ -33,7 +33,8 @@ export interface CliSessionDeps {
   setSubInterfaceConfig?: (
     parentPortId: string,
     vlanId: number,
-    updates: { ipAddress?: string; subnetMask?: string }
+    updates: { ipAddress?: string; subnetMask?: string },
+    oldVlanId?: number
   ) => void;
   removeSubInterface?: (parentPortId: string, vlanId: number) => void;
   clearMacTable?: () => void;
@@ -239,6 +240,8 @@ export class CliSession {
 
     if (
       cmd === 'show vlan brief' ||
+      cmd === 'sh vlan brief' ||
+      cmd === 'show vlan br' ||
       cmd === 'sh vlan br' ||
       cmd === 'show vlan' ||
       cmd === 'sh vlan'
@@ -355,7 +358,17 @@ export class CliSession {
       if (r.source === 'rip') {
         lines.push(`R       ${r.network}/${r.subnetMask} [${r.metric ?? 1}/1] via ${r.nextHop}, ${r.interfaceId}`);
       } else {
-        lines.push(`S       ${r.network}/${r.subnetMask} via ${r.nextHop}, ${r.interfaceId}`);
+        const isDirect =
+          !r.nextHop ||
+          !isValidIp(r.nextHop) ||
+          r.nextHop === '0.0.0.0' ||
+          r.nextHop.trim() === '' ||
+          r.nextHop.toLowerCase() === 'directly connected';
+        if (isDirect) {
+          lines.push(`S       ${r.network}/${r.subnetMask} is directly connected, ${r.interfaceId}`);
+        } else {
+          lines.push(`S       ${r.network}/${r.subnetMask} via ${r.nextHop}, ${r.interfaceId}`);
+        }
       }
     }
     if (lines.length === 2) {
@@ -640,8 +653,9 @@ export class CliSession {
         return this.invalid(`Invalid VLAN ID "${rawTokens[2]}". Rentang valid: 1-4094.`);
       }
       if (this.currentSubInterface) {
+        const oldVlanId = this.currentSubInterface.vlanId;
         this.currentSubInterface.vlanId = vlanId;
-        this.deps.setSubInterfaceConfig?.(this.currentSubInterface.parentPortId, vlanId, {});
+        this.deps.setSubInterfaceConfig?.(this.currentSubInterface.parentPortId, vlanId, {}, oldVlanId);
       } else {
         this.deps.setPortConfig(this.currentInterface!, { vlanId });
       }

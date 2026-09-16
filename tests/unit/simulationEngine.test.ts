@@ -654,10 +654,10 @@ describe('planPing — aliran event, PDU & determinisme (v1.2.0)', () => {
     // Frame ICMP hop keluar router: MAC sumber = port router fa0/1 (ditulis ulang per hop)
     const routerHop = icmpHops.find((e) => e.hop?.sourceNodeId === router.id)!;
     expect(routerHop.pdu?.frame.srcMac).toBe('00:50:79:RT:00:02'); // fa0/1 router
-    // Hop terakhir adalah sw2 → PC-2: MAC sumber = port switch, IP end-to-end tetap
+    // Hop terakhir adalah sw2 → PC-2: switch L2 tidak mengubah MAC sumber (tetap MAC router fa0/1)
     const lastHop = icmpHops[icmpHops.length - 1];
     expect(lastHop.hop?.sourceNodeId).toBe('sw-2');
-    expect(lastHop.pdu?.frame.srcMac).toBe('00:50:79:SW:02:02');
+    expect(lastHop.pdu?.frame.srcMac).toBe('00:50:79:RT:00:02');
     expect(lastHop.pdu?.packet?.dstIp).toBe('192.168.2.20'); // IP end-to-end tetap
   });
 

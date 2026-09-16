@@ -177,7 +177,7 @@ export function ClassroomStudentHUD() {
           break;
 
         case 'CLASS_CLOSED':
-          if (!session || session.classCode === event.classCode) {
+          if (!session || !event.classCode || session.classCode === event.classCode) {
             pushToast('warning', 'Sesi kelas telah diakhiri oleh guru.');
             setActiveExercises([]);
             setSelectedExerciseIndex(0);
@@ -518,7 +518,7 @@ export function ClassroomStudentHUD() {
           ) : null}
         </div>
 
-        {evaluation && (
+        {evaluation && activeExercise && (
           <Badge
             variant="outline"
             className={`text-[10px] font-bold shrink-0 ${
