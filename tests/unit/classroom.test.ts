@@ -11,6 +11,117 @@ import {
 import type { DeviceData, TopologyLink } from '../../src/types/network';
 import type { Exercise } from '../../src/features/classroom/types';
 
+
+const MOCK_EXERCISES: Exercise[] = [
+  {
+    id: 'ex-01-lan-basic',
+    title: 'Tantangan 01: Koneksi LAN Dasar (PC ke Switch & Server)',
+    instructions:
+      'Hubungkan PC-1 dan Server-1 ke Switch-1. Atur IP PC-1 ke 192.168.1.10 (mask 255.255.255.0) dan Server-1 ke 192.168.1.50 (mask 255.255.255.0). Pastikan ping dari PC-1 ke Server-1 berhasil.',
+    difficulty: 'Dasar',
+    starterTemplateId: 'tpl-single-switch-lan',
+    targets: [
+      {
+        id: 'tgt-pc1-ip',
+        title: 'Konfigurasi IP PC-1 (192.168.1.10/24)',
+        type: 'device_config',
+        deviceId: 'pc-1',
+        address: '192.168.1.10',
+        subnetMask: '255.255.255.0',
+      },
+      {
+        id: 'tgt-srv1-ip',
+        title: 'Konfigurasi IP Server-1 (192.168.1.50/24)',
+        type: 'device_config',
+        deviceId: 'server-1',
+        address: '192.168.1.50',
+        subnetMask: '255.255.255.0',
+      },
+      {
+        id: 'tgt-link-pc-sw',
+        title: 'Kabel fisik PC-1 terhubung ke Switch-1',
+        type: 'link_exists',
+        fromDeviceId: 'pc-1',
+        toDeviceId: 'sw-1',
+      },
+      {
+        id: 'tgt-ping-pc-srv',
+        title: 'Ping berhasil: PC-1 menjangkau Server-1 (ICMP 100%)',
+        type: 'reachability',
+        sourceDeviceId: 'pc-1',
+        destinationDeviceId: 'server-1',
+      },
+    ],
+  },
+  {
+    id: 'ex-02-router-gateway',
+    title: 'Tantangan 02: Routing Lintas Subnet dengan Default Gateway',
+    instructions:
+      'Hubungkan dua subnet berbeda melalui Router-1. Subnet A (192.168.1.0/24) untuk PC-1 dengan gateway 192.168.1.1. Subnet B (192.168.2.0/24) untuk PC-2 dengan gateway 192.168.2.1. Uji ping lintas segmen.',
+    difficulty: 'Menengah',
+    starterTemplateId: 'tpl-classic-router-direct',
+    targets: [
+      {
+        id: 'tgt-pc1-ip',
+        title: 'Konfigurasi IP PC-1 (192.168.1.10/24)',
+        type: 'device_config',
+        deviceId: 'pc-1',
+        address: '192.168.1.10',
+        subnetMask: '255.255.255.0',
+      },
+      {
+        id: 'tgt-pc2-ip',
+        title: 'Konfigurasi IP PC-2 (192.168.2.20/24)',
+        type: 'device_config',
+        deviceId: 'pc-2',
+        address: '192.168.2.20',
+        subnetMask: '255.255.255.0',
+      },
+      {
+        id: 'tgt-ping-cross-subnet',
+        title: 'Ping lintas subnet: PC-1 ke PC-2 melalui Router',
+        type: 'reachability',
+        sourceDeviceId: 'pc-1',
+        destinationDeviceId: 'pc-2',
+      },
+    ],
+  },
+  {
+    id: 'ex-03-vlan-segmentation',
+    title: 'Tantangan 03: Isolasi Keamanan Jaringan dengan VLAN',
+    instructions:
+      'Lakukan segmentasi port pada Switch-1. Kelompokkan port PC-1 ke dalam VLAN 10 dan PC-2 ke dalam VLAN 20. Pastikan kedua host yang berbeda VLAN tidak dapat saling membocorkan trafik.',
+    difficulty: 'Menengah',
+    starterTemplateId: 'tpl-single-switch-lan',
+    targets: [
+      {
+        id: 'tgt-vlan-pc1',
+        title: 'Port PC-1 berada pada VLAN 10 (Access)',
+        type: 'vlan_config',
+        deviceId: 'sw-1',
+        portId: 'fa0/1',
+        vlanId: 10,
+        mode: 'access',
+      },
+      {
+        id: 'tgt-vlan-pc2',
+        title: 'Port PC-2 berada pada VLAN 20 (Access)',
+        type: 'vlan_config',
+        deviceId: 'sw-1',
+        portId: 'fa0/2',
+        vlanId: 20,
+        mode: 'access',
+      },
+      {
+        id: 'tgt-link-sw-pc1',
+        title: 'Koneksi fisik PC-1 ke Switch-1',
+        type: 'link_exists',
+        fromDeviceId: 'pc-1',
+        toDeviceId: 'sw-1',
+      },
+    ],
+  },
+];
 describe('Classroom Feature Suite', () => {
   beforeEach(() => {
     classroomHub.clearAll();
@@ -84,10 +195,10 @@ describe('Classroom Feature Suite', () => {
   describe('Teacher Exit and Exercise Purging Lifecycle', () => {
     it('menutup kelas (closeClass) membersihkan seluruh soal aktif dan mengosongkan bank soal di storage', () => {
       classroomHub.setLockedRole('teacher');
-      saveExercises([...DEFAULT_EXERCISES]);
+      saveExercises([...MOCK_EXERCISES]);
       expect(loadExercises().length).toBeGreaterThan(0);
 
-      classroomHub.createClass('Kelas TKJ 1', 'NET-EX1', undefined, DEFAULT_EXERCISES);
+      classroomHub.createClass('Kelas TKJ 1', 'NET-EX1', undefined, MOCK_EXERCISES);
       expect(classroomHub.getActiveExercises().length).toBeGreaterThan(0);
       expect(classroomHub.getActiveExercise()).not.toBeNull();
 
@@ -105,10 +216,10 @@ describe('Classroom Feature Suite', () => {
 
     it('guru meninggalkan kelas (leaveClass) membersihkan seluruh soal aktif dan bank soal storage', () => {
       classroomHub.setLockedRole('teacher');
-      saveExercises([...DEFAULT_EXERCISES]);
+      saveExercises([...MOCK_EXERCISES]);
       expect(loadExercises().length).toBeGreaterThan(0);
 
-      classroomHub.createClass('Kelas TKJ 2', 'NET-EX2', undefined, DEFAULT_EXERCISES);
+      classroomHub.createClass('Kelas TKJ 2', 'NET-EX2', undefined, MOCK_EXERCISES);
       expect(classroomHub.getActiveExercises().length).toBeGreaterThan(0);
 
       // Guru leaveClass
@@ -123,10 +234,10 @@ describe('Classroom Feature Suite', () => {
 
     it('berganti peran dari guru ke student atau null (setLockedRole) membersihkan bank soal dan soal aktif', () => {
       classroomHub.setLockedRole('teacher');
-      saveExercises([...DEFAULT_EXERCISES]);
+      saveExercises([...MOCK_EXERCISES]);
       expect(loadExercises().length).toBeGreaterThan(0);
 
-      classroomHub.createClass('Kelas TKJ 3', 'NET-EX3', undefined, DEFAULT_EXERCISES);
+      classroomHub.createClass('Kelas TKJ 3', 'NET-EX3', undefined, MOCK_EXERCISES);
       expect(classroomHub.getActiveExercises().length).toBeGreaterThan(0);
 
       // Beralih ke student
@@ -138,7 +249,7 @@ describe('Classroom Feature Suite', () => {
 
       // Masuk lagi ke mode guru, simpan soal, lalu keluar ke null
       classroomHub.setLockedRole('teacher');
-      saveExercises([...DEFAULT_EXERCISES]);
+      saveExercises([...MOCK_EXERCISES]);
       expect(loadExercises().length).toBeGreaterThan(0);
 
       classroomHub.setLockedRole(null);
@@ -150,8 +261,8 @@ describe('Classroom Feature Suite', () => {
 
     it('clearAll membersihkan seluruh data sesi, peserta, submission, activeExercises, dan bank soal di storage', () => {
       classroomHub.setLockedRole('teacher');
-      saveExercises([...DEFAULT_EXERCISES]);
-      classroomHub.createClass('Kelas TKJ 4', 'NET-EX4', undefined, DEFAULT_EXERCISES);
+      saveExercises([...MOCK_EXERCISES]);
+      classroomHub.createClass('Kelas TKJ 4', 'NET-EX4', undefined, MOCK_EXERCISES);
       classroomHub.joinClass('NET-EX4', 'Murid 1');
 
       classroomHub.clearAll();
@@ -165,14 +276,14 @@ describe('Classroom Feature Suite', () => {
     });
 
     it('saveExercises dengan array kosong atau clearExercisesStorage() mengosongkan storage soal', () => {
-      saveExercises([...DEFAULT_EXERCISES]);
-      expect(loadExercises().length).toBe(DEFAULT_EXERCISES.length);
+      saveExercises([...MOCK_EXERCISES]);
+      expect(loadExercises().length).toBe(MOCK_EXERCISES.length);
 
       saveExercises([]);
       expect(loadExercises()).toEqual([]);
 
-      saveExercises([...DEFAULT_EXERCISES]);
-      expect(loadExercises().length).toBe(DEFAULT_EXERCISES.length);
+      saveExercises([...MOCK_EXERCISES]);
+      expect(loadExercises().length).toBe(MOCK_EXERCISES.length);
 
       clearExercisesStorage();
       expect(loadExercises()).toEqual([]);
@@ -184,11 +295,15 @@ describe('Classroom Feature Suite', () => {
       expect(loadExercises()).toEqual([]);
     });
 
+    it('DEFAULT_EXERCISES kosong secara default untuk eliminasi total soal bawaan', () => {
+      expect(DEFAULT_EXERCISES).toEqual([]);
+    });
+
     it('guru keluar dari mode guru tanpa sesi kelas aktif tetap mengosongkan bank soal dan soal aktif', () => {
       classroomHub.setLockedRole('teacher');
-      saveExercises([...DEFAULT_EXERCISES]);
-      classroomHub.saveActiveExercises([...DEFAULT_EXERCISES]);
-      classroomHub.saveActiveExercise(DEFAULT_EXERCISES[0]);
+      saveExercises([...MOCK_EXERCISES]);
+      classroomHub.saveActiveExercises([...MOCK_EXERCISES]);
+      classroomHub.saveActiveExercise(MOCK_EXERCISES[0]);
       expect(loadExercises().length).toBeGreaterThan(0);
       expect(classroomHub.getActiveExercises().length).toBeGreaterThan(0);
 
@@ -215,7 +330,7 @@ describe('Classroom Feature Suite', () => {
       });
 
       classroomHub.setLockedRole('teacher');
-      classroomHub.createClass('Kelas Broadcast', 'NET-BC1', undefined, DEFAULT_EXERCISES);
+      classroomHub.createClass('Kelas Broadcast', 'NET-BC1', undefined, MOCK_EXERCISES);
 
       classroomHub.closeClass('NET-BC1');
 
@@ -228,7 +343,7 @@ describe('Classroom Feature Suite', () => {
     });
 
     it('menghapus soal terakhir berhasil dan menyisakan daftar kosong serta membersihkan storage', () => {
-      saveExercises([DEFAULT_EXERCISES[0]]);
+      saveExercises([MOCK_EXERCISES[0]]);
       expect(loadExercises().length).toBe(1);
 
       // Simulasi guru menghapus soal terakhir
@@ -243,10 +358,9 @@ describe('Classroom Feature Suite', () => {
 
     it('guru keluar dari Mode Guru sepenuhnya membersihkan soal dari memori dan storage', () => {
       classroomHub.setLockedRole('teacher');
-      saveExercises([...DEFAULT_EXERCISES]);
-      classroomHub.saveActiveExercises([...DEFAULT_EXERCISES]);
-      classroomHub.saveActiveExercise(DEFAULT_EXERCISES[0]);
-
+      saveExercises([...MOCK_EXERCISES]);
+      classroomHub.saveActiveExercises([...MOCK_EXERCISES]);
+      classroomHub.saveActiveExercise(MOCK_EXERCISES[0]);
       expect(loadExercises().length).toBeGreaterThan(0);
       expect(classroomHub.getActiveExercises().length).toBeGreaterThan(0);
       expect(classroomHub.getActiveExercise()).not.toBeNull();
@@ -265,7 +379,7 @@ describe('Classroom Feature Suite', () => {
 
     it('penutupan modal saat mode guru aktif tanpa sesi kelas aktif membersihkan mode guru dan bank soal', () => {
       classroomHub.setLockedRole('teacher');
-      saveExercises([...DEFAULT_EXERCISES]);
+      saveExercises([...MOCK_EXERCISES]);
       expect(loadExercises().length).toBeGreaterThan(0);
       expect(classroomHub.getSession()).toBeNull();
 
@@ -290,8 +404,8 @@ describe('Classroom Feature Suite', () => {
 
     it('penutupan modal saat mode guru aktif dengan sesi kelas aktif selalu menutup kelas dan membersihkan seluruh soal dari memori dan storage', () => {
       classroomHub.setLockedRole('teacher');
-      saveExercises([...DEFAULT_EXERCISES]);
-      classroomHub.createClass('Kelas Ujian Modal', 'MODAL-99', undefined, DEFAULT_EXERCISES);
+      saveExercises([...MOCK_EXERCISES]);
+      classroomHub.createClass('Kelas Ujian Modal', 'MODAL-99', undefined, MOCK_EXERCISES);
       expect(classroomHub.getActiveExercises().length).toBeGreaterThan(0);
       expect(classroomHub.getActiveExercise()).not.toBeNull();
       expect(loadExercises().length).toBeGreaterThan(0);
@@ -340,8 +454,8 @@ describe('Classroom Feature Suite', () => {
         }
       });
       classroomHub.setLockedRole('teacher');
-      saveExercises([...DEFAULT_EXERCISES]);
-      classroomHub.createClass('Kelas Audit', 'AUDIT-101', undefined, DEFAULT_EXERCISES);
+      saveExercises([...MOCK_EXERCISES]);
+      classroomHub.createClass('Kelas Audit', 'AUDIT-101', undefined, MOCK_EXERCISES);
       classroomHub.joinClass('AUDIT-101', 'Peserta 1');
 
       expect(classroomHub.getLockedRole()).toBe('teacher');
@@ -383,18 +497,18 @@ describe('Classroom Feature Suite', () => {
     });
 
     it('penghapusan soal satu per satu sampai habis mengosongkan bank soal dan soal aktif', () => {
-      saveExercises([DEFAULT_EXERCISES[0], DEFAULT_EXERCISES[1]]);
+      saveExercises([MOCK_EXERCISES[0], MOCK_EXERCISES[1]]);
       expect(loadExercises().length).toBe(2);
 
       // Hapus soal pertama
       let currentList = loadExercises();
-      let updated = currentList.filter((x) => x.id !== DEFAULT_EXERCISES[0].id);
+      let updated = currentList.filter((x) => x.id !== MOCK_EXERCISES[0].id);
       saveExercises(updated);
       expect(loadExercises().length).toBe(1);
 
       // Hapus soal kedua (soal terakhir)
       currentList = loadExercises();
-      updated = currentList.filter((x) => x.id !== DEFAULT_EXERCISES[1].id);
+      updated = currentList.filter((x) => x.id !== MOCK_EXERCISES[1].id);
       saveExercises(updated);
       if (updated.length === 0) {
         clearExercisesStorage();
@@ -438,7 +552,7 @@ describe('Classroom Feature Suite', () => {
 
     it('pada startup/inisialisasi ClassroomHub tanpa sesi aktif, storage bank soal lama otomatis dibersihkan', () => {
       // Simulasikan data legacy tersimpan di storage sebelum hub diinisialisasi
-      saveExercises([...DEFAULT_EXERCISES]);
+      saveExercises([...MOCK_EXERCISES]);
       expect(loadExercises().length).toBeGreaterThan(0);
       expect(classroomHub.getSession()).toBeNull();
 
@@ -451,7 +565,7 @@ describe('Classroom Feature Suite', () => {
 
     it('invarian pembukaan modal tanpa sesi aktif: bank soal tetap kosong [] dan storage dibersihkan', () => {
       // Simulasikan ada data legacy
-      saveExercises([...DEFAULT_EXERCISES]);
+      saveExercises([...MOCK_EXERCISES]);
       expect(loadExercises().length).toBeGreaterThan(0);
 
       // Simulasikan logika ClassroomModal saat isOpen dan !existingSession
@@ -514,7 +628,7 @@ describe('Classroom Feature Suite', () => {
         { sourceNodeId: 'server-1', sourcePortId: 'fa0', targetNodeId: 'sw-1', targetPortId: 'fa0/2' },
       ];
 
-      const ex1 = DEFAULT_EXERCISES[0]; // ex-01-lan-basic
+      const ex1 = MOCK_EXERCISES[0]; // ex-01-lan-basic
       const evalResult = await evaluateExercise(ex1, devices, links);
 
       expect(evalResult.status).toBe('passed');
@@ -539,7 +653,7 @@ describe('Classroom Feature Suite', () => {
         { sourceNodeId: 'server-1', sourcePortId: 'fa0', targetNodeId: 'sw-1', targetPortId: 'fa0/2' },
       ];
 
-      const ex1 = DEFAULT_EXERCISES[0];
+      const ex1 = MOCK_EXERCISES[0];
       const evalResult = await evaluateExercise(ex1, devices, links);
 
       expect(evalResult.status).toBe('partial');
@@ -552,7 +666,7 @@ describe('Classroom Feature Suite', () => {
       const emptyDevices: DeviceData[] = [];
       const emptyLinks: TopologyLink[] = [];
 
-      const ex1 = DEFAULT_EXERCISES[0];
+      const ex1 = MOCK_EXERCISES[0];
       const evalResult = await evaluateExercise(ex1, emptyDevices, emptyLinks);
 
       expect(evalResult.status).toBe('failed');

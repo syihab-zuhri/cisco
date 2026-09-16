@@ -252,6 +252,16 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
     }
   }, [isOpen]);
 
+  // Cleanup saat komponen unmount: jika peran guru aktif, bersihkan seluruh data guru
+  useEffect(() => {
+    return () => {
+      const role = classroomHub.getLockedRole();
+      if (role === 'teacher') {
+        purgeAllTeacherData();
+      }
+    };
+  }, []);
+
   // Polling server relay setiap 2 detik selama modal aktif agar daftar peserta dan event sinkron lintas perangkat
   useEffect(() => {
     if (!isOpen) return;
@@ -522,6 +532,13 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
   };
 
   const handleLoadDefaultExercises = () => {
+    if (DEFAULT_EXERCISES.length === 0) {
+      pushToast(
+        'info',
+        'Tidak ada soal bawaan (soal diatur mulai dari nol). Anda dapat membuat soal baru atau mengimpor file.'
+      );
+      return;
+    }
     saveExercises(DEFAULT_EXERCISES);
     setExercises(DEFAULT_EXERCISES);
     setSelectedExercise(DEFAULT_EXERCISES[0]);
