@@ -245,9 +245,10 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
     } else {
       const role = classroomHub.getLockedRole();
       setLockedRole(role);
-      const loaded = loadExercises();
-      setExercises(loaded);
-      setSelectedExercise(loaded[0] || null);
+      clearExercisesStorage();
+      setExercises([]);
+      setSelectedExercise(null);
+      setSelectedExamExerciseIds([]);
     }
   }, [isOpen]);
 

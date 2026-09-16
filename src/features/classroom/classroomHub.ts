@@ -51,7 +51,7 @@ function getStorage() {
 
 type EventListener = (event: ClassroomEvent) => void;
 
-class ClassroomHub {
+export class ClassroomHub {
   private channel: BroadcastChannel | null = null;
   private listeners: Set<EventListener> = new Set();
 
@@ -67,6 +67,9 @@ class ClassroomHub {
       } catch (err) {
         console.warn('[ClassroomHub] BroadcastChannel init fallback:', err);
       }
+    }
+    if (!this.getSession()) {
+      clearExercisesStorage();
     }
   }
 

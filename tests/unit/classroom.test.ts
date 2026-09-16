@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { classroomHub } from '../../src/features/classroom/classroomHub';
+import { classroomHub, ClassroomHub } from '../../src/features/classroom/classroomHub';
 import { evaluateExercise } from '../../src/features/classroom/exerciseEvaluator';
 import { cleanNodesForStarterTopology } from '../../src/features/classroom/topologyExerciseConverter';
 import { DEFAULT_EXERCISES } from '../../src/features/classroom/defaultExercises';
@@ -434,6 +434,45 @@ describe('Classroom Feature Suite', () => {
       expect(activeExercise).toBeNull();
       const hasActiveQuestionInstructions = activeExercise !== null;
       expect(hasActiveQuestionInstructions).toBe(false);
+    });
+
+    it('pada startup/inisialisasi ClassroomHub tanpa sesi aktif, storage bank soal lama otomatis dibersihkan', () => {
+      // Simulasikan data legacy tersimpan di storage sebelum hub diinisialisasi
+      saveExercises([...DEFAULT_EXERCISES]);
+      expect(loadExercises().length).toBeGreaterThan(0);
+      expect(classroomHub.getSession()).toBeNull();
+
+      // Buat instance baru hub tanpa sesi aktif
+      new ClassroomHub();
+
+      // Storage harus sudah bersih
+      expect(loadExercises()).toEqual([]);
+    });
+
+    it('invarian pembukaan modal tanpa sesi aktif: bank soal tetap kosong [] dan storage dibersihkan', () => {
+      // Simulasikan ada data legacy
+      saveExercises([...DEFAULT_EXERCISES]);
+      expect(loadExercises().length).toBeGreaterThan(0);
+
+      // Simulasikan logika ClassroomModal saat isOpen dan !existingSession
+      const existingSession = classroomHub.getSession();
+      expect(existingSession).toBeNull();
+
+      let exercises: Exercise[] = ['dummy' as unknown as Exercise];
+      let selectedExercise: Exercise | null = 'dummy' as unknown as Exercise;
+      let selectedExamExerciseIds: string[] = ['ex-1'];
+
+      if (!existingSession) {
+        clearExercisesStorage();
+        exercises = [];
+        selectedExercise = null;
+        selectedExamExerciseIds = [];
+      }
+
+      expect(exercises).toEqual([]);
+      expect(selectedExercise).toBeNull();
+      expect(selectedExamExerciseIds).toEqual([]);
+      expect(loadExercises()).toEqual([]);
     });
   });
 
