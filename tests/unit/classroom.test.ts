@@ -3,6 +3,11 @@ import { classroomHub } from '../../src/features/classroom/classroomHub';
 import { evaluateExercise } from '../../src/features/classroom/exerciseEvaluator';
 import { cleanNodesForStarterTopology } from '../../src/features/classroom/topologyExerciseConverter';
 import { DEFAULT_EXERCISES } from '../../src/features/classroom/defaultExercises';
+import {
+  loadExercises,
+  saveExercises,
+  clearExercisesStorage,
+} from '../../src/features/classroom/exerciseParser';
 import type { DeviceData, TopologyLink } from '../../src/types/network';
 import type { Exercise } from '../../src/features/classroom/types';
 
@@ -73,6 +78,104 @@ describe('Classroom Feature Suite', () => {
 
       const participants = classroomHub.getParticipants();
       expect(participants.find((p) => p.id === student!.id)?.status).toBe('submitted');
+    });
+  });
+
+  describe('Teacher Exit and Exercise Purging Lifecycle', () => {
+    it('menutup kelas (closeClass) membersihkan seluruh soal aktif dan mengosongkan bank soal di storage', () => {
+      classroomHub.setLockedRole('teacher');
+      saveExercises([...DEFAULT_EXERCISES]);
+      expect(loadExercises().length).toBeGreaterThan(0);
+
+      classroomHub.createClass('Kelas TKJ 1', 'NET-EX1', undefined, DEFAULT_EXERCISES);
+      expect(classroomHub.getActiveExercises().length).toBeGreaterThan(0);
+      expect(classroomHub.getActiveExercise()).not.toBeNull();
+
+      // Guru menutup kelas
+      classroomHub.closeClass('NET-EX1');
+
+      // Seluruh soal aktif dan bank soal harus bersih
+      expect(classroomHub.getActiveExercises()).toEqual([]);
+      expect(classroomHub.getActiveExercise()).toBeNull();
+      expect(loadExercises()).toEqual([]);
+      expect(classroomHub.getSession()?.status).toBe('closed');
+      expect(classroomHub.getSession()?.activeExercises).toEqual([]);
+      expect(classroomHub.getSession()?.activeExerciseId).toBeNull();
+    });
+
+    it('guru meninggalkan kelas (leaveClass) membersihkan seluruh soal aktif dan bank soal storage', () => {
+      classroomHub.setLockedRole('teacher');
+      saveExercises([...DEFAULT_EXERCISES]);
+      expect(loadExercises().length).toBeGreaterThan(0);
+
+      classroomHub.createClass('Kelas TKJ 2', 'NET-EX2', undefined, DEFAULT_EXERCISES);
+      expect(classroomHub.getActiveExercises().length).toBeGreaterThan(0);
+
+      // Guru leaveClass
+      classroomHub.leaveClass();
+
+      // Seluruh soal dan peran harus bersih
+      expect(classroomHub.getActiveExercises()).toEqual([]);
+      expect(classroomHub.getActiveExercise()).toBeNull();
+      expect(loadExercises()).toEqual([]);
+      expect(classroomHub.getLockedRole()).toBeNull();
+    });
+
+    it('berganti peran dari guru ke student atau null (setLockedRole) membersihkan bank soal dan soal aktif', () => {
+      classroomHub.setLockedRole('teacher');
+      saveExercises([...DEFAULT_EXERCISES]);
+      expect(loadExercises().length).toBeGreaterThan(0);
+
+      classroomHub.createClass('Kelas TKJ 3', 'NET-EX3', undefined, DEFAULT_EXERCISES);
+      expect(classroomHub.getActiveExercises().length).toBeGreaterThan(0);
+
+      // Beralih ke student
+      classroomHub.setLockedRole('student');
+      expect(classroomHub.getActiveExercises()).toEqual([]);
+      expect(classroomHub.getActiveExercise()).toBeNull();
+      expect(loadExercises()).toEqual([]);
+      expect(classroomHub.getLockedRole()).toBe('student');
+
+      // Masuk lagi ke mode guru, simpan soal, lalu keluar ke null
+      classroomHub.setLockedRole('teacher');
+      saveExercises([...DEFAULT_EXERCISES]);
+      expect(loadExercises().length).toBeGreaterThan(0);
+
+      classroomHub.setLockedRole(null);
+      expect(classroomHub.getActiveExercises()).toEqual([]);
+      expect(classroomHub.getActiveExercise()).toBeNull();
+      expect(loadExercises()).toEqual([]);
+      expect(classroomHub.getLockedRole()).toBeNull();
+    });
+
+    it('clearAll membersihkan seluruh data sesi, peserta, submission, activeExercises, dan bank soal di storage', () => {
+      classroomHub.setLockedRole('teacher');
+      saveExercises([...DEFAULT_EXERCISES]);
+      classroomHub.createClass('Kelas TKJ 4', 'NET-EX4', undefined, DEFAULT_EXERCISES);
+      classroomHub.joinClass('NET-EX4', 'Murid 1');
+
+      classroomHub.clearAll();
+
+      expect(classroomHub.getSession()).toBeNull();
+      expect(classroomHub.getParticipants()).toEqual([]);
+      expect(classroomHub.getActiveExercises()).toEqual([]);
+      expect(classroomHub.getActiveExercise()).toBeNull();
+      expect(loadExercises()).toEqual([]);
+      expect(classroomHub.getLockedRole()).toBeNull();
+    });
+
+    it('saveExercises dengan array kosong atau clearExercisesStorage() mengosongkan storage soal', () => {
+      saveExercises([...DEFAULT_EXERCISES]);
+      expect(loadExercises().length).toBe(DEFAULT_EXERCISES.length);
+
+      saveExercises([]);
+      expect(loadExercises()).toEqual([]);
+
+      saveExercises([...DEFAULT_EXERCISES]);
+      expect(loadExercises().length).toBe(DEFAULT_EXERCISES.length);
+
+      clearExercisesStorage();
+      expect(loadExercises()).toEqual([]);
     });
   });
 

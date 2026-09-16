@@ -9,6 +9,7 @@ export interface EthernetFrame {
   srcMac: string;
   dstMac: string;
   ethertype: 'ARP' | 'IPv4';
+  vlanId?: number;
 }
 
 export interface ArpPacket {

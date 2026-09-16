@@ -18,6 +18,24 @@ let requestSeq = 0;
 const pendingPings = new Map<string, (result: PingResultPayload) => void>();
 const pendingDhcp = new Map<string, (result: DhcpResultPayload) => void>();
 const pendingRip = new Map<string, (result: RipResultPayload) => void>();
+let clearPacketsTimer: number | null = null;
+
+function scheduleClearActivePackets(delayMs = 600) {
+  if (clearPacketsTimer !== null) {
+    clearTimeout(clearPacketsTimer);
+  }
+  clearPacketsTimer = window.setTimeout(() => {
+    useAppStore.getState().setActivePackets([]);
+    clearPacketsTimer = null;
+  }, delayMs);
+}
+
+function cancelClearActivePackets() {
+  if (clearPacketsTimer !== null) {
+    clearTimeout(clearPacketsTimer);
+    clearPacketsTimer = null;
+  }
+}
 
 function ensureWorker(): Worker {
   if (worker) return worker;
@@ -49,7 +67,7 @@ function ensureWorker(): Worker {
           success: msg.payload.success,
         });
         store.setSimulationStatus('idle');
-        setTimeout(() => useAppStore.getState().setActivePackets([]), 600);
+        scheduleClearActivePackets();
         break;
       }
 
@@ -59,7 +77,7 @@ function ensureWorker(): Worker {
         resolver?.(msg.payload);
         store.setSimulationStatus('idle');
         store.checkLabObjectives();
-        setTimeout(() => useAppStore.getState().setActivePackets([]), 600);
+        scheduleClearActivePackets();
         break;
       }
 
@@ -69,7 +87,7 @@ function ensureWorker(): Worker {
         resolver?.(msg.payload);
         store.setSimulationStatus('idle');
         store.checkLabObjectives();
-        setTimeout(() => useAppStore.getState().setActivePackets([]), 600);
+        scheduleClearActivePackets();
         break;
       }
 
@@ -102,6 +120,7 @@ function ensureWorker(): Worker {
 }
 
 export function abortSimulation(): void {
+  cancelClearActivePackets();
   if (worker) {
     worker.postMessage({ type: 'ABORT_SIMULATION' } as UIWorkerMessage);
   }
@@ -295,12 +314,14 @@ export function useSimulationEngine() {
   useEffect(() => {
     ensureWorker();
     return () => {
+      cancelClearActivePackets();
       worker?.terminate();
       worker = null;
       pendingPings.clear();
+      pendingDhcp.clear();
+      pendingRip.clear();
     };
   }, []);
-
   const simulationSpeed = useAppStore((s) => s.simulationSpeed);
   useEffect(() => {
     setEngineSpeed(simulationSpeed);

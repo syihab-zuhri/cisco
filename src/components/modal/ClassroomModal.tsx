@@ -39,6 +39,7 @@ import {
 import {
   loadExercises,
   saveExercises,
+  clearExercisesStorage,
   parseExerciseJson,
   exportExercisesToJsonFile,
   exportLabPackageFile,
@@ -82,12 +83,13 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
     if (sess && sess.status !== 'closed') return 'teacher';
     return null;
   });
-
   const handleSelectRole = (role: 'teacher' | 'student') => {
     if (role === 'student') {
       // Switching to student: clear any lingering teacher active exercises
       classroomHub.saveActiveExercises([]);
       classroomHub.saveActiveExercise(null);
+      clearExercisesStorage();
+      setExercises([]);
       setSelectedExercise(null);
       setActiveExercise(null);
       setSelectedExamExerciseIds([]);
@@ -107,7 +109,7 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
       title: 'Ganti Peran Pengguna?',
       message:
         isTeacher
-          ? 'Anda akan keluar dari Mode Guru. Sesi administrasi guru pada perangkat ini akan dilepas dan seluruh soal aktif akan dibersihkan.'
+          ? 'Anda akan keluar dari Mode Guru. Sesi administrasi guru pada perangkat ini akan dilepas dan seluruh bank soal serta soal aktif akan sepenuhnya dibersihkan.'
           : 'Anda akan keluar dari Mode Siswa. Anda akan dikeluarkan dari sesi kelas siswa aktif saat ini.',
       confirmLabel: 'Ganti Peran',
       onConfirm: () => {
@@ -124,8 +126,12 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
               exercises: [],
             });
           }
+          clearExercisesStorage();
+          setExercises([]);
         }
         classroomHub.leaveClass();
+        clearExercisesStorage();
+        setExercises([]);
         setSession(null);
         setParticipants([]);
         setSubmissions({});
@@ -134,8 +140,47 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
         setSelectedExercise(null);
         setSelectedExamExerciseIds([]);
         setMyEvaluation(null);
+        classroomHub.setLockedRole(null);
         setLockedRole(null);
         pushToast('info', 'Silakan tentukan peran baru yang ingin Anda masuki.');
+      },
+    });
+  };
+
+  // Handler Guru: Keluar Mode Guru
+  const handleExitTeacherMode = () => {
+    requestConfirm({
+      title: 'Keluar Mode Guru?',
+      message:
+        'Anda akan keluar dari Mode Guru. Sesi kelas (jika aktif) akan ditutup, bank soal serta soal aktif akan sepenuhnya dihapus dari perangkat ini.',
+      confirmLabel: 'Keluar Mode Guru',
+      onConfirm: () => {
+        const curSess = session || classroomHub.getSession();
+        if (curSess && curSess.status !== 'closed') {
+          classroomHub.closeClass(curSess.classCode);
+        } else {
+          classroomHub.saveActiveExercises([]);
+          classroomHub.saveActiveExercise(null);
+          classroomHub.broadcast({
+            type: 'EXERCISES_UPDATED',
+            classCode: curSess?.classCode || '',
+            exercises: [],
+          });
+        }
+        classroomHub.leaveClass();
+        clearExercisesStorage();
+        setExercises([]);
+        setSession(null);
+        setParticipants([]);
+        setSubmissions({});
+        setJoinedParticipant(null);
+        setActiveExercise(null);
+        setSelectedExercise(null);
+        setSelectedExamExerciseIds([]);
+        setMyEvaluation(null);
+        classroomHub.setLockedRole(null);
+        setLockedRole(null);
+        pushToast('info', 'Berhasil keluar dari Mode Guru. Seluruh soal dan sesi telah dibersihkan.');
       },
     });
   };
@@ -153,7 +198,7 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
   });
   const [reviewedSubmission, setReviewedSubmission] = useState<Submission | null>(null);
   const [isCopiedCode, setIsCopiedCode] = useState(false);
-
+  const copyTimerRef = useRef<number | null>(null);
   // Editor Soal State
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [editingExercise, setEditingExercise] = useState<Exercise | null>(null);
@@ -280,6 +325,8 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
 
         case 'CLASS_CLOSED':
           setSession((prev) => (prev ? { ...prev, status: 'closed' } : null));
+          setExercises([]);
+          clearExercisesStorage();
           setSelectedExercise(null);
           setActiveExercise(null);
           setSelectedExamExerciseIds([]);
@@ -288,6 +335,8 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
         case 'ROLE_CHANGED':
           setLockedRole(event.role);
           if (event.role !== 'teacher') {
+            setExercises([]);
+            clearExercisesStorage();
             setSelectedExercise(null);
             setActiveExercise(null);
             setSelectedExamExerciseIds([]);
@@ -322,6 +371,10 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
     });
 
     return () => {
+      if (copyTimerRef.current !== null) {
+        clearTimeout(copyTimerRef.current);
+        copyTimerRef.current = null;
+      }
       unsubscribe();
     };
   }, []);
@@ -597,6 +650,8 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
     classroomHub.closeClass(code);
     classroomHub.saveActiveExercises([]);
     classroomHub.saveActiveExercise(null);
+    clearExercisesStorage();
+    setExercises([]);
     setSession(null);
     setParticipants([]);
     setSubmissions({});
@@ -604,7 +659,7 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
     setActiveExercise(null);
     setSelectedExamExerciseIds([]);
     classroomHub.clearAll();
-    pushToast('info', 'Sesi kelas telah diakhiri dan soal aktif dibersihkan.');
+    pushToast('info', 'Sesi kelas telah diakhiri dan seluruh soal telah dibersihkan.');
   };
 
   // Handler Siswa: Gabung Kelas
@@ -843,9 +898,14 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
     if (!session) return;
     navigator.clipboard.writeText(session.classCode);
     setIsCopiedCode(true);
-    setTimeout(() => setIsCopiedCode(false), 2000);
+    if (copyTimerRef.current !== null) {
+      clearTimeout(copyTimerRef.current);
+    }
+    copyTimerRef.current = window.setTimeout(() => {
+      setIsCopiedCode(false);
+      copyTimerRef.current = null;
+    }, 2000);
   };
-
   const renderExerciseCatalog = (isActiveSession: boolean) => {
     const activeExamIds =
       session?.activeExercises?.map((x) => x.id) ||
@@ -1269,6 +1329,30 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
             <div className="flex flex-col gap-5">
               {!session ? (
                 <div className="flex flex-col gap-5">
+                  {/* Bar Kontrol Guru (Belum Buka Kelas) */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-muted/40 p-3.5 sm:px-4">
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <GraduationCap className="h-4 w-4" />
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-xs font-bold text-foreground">Panel Administrasi Guru</span>
+                        <span className="text-[11px] text-muted-foreground">
+                          Siapkan bank soal atau langsung buka sesi kelas baru di bawah
+                        </span>
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleExitTeacherMode}
+                      className="gap-1.5 text-xs text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive font-medium"
+                    >
+                      <LogOut className="h-3.5 w-3.5" />
+                      Keluar Mode Guru
+                    </Button>
+                  </div>
+
                   {/* Form Buat Kelas Baru */}
                   <Card className="p-5">
                     <div className="mb-4 flex flex-col gap-1">
@@ -1421,6 +1505,16 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
                       >
                         <LogOut className="h-3.5 w-3.5" />
                         Tutup Kelas
+                      </Button>
+
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleExitTeacherMode}
+                        className="gap-1.5 text-xs text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive font-medium"
+                      >
+                        <LogOut className="h-3.5 w-3.5" />
+                        Keluar Mode Guru
                       </Button>
                     </div>
                   </div>

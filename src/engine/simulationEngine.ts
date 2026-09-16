@@ -310,25 +310,77 @@ export class HeadlessSimulationEngine {
   private buildFramePdu(
     hop: L2Hop,
     kind: EventKind,
-    opts: { arp?: ArpPacket; packet?: IPv4Packet; icmp?: IcmpPacket; dhcp?: DhcpPacket; note?: string }
+    opts: {
+      arp?: ArpPacket;
+      packet?: IPv4Packet;
+      icmp?: IcmpPacket;
+      dhcp?: DhcpPacket;
+      note?: string;
+      srcMac?: string;
+      dstMac?: string;
+      vlanId?: number;
+    }
   ): PduSnapshot {
     const fromPort = this.portOf(hop.fromNodeId, hop.fromPortId);
     const toPort = this.portOf(hop.toNodeId, hop.toPortId);
     return {
       frame: {
-        srcMac: fromPort?.macAddress ?? '00:00:00:00:00:00',
+        srcMac: opts.srcMac ?? fromPort?.macAddress ?? '00:00:00:00:00:00',
         dstMac:
-          kind === 'ARP_REQ' || kind === 'DHCP_DISCOVER' || kind === 'DHCP_REQUEST'
+          opts.dstMac ??
+          (kind === 'ARP_REQ' || kind === 'DHCP_DISCOVER' || kind === 'DHCP_REQUEST'
             ? BROADCAST_MAC
             : kind === 'RIP_UPDATE'
             ? '01:00:5E:00:00:09' // Multicast RIPv2 (RFC 2453)
-            : (toPort?.macAddress ?? '00:00:00:00:00:00'),
+            : (toPort?.macAddress ?? '00:00:00:00:00:00')),
         ethertype: kind.startsWith('ARP') ? 'ARP' : 'IPv4',
+        vlanId: opts.vlanId ?? fromPort?.vlanId ?? toPort?.vlanId,
       },
       packet: opts.packet,
       segment: opts.arp ?? opts.icmp,
+      dhcp: opts.dhcp,
       note: opts.note,
     };
+  }
+
+  private learnCamOnHop(
+    ctx: PlanContext,
+    hop: L2Hop,
+    mac: string,
+    eventKind: EventKind,
+    animate: boolean
+  ): void {
+    const sw = this.devices.get(hop.toNodeId);
+    if (!sw || !learnsCam(sw.type)) return;
+    sw.macTable = sw.macTable || {};
+    const oldPort = sw.macTable[mac];
+    sw.macTable[mac] = hop.toPortId;
+    if (oldPort !== hop.toPortId) {
+      if (animate) {
+        this.record(
+          ctx,
+          'INFO',
+          `${sw.label}: CAM Table belajar MAC ${mac} pada port ${hop.toPortId}`
+        );
+      }
+      const hopEvent = ctx.queue
+        .snapshot()
+        .reverse()
+        .find((e) => e.hop && e.hop.targetNodeId === sw.id && e.kind === eventKind);
+      if (hopEvent) {
+        const portObj = this.portOf(hop.toNodeId, hop.toPortId);
+        hopEvent.effects = [
+          ...(hopEvent.effects ?? []),
+          {
+            type: 'CAM_LEARN',
+            nodeId: sw.id,
+            mac,
+            portId: hop.toPortId,
+            vlan: portObj?.vlanId ?? 1,
+          },
+        ];
+      }
+    }
   }
 
   private toHopPayload(ev: SimEvent) {
@@ -615,7 +667,8 @@ export class HeadlessSimulationEngine {
         if (!p.ipAddress || !p.subnetMask) continue;
         if (isSameSubnet(p.ipAddress, targetIp, p.subnetMask)) {
           const prefix = prefixLength(p.subnetMask);
-          if (!best || prefix > best.prefix) best = { nextHopIp: targetIp, prefix, portId: p.id };
+          if (!best || prefix > best.prefix)
+            best = { nextHopIp: targetIp, prefix, portId: p.id, vlanId: p.vlanId };
         }
       }
       for (const r of dev.routes ?? []) {
@@ -623,20 +676,30 @@ export class HeadlessSimulationEngine {
           r.network === '0.0.0.0' && (r.subnetMask === '0.0.0.0' || r.subnetMask === '0');
         if (isDefault || isSameSubnet(targetIp, r.network, r.subnetMask)) {
           const prefix = isDefault ? 0 : prefixLength(r.subnetMask);
-          // Egress interface static route: cari port atau sub-interface yang satu segmen dengan nextHop
-          let egress =
-            dev.ports.find(
-              (p) =>
-                p.ipAddress &&
-                p.status === 'up' &&
-                isSameSubnet(p.ipAddress, r.nextHop, p.subnetMask ?? '255.255.255.0')
-            );
+          const isDirectlyAttached = !r.nextHop || r.nextHop === '0.0.0.0' || r.nextHop.trim() === '';
+          const effectiveNextHop = isDirectlyAttached ? targetIp : r.nextHop;
+          let egress = isDirectlyAttached
+            ? dev.ports.find((p) => p.id === r.interfaceId) ??
+              dev.ports.find(
+                (p) =>
+                  p.ipAddress &&
+                  p.status === 'up' &&
+                  isSameSubnet(p.ipAddress, targetIp, p.subnetMask ?? '255.255.255.0')
+              )
+            : dev.ports.find(
+                (p) =>
+                  p.ipAddress &&
+                  p.status === 'up' &&
+                  isSameSubnet(p.ipAddress, r.nextHop, p.subnetMask ?? '255.255.255.0')
+              );
           let subIfIp: string | undefined;
           let vlanId: number | undefined;
           if (!egress) {
             for (const p of dev.ports) {
               if (p.status !== 'up') continue;
-              const sub = p.subInterfaces?.find((s) => isSameSubnet(s.ipAddress, r.nextHop, s.subnetMask));
+              const sub = p.subInterfaces?.find((s) =>
+                isSameSubnet(s.ipAddress, effectiveNextHop, s.subnetMask)
+              );
               if (sub) {
                 egress = p;
                 subIfIp = sub.ipAddress;
@@ -649,7 +712,7 @@ export class HeadlessSimulationEngine {
             egress = dev.ports.find((p) => p.id === r.interfaceId);
           }
           if (!best || prefix > best.prefix)
-            best = { nextHopIp: r.nextHop, prefix, portId: egress?.id ?? r.interfaceId, subIfIp, vlanId };
+            best = { nextHopIp: effectiveNextHop, prefix, portId: egress?.id ?? r.interfaceId, subIfIp, vlanId };
         }
       }
       if (!best) {
@@ -710,8 +773,8 @@ export class HeadlessSimulationEngine {
       `${sender.dev.label}: ARP Cache MISS untuk IP ${nextHopIp}. Memancarkan ARP Request (Broadcast)...`
     );
 
-    if (animate) {
-      for (const hop of path) {
+    for (const hop of path) {
+      if (animate) {
         const arp: ArpPacket = {
           opcode: 1,
           senderIp: sender.port.ipAddress!,
@@ -723,43 +786,15 @@ export class HeadlessSimulationEngine {
           hop,
           'ARP_REQ',
           `ARP Request: Who has ${nextHopIp}? Tell ${sender.port.ipAddress}`,
-          this.buildFramePdu(hop, 'ARP_REQ', { arp })
+          this.buildFramePdu(hop, 'ARP_REQ', {
+            arp,
+            srcMac: sender.port.macAddress,
+            dstMac: BROADCAST_MAC,
+            vlanId: sender.port.vlanId,
+          })
         );
       }
-    }
-
-    for (const hop of path) {
-      const sw = this.devices.get(hop.toNodeId);
-      if (sw && learnsCam(sw.type)) {
-        sw.macTable = sw.macTable || {};
-        const oldPort = sw.macTable[sender.port.macAddress];
-        // Port migration (Bug 5): CAM belajar/update port baru untuk MAC ini
-        sw.macTable[sender.port.macAddress] = hop.toPortId;
-        if (animate && oldPort !== hop.toPortId) {
-          this.record(
-            ctx,
-            'INFO',
-            `${sw.label}: CAM Table belajar MAC ${sender.port.macAddress} pada port ${hop.toPortId}`
-          );
-          // Tempelkan efek CAM_LEARN ke event hop ARP_REQ yang tiba di switch ini
-          const hopEvent = ctx.queue
-            .snapshot()
-            .reverse()
-            .find((e) => e.hop && e.hop.targetNodeId === sw.id && e.kind === 'ARP_REQ');
-          if (hopEvent) {
-            hopEvent.effects = [
-              ...(hopEvent.effects ?? []),
-              {
-                type: 'CAM_LEARN',
-                nodeId: sw.id,
-                mac: sender.port.macAddress,
-                portId: hop.toPortId,
-                vlan: this.portOf(hop.toNodeId, hop.toPortId)?.vlanId ?? 1,
-              },
-            ];
-          }
-        }
-      }
+      this.learnCamOnHop(ctx, hop, sender.port.macAddress, 'ARP_REQ', animate);
     }
 
     owner.dev.arpTable = owner.dev.arpTable || {};
@@ -794,31 +829,15 @@ export class HeadlessSimulationEngine {
           hop,
           'ARP_REP',
           `ARP Reply: ${nextHopIp} is at ${owner.port.macAddress}`,
-          this.buildFramePdu(hop, 'ARP_REP', { arp }),
+          this.buildFramePdu(hop, 'ARP_REP', {
+            arp,
+            srcMac: owner.port.macAddress,
+            dstMac: sender.port.macAddress,
+            vlanId: owner.port.vlanId,
+          }),
           effects
         );
-        const sw = this.devices.get(hop.toNodeId);
-        if (sw && learnsCam(sw.type)) {
-          sw.macTable = sw.macTable || {};
-          const oldPort = sw.macTable[owner.port.macAddress];
-          // Port migration (Bug 5): CAM belajar/update port baru
-          sw.macTable[owner.port.macAddress] = hop.toPortId;
-          if (oldPort !== hop.toPortId) {
-            this.record(
-              ctx,
-              'INFO',
-              `${sw.label}: CAM Table belajar MAC ${owner.port.macAddress} pada port ${hop.toPortId}`
-            );
-            const hopEvent = ctx.queue.snapshot().at(-1);
-            hopEvent?.effects?.push({
-              type: 'CAM_LEARN',
-              nodeId: sw.id,
-              mac: owner.port.macAddress,
-              portId: hop.toPortId,
-              vlan: this.portOf(hop.toNodeId, hop.toPortId)?.vlanId ?? 1,
-            });
-          }
-        }
+        this.learnCamOnHop(ctx, hop, owner.port.macAddress, 'ARP_REP', animate);
         if (idx === backwardPath.length - 1) {
           const lastEvent = ctx.queue.snapshot().at(-1);
           lastEvent?.effects?.push({
@@ -872,6 +891,7 @@ export class HeadlessSimulationEngine {
     let ttlAtHop = INITIAL_TTL;
     const visitedRouters = new Set<string>();
     const requestPath: L2Hop[] = [];
+    let natInfo: { routerId: string; globalIp: string; insideIp: string } | null = null;
 
     // Fase request: bisa melewati beberapa router (max depth dijaga visitedRouters)
     for (let depth = 0; depth < 8; depth++) {
@@ -927,8 +947,8 @@ export class HeadlessSimulationEngine {
 
       // NAT/PAT: segmen keluar router melalui port natEnabled menuju IP publik/non-privat —
       // src IP di-rewrite menjadi IP WAN dan translasi dicatat di tabel router.
-      let natInfo: { routerId: string; globalIp: string; insideIp: string } | null = null;
       if (
+        !natInfo &&
         sender.dev.type === 'router' &&
         !isPrivateIp(targetIp) &&
         egressPort?.natEnabled &&
@@ -974,7 +994,7 @@ export class HeadlessSimulationEngine {
             payloadBytes: ICMP_PAYLOAD_BYTES,
           };
           const effects: NonNullable<SimEvent['effects']> | undefined =
-            hopIdx === 0 && natInfo
+            hopIdx === 0 && natInfo && sender.dev.id === natInfo.routerId
               ? [
                   {
                     type: 'NAT_TRANSLATE',
@@ -991,9 +1011,15 @@ export class HeadlessSimulationEngine {
             hop,
             'ICMP_REQ',
             `ICMP Echo Request: ${natInfo ? natInfo.globalIp : source.port.ipAddress} -> ${targetIp}${depth > 0 ? ' (diteruskan router)' : ''}`,
-            this.buildFramePdu(hop, 'ICMP_REQ', { packet, icmp, note: notes.length > 0 ? notes.join(' · ') : undefined }),
+            this.buildFramePdu(hop, 'ICMP_REQ', {
+              packet,
+              icmp,
+              vlanId: next.vlanId ?? arpSender.port.vlanId,
+              note: notes.length > 0 ? notes.join(' · ') : undefined,
+            }),
             effects
           );
+          this.learnCamOnHop(ctx, hop, arpSender.port.macAddress, 'ICMP_REQ', animate);
         });
       }
       requestPath.push(...path);
@@ -1134,13 +1160,25 @@ export class HeadlessSimulationEngine {
         nat && unNatted && hop.fromNodeId === nat.routerId
           ? `NAT: dst dikembalikan ke ${nat.insideIp}`
           : undefined;
+      const fromPort = this.portOf(hop.fromNodeId, hop.fromPortId);
+      const toPort = this.portOf(hop.toNodeId, hop.toPortId);
       this.recordHop(
         ctx,
         hop,
         'ICMP_REP',
         `ICMP Echo Reply: ${targetIp} -> ${source.port.ipAddress}`,
-        this.buildFramePdu(hop, 'ICMP_REP', { packet, icmp, note })
+        this.buildFramePdu(hop, 'ICMP_REP', {
+          packet,
+          icmp,
+          srcMac: fromPort?.macAddress,
+          dstMac: toPort?.macAddress,
+          vlanId: fromPort?.vlanId,
+          note,
+        })
       );
+      if (fromPort?.macAddress) {
+        this.learnCamOnHop(ctx, hop, fromPort.macAddress, 'ICMP_REP', true);
+      }
       const arrivedDev = this.devices.get(hop.toNodeId);
       if (arrivedDev?.type === 'router') {
         ttlReply -= 1;
@@ -1456,6 +1494,15 @@ export class HeadlessSimulationEngine {
       label: string,
       kind: EventKind
     ) => {
+      const isClientToServer = messageType === 1 || messageType === 3;
+      const srcMac = isClientToServer ? port.macAddress : chosen!.iface.macAddress;
+      const dstMac = BROADCAST_MAC;
+      const srcIp = isClientToServer ? '0.0.0.0' : chosen!.iface.ipAddress!;
+      const dstIp = '255.255.255.255';
+      const udpNote = isClientToServer
+        ? 'UDP 68 (BootPC) → 67 (BootPS) · Broadcast'
+        : 'UDP 67 (BootPS) → 68 (BootPC) · Broadcast';
+
       for (const hop of hops) {
         const dhcp: DhcpPacket = {
           messageType,
@@ -1463,16 +1510,28 @@ export class HeadlessSimulationEngine {
           yiaddr: messageType === 1 ? undefined : offeredIp!,
           serverId: messageType === 1 ? undefined : chosen!.iface.ipAddress,
         };
+        const packet: IPv4Packet = {
+          srcIp,
+          dstIp,
+          ttl: 128,
+          protocol: 'UDP',
+          id: 0,
+        };
         this.recordHop(
           ctx,
           hop,
           kind,
           `DHCP ${label}: ${client.label} <-> ${chosen!.router.label} (offer ${offeredIp})`,
           this.buildFramePdu(hop, kind, {
+            packet,
             dhcp,
-            note: 'UDP 68 → 67 (broadcast)',
+            srcMac,
+            dstMac,
+            vlanId: port.vlanId,
+            note: udpNote,
           })
         );
+        this.learnCamOnHop(ctx, hop, srcMac, kind, true);
       }
     };
 
@@ -1485,23 +1544,37 @@ export class HeadlessSimulationEngine {
     recordDhcpHops(chosen.path, 1, 'Discover', 'DHCP_DISCOVER');
     recordDhcpHops(backwardPath, 2, 'Offer', 'DHCP_OFFER');
     recordDhcpHops(chosen.path, 3, 'Request', 'DHCP_REQUEST');
-    const ackEvents = backwardPath.map((hop) =>
-      this.recordHop(
+    const ackEvents = backwardPath.map((hop) => {
+      const dhcp: DhcpPacket = {
+        messageType: 5,
+        clientId: port.macAddress,
+        yiaddr: offeredIp!,
+        serverId: chosen!.iface.ipAddress,
+      };
+      const packet: IPv4Packet = {
+        srcIp: chosen!.iface.ipAddress!,
+        dstIp: '255.255.255.255',
+        ttl: 128,
+        protocol: 'UDP',
+        id: 0,
+      };
+      const ev = this.recordHop(
         ctx,
         hop,
         'DHCP_ACK',
         `DHCP Ack: ${offeredIp} dikirim ke ${client.label}`,
         this.buildFramePdu(hop, 'DHCP_ACK', {
-          dhcp: {
-            messageType: 5,
-            clientId: port.macAddress,
-            yiaddr: offeredIp!,
-            serverId: chosen!.iface.ipAddress,
-          },
-          note: 'UDP 67 → 68',
+          packet,
+          dhcp,
+          srcMac: chosen!.iface.macAddress,
+          dstMac: BROADCAST_MAC,
+          vlanId: chosen!.iface.vlanId,
+          note: 'UDP 67 (BootPS) → 68 (BootPC) · Broadcast',
         })
-      )
-    );
+      );
+      this.learnCamOnHop(ctx, hop, chosen!.iface.macAddress, 'DHCP_ACK', true);
+      return ev;
+    });
 
     // Terapkan lease di engine & jadwalkan efek untuk UI
     port.ipAddress = offeredIp;
@@ -1613,25 +1686,106 @@ export class HeadlessSimulationEngine {
       for (const r of routers) {
         const rState = state.get(r.id)!;
 
-        // Cari tetangga router yang terjangkau lewat L2 (kabel langsung atau switch/hub)
+        const routerInterfaces: Array<{
+          portId: string;
+          ipAddress: string;
+          subnetMask: string;
+          vlanId?: number;
+        }> = [];
         for (const pr of r.ports) {
-          if (pr.status !== 'up' || !pr.ipAddress) continue;
+          if (pr.status !== 'up') continue;
+          if (pr.ipAddress && pr.subnetMask) {
+            routerInterfaces.push({
+              portId: pr.id,
+              ipAddress: pr.ipAddress,
+              subnetMask: pr.subnetMask,
+              vlanId: pr.vlanId,
+            });
+          }
+          for (const s of pr.subInterfaces ?? []) {
+            if (s.ipAddress && s.subnetMask) {
+              routerInterfaces.push({
+                portId: pr.id,
+                ipAddress: s.ipAddress,
+                subnetMask: s.subnetMask,
+                vlanId: s.vlanId,
+              });
+            }
+          }
+        }
+
+        // Cari tetangga router yang terjangkau lewat L2 (kabel langsung atau switch/hub)
+        for (const pr of routerInterfaces) {
           for (const neighbor of routers) {
             if (neighbor.id === r.id || !neighbor.ripEnabled) continue;
-            const path = this.findL2Path(r.id, neighbor.id, pr.id);
+            const path = this.findL2Path(r.id, neighbor.id, pr.portId, pr.vlanId);
             if (!path || path.length === 0) continue;
             const arrivalPortId = path.at(-1)?.toPortId;
-            const pn = neighbor.ports.find((p) => p.id === arrivalPortId);
-            if (!pn || pn.status !== 'up' || !pn.ipAddress) continue;
-            if (!isSameSubnet(pr.ipAddress, pn.ipAddress, pr.subnetMask ?? '255.255.255.0')) continue;
+            const pnRaw = neighbor.ports.find((p) => p.id === arrivalPortId);
+            if (!pnRaw || pnRaw.status !== 'up') continue;
+
+            const neighborInterfaces: Array<{ portId: string; ipAddress: string; subnetMask: string }> = [];
+            if (pnRaw.ipAddress && pnRaw.subnetMask) {
+              neighborInterfaces.push({ portId: pnRaw.id, ipAddress: pnRaw.ipAddress, subnetMask: pnRaw.subnetMask });
+            }
+            for (const s of pnRaw.subInterfaces ?? []) {
+              if (s.ipAddress && s.subnetMask) {
+                neighborInterfaces.push({ portId: pnRaw.id, ipAddress: s.ipAddress, subnetMask: s.subnetMask });
+              }
+            }
+            const pn = neighborInterfaces.find((ni) =>
+              isSameSubnet(pr.ipAddress, ni.ipAddress, pr.subnetMask)
+            );
+            if (!pn) continue;
 
             const nId = neighbor.id;
             const nState = state.get(nId)!;
             const nextHopIp = pr.ipAddress;
-
             for (const [key, route] of rState) {
-              // Split horizon sederhana: jangan iklankan lewat interface asal route
-              if (route.interfaceId === pr.id) continue;
+              // Split horizon with poison reverse (RFC 2453 §3.4.3):
+              // Jika route dipelajari dari interface ini, iklankan balik dengan metric 16 (unreachable / poisoned).
+              const isReverse = route.interfaceId === pr.portId;
+              if (isReverse) {
+                const existing = nState.get(key);
+                if (existing && existing.nextHop === nextHopIp && existing.metric < 16) {
+                  existing.metric = 16;
+                  changed = true;
+                  for (const hop of path) {
+                    const event = this.recordHop(
+                      ctx,
+                      hop,
+                      'RIP_UPDATE',
+                      `RIPv2 poison reverse: ${r.label} mengiklankan ${route.network}/${route.mask} (metric 16 / unreachable) ke ${neighbor.label}`,
+                      this.buildFramePdu(hop, 'RIP_UPDATE', {
+                        packet: {
+                          srcIp: pr.ipAddress,
+                          dstIp: '224.0.0.9',
+                          ttl: 1,
+                          protocol: 'RIP',
+                          id: 0,
+                        },
+                        vlanId: pr.vlanId,
+                        note: `RIPv2 poison reverse: ${route.network}/${route.mask} metric 16 via ${nextHopIp}`,
+                      })
+                    );
+                    if (hop === path.at(-1)) {
+                      event.effects = [
+                        {
+                          type: 'ROUTE_LEARN',
+                          nodeId: nId,
+                          network: route.network,
+                          subnetMask: route.mask,
+                          nextHop: nextHopIp,
+                          interfaceId: pn.portId,
+                          metric: 16,
+                        },
+                      ];
+                    }
+                  }
+                }
+                continue;
+              }
+
               const newMetric = route.metric + 1;
               if (newMetric >= 16) continue;
               const existing = nState.get(key);
@@ -1642,7 +1796,7 @@ export class HeadlessSimulationEngine {
                 mask: route.mask,
                 metric: newMetric,
                 nextHop: nextHopIp,
-                interfaceId: pn.id,
+                interfaceId: pn.portId,
                 learned: true,
               });
               changed = true;
@@ -1673,7 +1827,7 @@ export class HeadlessSimulationEngine {
                       network: route.network,
                       subnetMask: route.mask,
                       nextHop: nextHopIp,
-                      interfaceId: pn.id,
+                      interfaceId: pn.portId,
                       metric: newMetric,
                     },
                   ];
@@ -1691,7 +1845,7 @@ export class HeadlessSimulationEngine {
       const dev = this.devices.get(r.id);
       if (!dev) continue;
       const ripRoutes = [...(state.get(r.id) ?? new Map<string, RipRoute>())]
-        .filter(([, v]) => v.learned)
+        .filter(([, v]) => v.learned && v.metric < 16)
         .map(([, v]) => ({
           network: v.network,
           subnetMask: v.mask,

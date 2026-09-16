@@ -82,7 +82,7 @@ export function PduInspectorDrawer() {
           </div>
         ) : !pdu ? (
           <div className="text-muted-foreground italic text-center py-4">
-            Event ini bukan paket (log internal). Pilih event ARP_REQ/ARP_REP/ICMP_REQ/ICMP_REP.
+            Event ini bukan paket (log internal). Pilih event paket di linimasa simulasi.
           </div>
         ) : (
           <>
@@ -107,6 +107,10 @@ export function PduInspectorDrawer() {
                 }
               />
               <HeaderRow label="Ethertype" value={`0x${pdu.frame.ethertype === 'ARP' ? '0806' : '0800'} (${pdu.frame.ethertype})`} />
+              <HeaderRow
+                label="802.1Q VLAN"
+                value={pdu.frame.vlanId ? `VLAN ${pdu.frame.vlanId}` : 'Untagged / Native (VLAN 1)'}
+              />
             </div>
 
             {/* L3 — IPv4 Packet */}
@@ -177,6 +181,14 @@ export function PduInspectorDrawer() {
                       pdu.dhcp.messageType
                     ] ?? String(pdu.dhcp.messageType)
                   }
+                />
+                <HeaderRow
+                  label="Source Port"
+                  value={pdu.dhcp.messageType === 1 || pdu.dhcp.messageType === 3 ? 'UDP 68 (BootPC)' : 'UDP 67 (BootPS)'}
+                />
+                <HeaderRow
+                  label="Dest Port"
+                  value={pdu.dhcp.messageType === 1 || pdu.dhcp.messageType === 3 ? 'UDP 67 (BootPS)' : 'UDP 68 (BootPC)'}
                 />
                 <HeaderRow label="Client MAC" value={pdu.dhcp.clientId} />
                 {pdu.dhcp.yiaddr && <HeaderRow label="yiaddr (IP)" value={pdu.dhcp.yiaddr} />}

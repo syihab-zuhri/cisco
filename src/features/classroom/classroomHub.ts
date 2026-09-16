@@ -6,6 +6,7 @@ import type {
   ClassroomEvent,
   SessionStatus,
 } from './types';
+import { clearExercisesStorage } from './exerciseParser';
 
 const CHANNEL_NAME = 'openpacket_classroom_bus';
 const STORAGE_KEY_SESSION = 'openpacket_class_session';
@@ -517,6 +518,7 @@ class ClassroomHub {
     }
     this.saveActiveExercises([]);
     this.saveActiveExercise(null);
+    clearExercisesStorage();
     this.broadcast({
       type: 'CLASS_CLOSED',
       classCode: cleanCode,
@@ -684,19 +686,32 @@ class ClassroomHub {
         // Mode guru: lepas status sebagai siswa
         this.setCurrentParticipant(null);
       } else if (role === 'student' && prevRole === 'teacher') {
-        // Keluar dari mode guru: bersihkan soal aktif
-        this.saveActiveExercises([]);
-        this.saveActiveExercise(null);
+        // Keluar dari mode guru: bersihkan soal aktif, bank soal, dan sesi kelas
+        this.handleTeacherExitCleanup();
       }
     } else {
       memoryStore.removeItem(STORAGE_KEY_LOCKED_ROLE);
       if (prevRole === 'teacher') {
-        // Keluar dari mode guru: bersihkan soal aktif
-        this.saveActiveExercises([]);
-        this.saveActiveExercise(null);
+        // Keluar dari mode guru: bersihkan soal aktif, bank soal, dan sesi kelas
+        this.handleTeacherExitCleanup();
       }
     }
     this.notifyListeners({ type: 'ROLE_CHANGED', role });
+  }
+
+  private handleTeacherExitCleanup(): void {
+    const session = this.getSession();
+    if (session && session.status !== 'closed') {
+      this.closeClass(session.classCode);
+    }
+    this.saveActiveExercises([]);
+    this.saveActiveExercise(null);
+    clearExercisesStorage();
+    this.broadcast({
+      type: 'EXERCISES_UPDATED',
+      classCode: session?.classCode || '',
+      exercises: [],
+    });
   }
 
   public isStudentActive(): boolean {
@@ -708,21 +723,11 @@ class ClassroomHub {
   public leaveClass(): void {
     const role = this.getLockedRole();
     if (role === 'teacher') {
-      const session = this.getSession();
-      if (session && session.status !== 'closed') {
-        this.closeClass(session.classCode);
-      } else {
-        this.saveActiveExercises([]);
-        this.saveActiveExercise(null);
-        this.broadcast({
-          type: 'EXERCISES_UPDATED',
-          classCode: session?.classCode || '',
-          exercises: [],
-        });
-      }
+      this.handleTeacherExitCleanup();
     }
     this.saveActiveExercises([]);
     this.saveActiveExercise(null);
+    clearExercisesStorage();
     this.setCurrentParticipant(null);
     this.setLockedRole(null);
   }
@@ -735,11 +740,16 @@ class ClassroomHub {
     storage.removeItem(STORAGE_KEY_SUBMISSIONS);
     storage.removeItem(STORAGE_KEY_ACTIVE_EXERCISE);
     storage.removeItem(STORAGE_KEY_ACTIVE_EXERCISES);
+    clearExercisesStorage();
     this.saveActiveExercises([]);
     this.saveActiveExercise(null);
     this.setCurrentParticipant(null);
     this.setLockedRole(null);
     if (curSession) {
+      this.broadcast({
+        type: 'CLASS_CLOSED',
+        classCode: curSession.classCode,
+      });
       this.broadcast({
         type: 'EXERCISES_UPDATED',
         classCode: curSession.classCode,

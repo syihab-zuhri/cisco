@@ -54,6 +54,15 @@ export function ClassroomStudentHUD() {
     typeof window !== 'undefined' ? window.innerWidth < 640 : false
   );
 
+  // Pastikan jika daftar soal kosong, seluruh status penilaian & indeks soal segera direset
+  useEffect(() => {
+    if (activeExercises.length === 0) {
+      setSelectedExerciseIndex(0);
+      setEvaluationsByExerciseId({});
+      setIsEvaluating(false);
+    }
+  }, [activeExercises.length]);
+
   // Soal yang sedang dipilih oleh siswa
   const activeExercise: Exercise | null =
     activeExercises[selectedExerciseIndex] || activeExercises[0] || null;
@@ -63,7 +72,6 @@ export function ClassroomStudentHUD() {
     activeExercise && evaluationsByExerciseId[activeExercise.id]
       ? evaluationsByExerciseId[activeExercise.id]
       : null;
-
   // Handler Keluar Kelas
   const handleLeaveClass = useCallback(
     (confirm = true) => {
@@ -128,6 +136,7 @@ export function ClassroomStudentHUD() {
             setActiveExercises([]);
             setSelectedExerciseIndex(0);
             setEvaluationsByExerciseId({});
+            setIsEvaluating(false);
             pushToast('info', 'Materi/soal aktif telah ditiadakan oleh guru.');
           }
           break;
@@ -234,13 +243,19 @@ export function ClassroomStudentHUD() {
           }
         }
       } else {
-        if (session && curSess?.status === 'closed') {
-          setSession(null);
+        if (curSess?.status === 'closed' || !curSess) {
+          if (session) {
+            setSession(null);
+          }
+          if (participant) {
+            handleLeaveClass(false);
+          }
         }
         if (activeExercises.length > 0) {
           setActiveExercises([]);
           setSelectedExerciseIndex(0);
           setEvaluationsByExerciseId({});
+          setIsEvaluating(false);
         }
       }
     }, 2000);
@@ -477,50 +492,6 @@ export function ClassroomStudentHUD() {
     ? 'right-2 sm:right-4 md:right-[336px]'
     : 'right-2 sm:right-4';
 
-  // Jika siswa sudah terhubung tetapi belum ada soal yang disiarkan oleh guru
-  if (!activeExercise || activeExercises.length === 0) {
-    return (
-      <Card
-        className={cn(
-          'absolute top-3 z-30 flex flex-col border border-primary/40 bg-background/95 shadow-2xl backdrop-blur transition-all duration-200 w-[calc(100vw-1rem)] sm:w-[380px] max-w-[380px]',
-          positionClass
-        )}
-      >
-        <div className="flex items-center justify-between border-b bg-muted/40 px-3.5 py-2.5">
-          <div className="flex items-center gap-2">
-            <GraduationCap className="h-4 w-4 text-primary" />
-            <div className="flex flex-col">
-              <span className="font-mono text-xs font-bold text-foreground">
-                {session?.classCode || 'KELAS'}
-              </span>
-              <span className="text-[10px] text-muted-foreground">
-                {participant.nickname} • Terhubung
-              </span>
-            </div>
-          </div>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => handleLeaveClass(true)}
-            className="h-7 px-2 text-xs text-rose-400 hover:bg-rose-500/10 hover:text-rose-300"
-          >
-            <LogOut className="h-3.5 w-3.5 mr-1" />
-            Keluar
-          </Button>
-        </div>
-        <div className="flex flex-col items-center justify-center p-6 text-center gap-3">
-          <Clock className="h-8 w-8 text-amber-400 animate-pulse" />
-          <div className="flex flex-col gap-1">
-            <h4 className="text-xs font-bold text-foreground">Menunggu Soal dari Guru</h4>
-            <p className="text-[11px] text-muted-foreground leading-relaxed">
-              Anda telah terhubung ke ruang kelas. Begitu guru menyiarkan materi ujian atau latihan, lembar instruksi dan target praktikum akan otomatis muncul di sini.
-            </p>
-          </div>
-        </div>
-      </Card>
-    );
-  }
-
   // Tampilan Minimized (Floating Pill)
   if (isMinimized) {
     return (
@@ -536,11 +507,15 @@ export function ClassroomStudentHUD() {
             {session?.classCode || 'KELAS'}
           </span>
           <span className="text-muted-foreground truncate">• {participant?.nickname || 'Siswa'}</span>
-          {activeExercises.length > 1 && (
+          {activeExercises.length > 1 ? (
             <span className="text-[10px] text-primary font-mono shrink-0">
               ({selectedExerciseIndex + 1}/{activeExercises.length})
             </span>
-          )}
+          ) : activeExercises.length === 0 ? (
+            <span className="text-[10px] text-muted-foreground font-medium shrink-0">
+              (Menunggu Soal)
+            </span>
+          ) : null}
         </div>
 
         {evaluation && (
@@ -566,6 +541,61 @@ export function ClassroomStudentHUD() {
           <ChevronDown className="h-4 w-4" />
         </Button>
       </div>
+    );
+  }
+
+  // Jika siswa sudah terhubung tetapi belum ada soal yang disiarkan oleh guru
+  if (!activeExercise || activeExercises.length === 0) {
+    return (
+      <Card
+        className={cn(
+          'absolute top-3 z-30 flex flex-col border border-primary/40 bg-background/95 shadow-2xl backdrop-blur transition-all duration-200 w-[calc(100vw-1rem)] sm:w-[380px] max-w-[380px]',
+          positionClass
+        )}
+      >
+        <div className="flex items-center justify-between border-b bg-muted/40 px-3.5 py-2.5">
+          <div className="flex items-center gap-2">
+            <GraduationCap className="h-4 w-4 text-primary" />
+            <div className="flex flex-col">
+              <span className="font-mono text-xs font-bold text-foreground">
+                {session?.classCode || 'KELAS'}
+              </span>
+              <span className="text-[10px] text-muted-foreground">
+                {participant.nickname} • Terhubung
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-1">
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={() => setIsMinimized(true)}
+              className="h-6 w-6 text-muted-foreground hover:text-foreground shrink-0"
+              title="Kecilkan HUD"
+            >
+              <ChevronUp className="h-4 w-4" />
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => handleLeaveClass(true)}
+              className="h-7 px-2 text-xs text-rose-400 hover:bg-rose-500/10 hover:text-rose-300"
+            >
+              <LogOut className="h-3.5 w-3.5 mr-1" />
+              Keluar
+            </Button>
+          </div>
+        </div>
+        <div className="flex flex-col items-center justify-center p-6 text-center gap-3">
+          <Clock className="h-8 w-8 text-amber-400 animate-pulse" />
+          <div className="flex flex-col gap-1">
+            <h4 className="text-xs font-bold text-foreground">Menunggu Soal dari Guru</h4>
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              Anda telah terhubung ke ruang kelas. Begitu guru menyiarkan materi ujian atau latihan, lembar instruksi dan target praktikum akan otomatis muncul di sini.
+            </p>
+          </div>
+        </div>
+      </Card>
     );
   }
 

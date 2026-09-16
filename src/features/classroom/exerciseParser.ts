@@ -453,6 +453,10 @@ export function loadExercises(): Exercise[] {
 
 export function saveExercises(list: Exercise[]): void {
   try {
+    if (!list || list.length === 0) {
+      clearExercisesStorage();
+      return;
+    }
     getStorage().setItem(STORAGE_KEY_EXERCISES, JSON.stringify(list));
   } catch (err) {
     console.warn('[ExerciseParser] Gagal menyimpan storage soal:', err);
@@ -460,5 +464,10 @@ export function saveExercises(list: Exercise[]): void {
 }
 
 export function clearExercisesStorage(): void {
-  getStorage().removeItem(STORAGE_KEY_EXERCISES);
+  try {
+    getStorage().removeItem(STORAGE_KEY_EXERCISES);
+  } catch {
+    // Fallback if blocked
+  }
+  memoryStore.removeItem(STORAGE_KEY_EXERCISES);
 }

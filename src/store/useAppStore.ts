@@ -1105,9 +1105,50 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       seenEdgeIds.add(edge.id);
       validEdges.push(edge);
     }
+    // Sinkronisasi status port pada nodes dengan validEdges (penegakan INV-003)
+    const validEdgeByPortKey = new Map<string, { edgeId: string; peerNodeId: string; peerPortId: string }>();
+    for (const e of validEdges) {
+      const isWireless = e.type === 'wirelessLink';
+      const srcKey = `${e.source}:${e.sourceHandle}`;
+      const dstKey = `${e.target}:${e.targetHandle}`;
+      validEdgeByPortKey.set(srcKey, { edgeId: e.id, peerNodeId: e.target, peerPortId: e.targetHandle ?? 'fa0' });
+      if (!isWireless) {
+        validEdgeByPortKey.set(dstKey, { edgeId: e.id, peerNodeId: e.source, peerPortId: e.sourceHandle ?? 'fa0' });
+      }
+    }
+
+    const syncedNodes = nodes.map((node) => ({
+      ...node,
+      data: {
+        ...node.data,
+        ports: node.data.ports.map((p) => {
+          const key = `${node.id}:${p.id}`;
+          const binding = validEdgeByPortKey.get(key);
+          if (binding) {
+            return {
+              ...p,
+              connectedEdgeId: binding.edgeId,
+              connectedToNodeId: binding.peerNodeId,
+              connectedToPortId: binding.peerPortId,
+              status: node.data.type === 'router' && p.status === 'down' ? ('down' as const) : ('up' as const),
+            };
+          }
+          if (p.kind !== 'wireless' && p.connectedEdgeId) {
+            return {
+              ...p,
+              connectedEdgeId: undefined,
+              connectedToNodeId: undefined,
+              connectedToPortId: undefined,
+              status: 'down' as const,
+            };
+          }
+          return p;
+        }),
+      },
+    }));
 
     set({
-      nodes,
+      nodes: syncedNodes,
       edges: validEdges,
       selectedNodeId: null,
       topologyVersion: get().topologyVersion + 1,
