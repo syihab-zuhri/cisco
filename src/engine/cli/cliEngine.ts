@@ -480,7 +480,7 @@ export class CliSession {
       }
       const net = rawTokens[2];
       const maskOrPrefix = rawTokens[3];
-      const nextHop = rawTokens[4];
+      const nextHop = rawTokens.slice(4).join(' ');
       if (!net || !maskOrPrefix || !nextHop) {
         return this.invalid('Incomplete command. Format: ip route <network> <subnet-mask> <next-hop>');
       }
@@ -528,7 +528,7 @@ export class CliSession {
       }
       const net = rawTokens[3];
       const maskOrPrefix = rawTokens[4];
-      const nextHop = rawTokens[5];
+      const nextHop = rawTokens.length > 5 ? rawTokens.slice(5).join(' ') : undefined;
       if (!net || !maskOrPrefix) {
         return this.invalid('Incomplete command. Format: no ip route <network> <subnet-mask> [next-hop]');
       }
@@ -541,7 +541,15 @@ export class CliSession {
         }
       }
       const routes = dev.routes ?? [];
-      const idx = routes.findIndex((r) => r.network === net && r.subnetMask === mask && (!nextHop || r.nextHop === nextHop));
+      const cleanNextHop = nextHop ? nextHop.toLowerCase().replace(/\s+/g, '') : undefined;
+      const idx = routes.findIndex((r) => {
+        if (r.network !== net || r.subnetMask !== mask) return false;
+        if (!nextHop) return true;
+        if (r.nextHop === nextHop) return true;
+        const rClean = r.nextHop.toLowerCase().replace(/\s+/g, '');
+        const rIfClean = r.interfaceId?.toLowerCase().replace(/\s+/g, '');
+        return rClean === cleanNextHop || rIfClean === cleanNextHop;
+      });
       if (idx !== -1) {
         this.deps.removeStaticRoute?.(idx);
         return [];

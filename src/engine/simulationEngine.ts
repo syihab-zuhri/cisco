@@ -646,13 +646,21 @@ export class HeadlessSimulationEngine {
         }
       }
     }
-    return (
-      candidates.find(
-        (p) =>
-          (p.ipAddress && isSameSubnet(p.ipAddress, targetIp, p.subnetMask!)) ||
-          p.subInterfaces?.some((s) => isSameSubnet(s.ipAddress, targetIp, s.subnetMask))
-      ) ?? candidates[0]
+    const localMatch = candidates.find(
+      (p) =>
+        (p.ipAddress && isSameSubnet(p.ipAddress, targetIp, p.subnetMask!)) ||
+        p.subInterfaces?.some((s) => isSameSubnet(s.ipAddress, targetIp, s.subnetMask))
     );
+    if (localMatch) return localMatch;
+
+    if (dev.defaultGateway) {
+      const gwPort = candidates.find(
+        (p) => p.ipAddress && p.subnetMask && isSameSubnet(p.ipAddress, dev.defaultGateway!, p.subnetMask)
+      );
+      if (gwPort) return gwPort;
+    }
+
+    return candidates[0];
   }
 
   /**
@@ -720,19 +728,36 @@ export class HeadlessSimulationEngine {
 
           if (isDirectlyAttached) {
             const targetRef = (r.interfaceId || r.nextHop || '').toLowerCase().trim();
+            const cleanTarget = targetRef.replace(/\s+/g, '');
             egress = dev.ports.find(
-              (p) =>
-                (p.id.toLowerCase() === targetRef || p.name.toLowerCase() === targetRef) &&
-                p.status === 'up'
+              (p) => {
+                const pId = p.id.toLowerCase().replace(/\s+/g, '');
+                const pName = p.name.toLowerCase().replace(/\s+/g, '');
+                return (
+                  pId === cleanTarget ||
+                  pName === cleanTarget ||
+                  pId.replace(/^fastethernet/, 'fa') === cleanTarget ||
+                  pName.replace(/^fastethernet/, 'fa') === cleanTarget ||
+                  cleanTarget.replace(/^fastethernet/, 'fa') === pId ||
+                  cleanTarget.replace(/^fastethernet/, 'fa') === pName
+                ) && p.status === 'up';
+              }
             );
             if (!egress) {
               for (const p of dev.ports) {
                 if (p.status !== 'up') continue;
-                const sub = p.subInterfaces?.find(
-                  (s) =>
-                    `${p.id}.${s.vlanId}`.toLowerCase() === targetRef ||
-                    `${p.name}.${s.vlanId}`.toLowerCase() === targetRef
-                );
+                const sub = p.subInterfaces?.find((s) => {
+                  const sId = `${p.id}.${s.vlanId}`.toLowerCase().replace(/\s+/g, '');
+                  const sName = `${p.name}.${s.vlanId}`.toLowerCase().replace(/\s+/g, '');
+                  return (
+                    sId === cleanTarget ||
+                    sName === cleanTarget ||
+                    sId.replace(/^fastethernet/, 'fa') === cleanTarget ||
+                    sName.replace(/^fastethernet/, 'fa') === cleanTarget ||
+                    cleanTarget.replace(/^fastethernet/, 'fa') === sId ||
+                    cleanTarget.replace(/^fastethernet/, 'fa') === sName
+                  );
+                });
                 if (sub) {
                   egress = p;
                   subIfIp = sub.ipAddress;
@@ -771,9 +796,13 @@ export class HeadlessSimulationEngine {
               }
             }
             if (!egress && r.interfaceId) {
+              const cleanIf = r.interfaceId.toLowerCase().replace(/\s+/g, '');
               egress = dev.ports.find(
                 (p) =>
-                  (p.id === r.interfaceId || p.name.toLowerCase() === r.interfaceId.toLowerCase()) &&
+                  (p.id.toLowerCase().replace(/\s+/g, '') === cleanIf ||
+                    p.name.toLowerCase().replace(/\s+/g, '') === cleanIf ||
+                    p.id.toLowerCase().replace(/\s+/g, '').replace(/^fastethernet/, 'fa') === cleanIf ||
+                    p.name.toLowerCase().replace(/\s+/g, '').replace(/^fastethernet/, 'fa') === cleanIf) &&
                   p.status === 'up'
               );
             }
@@ -1528,7 +1557,24 @@ export class HeadlessSimulationEngine {
       // melintasi interface lain untuk melayani segmen klien.
       const arrivalPortId = path.at(-1)?.toPortId;
       const iface = dev.ports.find((p) => p.id === arrivalPortId);
-      const pool = iface ? dev.dhcpPools?.[iface.id] : undefined;
+      let pool = iface ? dev.dhcpPools?.[iface.id] : undefined;
+      if (!pool && iface && port.vlanId) {
+        pool = dev.dhcpPools?.[`${iface.id}.${port.vlanId}`];
+      }
+      if (!pool && iface && dev.dhcpPools) {
+        for (const pEntry of Object.values(dev.dhcpPools)) {
+          if (
+            pEntry.enabled &&
+            (
+              (iface.ipAddress && isSameSubnet(iface.ipAddress, pEntry.network, pEntry.mask)) ||
+              iface.subInterfaces?.some((s) => isSameSubnet(s.ipAddress, pEntry.network, pEntry.mask))
+            )
+          ) {
+            pool = pEntry;
+            break;
+          }
+        }
+      }
       const matchingSub = iface?.subInterfaces?.find(
         (s) => pool && isSameSubnet(s.ipAddress, pool.network, pool.mask)
       );
