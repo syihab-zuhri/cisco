@@ -477,9 +477,9 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       const targetNode = state.nodes.find((n) => n.id === nodeId);
       const targetPort = targetNode?.data.ports.find((p) => p.id === portId);
       const oldIp = targetPort?.ipAddress;
-      const ipChanged = updates.ipAddress && updates.ipAddress !== oldIp;
+      const ipChanged = 'ipAddress' in updates && updates.ipAddress !== oldIp;
       const oldMac = targetPort?.macAddress;
-      const macChanged = updates.macAddress && updates.macAddress !== oldMac;
+      const macChanged = 'macAddress' in updates && updates.macAddress !== oldMac;
 
       return {
         nodes: state.nodes.map((node) => {
@@ -610,7 +610,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       style: { stroke: '#10B981', strokeWidth: 2 },
     };
 
-    set({ edges: [...edges, newEdge] });
+    set((state) => ({ edges: [...state.edges, newEdge] }));
     get().addSimulationLog(
       'INFO',
       `Kabel terhubung: ${sourceNode.data.label} (${sPort.name}) <--> ${targetNode.data.label} (${tPort.name})`
@@ -766,7 +766,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       });
     }
 
-    set({ edges: edges.filter((e) => e.id !== edgeId) });
+    set((state) => ({ edges: state.edges.filter((e) => e.id !== edgeId) }));
     get().addSimulationLog(
       'INFO',
       isWireless ? `Asosiasi ${edge.id} diputus.` : `Kabel ${edge.id} dilepas. Link DOWN.`

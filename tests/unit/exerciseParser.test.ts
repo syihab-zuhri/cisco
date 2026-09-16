@@ -298,5 +298,41 @@ describe('Exercise Parser & Validator Suite', () => {
       expect(loaded[0].id).toBe('custom-01');
       expect(loaded[0].title).toBe('Soal Khusus Ujian');
     });
+
+    it('loadExercises mengembalikan array kosong [] secara default tanpa auto-seed', () => {
+      clearExercisesStorage();
+      expect(loadExercises()).toEqual([]);
+    });
+
+    it('clearExercisesStorage dan saveExercises([]) mengosongkan storage', () => {
+      const custom: Exercise[] = [
+        {
+          id: 'custom-02',
+          title: 'Soal Test',
+          instructions: 'Instruksi',
+          difficulty: 'Dasar',
+          targets: [
+            {
+              id: 't2',
+              title: 'Target',
+              type: 'device_config',
+              deviceId: 'PC-1',
+              address: '192.168.1.1',
+            },
+          ],
+        },
+      ];
+      saveExercises(custom);
+      expect(loadExercises().length).toBe(1);
+
+      saveExercises([]);
+      expect(loadExercises()).toEqual([]);
+
+      saveExercises(custom);
+      expect(loadExercises().length).toBe(1);
+
+      clearExercisesStorage();
+      expect(loadExercises()).toEqual([]);
+    });
   });
 });

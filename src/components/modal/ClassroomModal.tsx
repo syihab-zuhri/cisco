@@ -627,10 +627,24 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
     if (selectedExercise?.id === exId) {
       setSelectedExercise(updated.length > 0 ? updated[0] : null);
     }
+    if (activeExercise?.id === exId) {
+      setActiveExercise(null);
+    }
     if (updated.length === 0) {
       clearExercisesStorage();
       setSelectedExercise(null);
+      setActiveExercise(null);
       setSelectedExamExerciseIds([]);
+      classroomHub.saveActiveExercises([]);
+      classroomHub.saveActiveExercise(null);
+      const curSess = session || classroomHub.getSession();
+      if (curSess) {
+        classroomHub.broadcast({
+          type: 'EXERCISES_UPDATED',
+          classCode: curSess.classCode,
+          exercises: [],
+        });
+      }
     }
     pushToast('info', 'Soal telah dihapus dari bank soal.');
   };

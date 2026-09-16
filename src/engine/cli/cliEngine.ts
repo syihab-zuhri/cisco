@@ -370,7 +370,13 @@ export class CliSession {
     if (device.type !== 'router') {
       return this.invalid('IP routing not enabled pada perangkat ini.');
     }
-    const lines = ['Codes: C - connected, S - static, R - RIP', 'Gateway of last resort is not set'];
+    const defaultRoute = (device.routes ?? []).find(
+      (r) => r.network === '0.0.0.0' && (r.subnetMask === '0.0.0.0' || r.subnetMask === '0')
+    );
+    const gatewayMsg = defaultRoute
+      ? `Gateway of last resort is ${defaultRoute.nextHop} to network 0.0.0.0`
+      : 'Gateway of last resort is not set';
+    const lines = ['Codes: C - connected, S - static, R - RIP', gatewayMsg];
     for (const p of device.ports) {
       if (!p.ipAddress || !p.subnetMask) continue;
       const network = networkAddress(p.ipAddress, p.subnetMask);
@@ -393,10 +399,14 @@ export class CliSession {
           r.nextHop === '0.0.0.0' ||
           r.nextHop.trim() === '' ||
           r.nextHop.toLowerCase() === 'directly connected';
+        const isDefault =
+          r.network === '0.0.0.0' && (r.subnetMask === '0.0.0.0' || r.subnetMask === '0');
+        const code = isDefault ? 'S*' : 'S';
+        const displayNet = isDefault ? '0.0.0.0/0' : `${r.network}/${r.subnetMask}`;
         if (isDirect) {
-          lines.push(`S       ${r.network}/${r.subnetMask} is directly connected, ${r.interfaceId}`);
+          lines.push(`${code.padEnd(8)}${displayNet} is directly connected, ${r.interfaceId}`);
         } else {
-          lines.push(`S       ${r.network}/${r.subnetMask} via ${r.nextHop}, ${r.interfaceId}`);
+          lines.push(`${code.padEnd(8)}${displayNet} via ${r.nextHop}, ${r.interfaceId}`);
         }
       }
     }
@@ -825,7 +835,7 @@ export class CliSession {
     }
 
     for (const r of device.routes ?? []) {
-      if (r.source !== 'connected') {
+      if (r.source !== 'connected' && r.source !== 'rip') {
         lines.push(`ip route ${r.network} ${r.subnetMask} ${r.nextHop}`);
       }
     }

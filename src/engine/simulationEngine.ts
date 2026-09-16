@@ -374,6 +374,7 @@ export class HeadlessSimulationEngine {
         .find((e) => e.hop && e.hop.targetNodeId === sw.id && e.kind === eventKind);
       if (hopEvent) {
         const portObj = this.portOf(hop.toNodeId, hop.toPortId);
+        const vlan = hopEvent.pdu?.frame.vlanId ?? portObj?.vlanId ?? 1;
         hopEvent.effects = [
           ...(hopEvent.effects ?? []),
           {
@@ -381,7 +382,7 @@ export class HeadlessSimulationEngine {
             nodeId: sw.id,
             mac,
             portId: hop.toPortId,
-            vlan: portObj?.vlanId ?? 1,
+            vlan,
           },
         ];
       }
@@ -893,7 +894,7 @@ export class HeadlessSimulationEngine {
             mac: sender.port.macAddress,
           });
         }
-        this.recordHop(
+        const repEvent = this.recordHop(
           ctx,
           hop,
           'ARP_REP',
@@ -908,13 +909,15 @@ export class HeadlessSimulationEngine {
         );
         this.learnCamOnHop(ctx, hop, owner.port.macAddress, 'ARP_REP', animate);
         if (idx === backwardPath.length - 1) {
-          const lastEvent = ctx.queue.snapshot().at(-1);
-          lastEvent?.effects?.push({
-            type: 'ARP_LEARN',
-            nodeId: sender.dev.id,
-            ip: nextHopIp,
-            mac: owner.port.macAddress,
-          });
+          repEvent.effects = [
+            ...(repEvent.effects ?? []),
+            {
+              type: 'ARP_LEARN',
+              nodeId: sender.dev.id,
+              ip: nextHopIp,
+              mac: owner.port.macAddress,
+            },
+          ];
         }
       });
     }
@@ -1690,7 +1693,7 @@ export class HeadlessSimulationEngine {
           dhcp,
           srcMac: chosen!.iface.macAddress,
           dstMac: BROADCAST_MAC,
-          vlanId: chosen!.iface.vlanId,
+          vlanId: chosen!.iface.vlanId ?? port.vlanId,
           note: 'UDP 67 (BootPS) → 68 (BootPC) · Broadcast',
         })
       );
@@ -1866,12 +1869,14 @@ export class HeadlessSimulationEngine {
             for (const [key, route] of rState) {
               // Split horizon with poison reverse (RFC 2453 §3.4.3):
               // Jika route dipelajari dari interface ini, iklankan balik dengan metric 16 (unreachable / poisoned).
-              const isReverse = route.interfaceId === pr.portId;
+              const isReverse = route.learned && route.interfaceId === pr.portId;
               if (isReverse) {
                 const existing = nState.get(key);
                 if (existing && existing.nextHop === nextHopIp && existing.metric < 16) {
                   existing.metric = 16;
                   changed = true;
+                }
+                if (round === 2 || (existing && existing.nextHop === nextHopIp)) {
                   for (const hop of path) {
                     const event = this.recordHop(
                       ctx,
@@ -1895,7 +1900,7 @@ export class HeadlessSimulationEngine {
                     if (prPortMac) {
                       this.learnCamOnHop(ctx, hop, prPortMac, 'RIP_UPDATE', true);
                     }
-                    if (hop === path.at(-1)) {
+                    if (hop === path.at(-1) && existing && existing.nextHop === nextHopIp) {
                       event.effects = [
                         {
                           type: 'ROUTE_LEARN',

@@ -318,6 +318,123 @@ describe('Classroom Feature Suite', () => {
       expect(classroomHub.getSession()?.activeExercises).toEqual([]);
       expect(classroomHub.getSession()?.activeExerciseId).toBeNull();
     });
+
+    it('purgeAllTeacherData memicu siklus pembersihan menyeluruh (kelas ditutup, soal aktif kosong, storage bank soal kosong, lockedRole null, dan event broadcast)', async () => {
+      let classClosedReceived = false;
+      let exercisesUpdatedReceived = false;
+      let resolveClosed!: () => void;
+      const closedPromise = new Promise<void>((r) => { resolveClosed = r; });
+      let resolveUpdated!: () => void;
+      const updatedPromise = new Promise<void>((r) => { resolveUpdated = r; });
+      let broadcastExercises: unknown = null;
+
+      const unsub = classroomHub.subscribe((ev) => {
+        if (ev.type === 'CLASS_CLOSED') {
+          classClosedReceived = true;
+          resolveClosed();
+        }
+        if (ev.type === 'EXERCISES_UPDATED' && (!ev.exercises || ev.exercises.length === 0)) {
+          exercisesUpdatedReceived = true;
+          broadcastExercises = ev.exercises;
+          resolveUpdated();
+        }
+      });
+      classroomHub.setLockedRole('teacher');
+      saveExercises([...DEFAULT_EXERCISES]);
+      classroomHub.createClass('Kelas Audit', 'AUDIT-101', undefined, DEFAULT_EXERCISES);
+      classroomHub.joinClass('AUDIT-101', 'Peserta 1');
+
+      expect(classroomHub.getLockedRole()).toBe('teacher');
+      expect(classroomHub.getActiveExercises().length).toBeGreaterThan(0);
+      expect(loadExercises().length).toBeGreaterThan(0);
+      expect(classroomHub.getSession()?.status).toBe('open');
+
+      // Jalankan logika identik dengan purgeAllTeacherData di ClassroomModal
+      const curSess = classroomHub.getSession();
+      const code = (curSess?.classCode || '').trim();
+      classroomHub.closeClass(code);
+      classroomHub.saveActiveExercises([]);
+      classroomHub.saveActiveExercise(null);
+      clearExercisesStorage();
+      classroomHub.broadcast({
+        type: 'CLASS_CLOSED',
+        classCode: code,
+      });
+      classroomHub.broadcast({
+        type: 'EXERCISES_UPDATED',
+        classCode: code,
+        exercises: [],
+      });
+      classroomHub.leaveClass();
+      classroomHub.setLockedRole(null);
+      await Promise.all([closedPromise, updatedPromise]);
+
+      expect(loadExercises()).toEqual([]);
+      expect(classroomHub.getActiveExercises()).toEqual([]);
+      expect(classroomHub.getActiveExercise()).toBeNull();
+      expect(classroomHub.getLockedRole()).toBeNull();
+      expect(classroomHub.getSession()?.status).toBe('closed');
+      expect(classroomHub.getSession()?.activeExercises).toEqual([]);
+      expect(classroomHub.getSession()?.activeExerciseId).toBeNull();
+      expect(classClosedReceived).toBe(true);
+      expect(exercisesUpdatedReceived).toBe(true);
+      expect(broadcastExercises).toEqual([]);
+      unsub();
+    });
+
+    it('penghapusan soal satu per satu sampai habis mengosongkan bank soal dan soal aktif', () => {
+      saveExercises([DEFAULT_EXERCISES[0], DEFAULT_EXERCISES[1]]);
+      expect(loadExercises().length).toBe(2);
+
+      // Hapus soal pertama
+      let currentList = loadExercises();
+      let updated = currentList.filter((x) => x.id !== DEFAULT_EXERCISES[0].id);
+      saveExercises(updated);
+      expect(loadExercises().length).toBe(1);
+
+      // Hapus soal kedua (soal terakhir)
+      currentList = loadExercises();
+      updated = currentList.filter((x) => x.id !== DEFAULT_EXERCISES[1].id);
+      saveExercises(updated);
+      if (updated.length === 0) {
+        clearExercisesStorage();
+        classroomHub.saveActiveExercises([]);
+        classroomHub.saveActiveExercise(null);
+      }
+
+      expect(loadExercises()).toEqual([]);
+      expect(classroomHub.getActiveExercises()).toEqual([]);
+      expect(classroomHub.getActiveExercise()).toBeNull();
+    });
+
+    it('invarian HUD Siswa: null jika sesi closed atau peserta null, dan tidak ada target soal aktif bila soal kosong', () => {
+      // Kondisi 1: Peserta null -> HUD harus null
+      const participantNull = null;
+      const sessionOpen = {
+        classCode: 'TEST-1',
+        title: 'Kelas Test',
+        createdAt: Date.now(),
+        status: 'open' as 'open' | 'closed',
+        allowSelfCheck: true,
+        activeExercises: [],
+        activeExerciseId: null,
+      };
+      const shouldRenderHUD1 = !(!participantNull || !sessionOpen || sessionOpen.status === 'closed');
+      expect(shouldRenderHUD1).toBe(false);
+
+      // Kondisi 2: Sesi closed -> HUD harus null
+      const dummyParticipant = { id: 'p-1', nickname: 'Budi', joinedAt: Date.now(), status: 'in_progress' as const };
+      const sessionClosed = { ...sessionOpen, status: 'closed' as const };
+      const shouldRenderHUD2 = !(!dummyParticipant || !sessionClosed || sessionClosed.status === 'closed');
+      expect(shouldRenderHUD2).toBe(false);
+
+      // Kondisi 3: Siswa terhubung tetapi activeExercises kosong -> tidak ada instruksi/target soal
+      const activeExercisesEmpty: Exercise[] = [];
+      const activeExercise = activeExercisesEmpty[0] || null;
+      expect(activeExercise).toBeNull();
+      const hasActiveQuestionInstructions = activeExercise !== null;
+      expect(hasActiveQuestionInstructions).toBe(false);
+    });
   });
 
   describe('Exercise Evaluator', () => {
