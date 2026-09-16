@@ -292,7 +292,18 @@ export class CliSession {
       ) {
         return this.showIpRoute();
       }
-      if (cmd === 'show mac-address-table' || cmd === 'sh mac-address-table' || cmd === 'sh mac' || cmd === 'show mac') {
+      if (
+        cmd === 'show mac-address-table' ||
+        cmd === 'sh mac-address-table' ||
+        cmd === 'show mac address-table' ||
+        cmd === 'sh mac address-table' ||
+        cmd === 'show mac-address-table dynamic' ||
+        cmd === 'sh mac-address-table dynamic' ||
+        cmd === 'show mac address-table dynamic' ||
+        cmd === 'sh mac address-table dynamic' ||
+        cmd === 'sh mac' ||
+        cmd === 'show mac'
+      ) {
         return this.showMacTable();
       }
       if (cmd === 'show arp' || cmd === 'sh arp') {
@@ -504,7 +515,17 @@ export class CliSession {
       let egressInterfaceId = dev.ports[0]?.id ?? 'fa0/0';
       if (isValidIp(nextHop)) {
         const matchingPort = dev.ports.find((p) => p.ipAddress && isSameSubnet(p.ipAddress, nextHop, p.subnetMask ?? '255.255.255.0'));
-        if (matchingPort) egressInterfaceId = matchingPort.id;
+        if (matchingPort) {
+          egressInterfaceId = matchingPort.id;
+        } else {
+          for (const p of dev.ports) {
+            const matchingSub = p.subInterfaces?.find((s) => s.ipAddress && isSameSubnet(s.ipAddress, nextHop, s.subnetMask ?? '255.255.255.0'));
+            if (matchingSub) {
+              egressInterfaceId = `${p.id}.${matchingSub.vlanId}`;
+              break;
+            }
+          }
+        }
       } else {
         const namedPort = this.findPort(nextHop);
         if (namedPort) egressInterfaceId = namedPort.id;

@@ -428,9 +428,9 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
           let arpTable = n.data.arpTable;
           let macTable = n.data.macTable;
           let changed = false;
-          if (arpTable && deletedIps.size > 0) {
-            for (const ip of deletedIps) {
-              if (ip in arpTable) {
+          if (arpTable && (deletedIps.size > 0 || deletedMacs.size > 0)) {
+            for (const [ip, mac] of Object.entries(arpTable)) {
+              if (deletedIps.has(ip) || deletedMacs.has(mac)) {
                 if (!changed) {
                   arpTable = { ...arpTable };
                   changed = true;
@@ -480,6 +480,19 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       const ipChanged = 'ipAddress' in updates && updates.ipAddress !== oldIp;
       const oldMac = targetPort?.macAddress;
       const macChanged = 'macAddress' in updates && updates.macAddress !== oldMac;
+      const oldSubIps = new Set<string>();
+      targetPort?.subInterfaces?.forEach((s) => {
+        if (s.ipAddress) oldSubIps.add(s.ipAddress);
+      });
+      const newSubIps = new Set<string>();
+      if ('subInterfaces' in updates && updates.subInterfaces) {
+        updates.subInterfaces.forEach((s) => {
+          if (s.ipAddress) newSubIps.add(s.ipAddress);
+        });
+      }
+      const staleSubIps = 'subInterfaces' in updates
+        ? [...oldSubIps].filter((ip) => !newSubIps.has(ip))
+        : [];
 
       return {
         nodes: state.nodes.map((node) => {
@@ -493,7 +506,18 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
             arpTable = nextArp;
             changed = true;
           }
-          // Invalidate stale MAC entries in switches when port MAC changes
+          // Invalidate stale ARP entries for deleted sub-interface IPs
+          if (staleSubIps.length > 0 && arpTable) {
+            for (const sIp of staleSubIps) {
+              if (sIp in arpTable) {
+                if (!changed) {
+                  arpTable = { ...arpTable };
+                  changed = true;
+                }
+                delete arpTable[sIp];
+              }
+            }
+          }
           if (macChanged && macTable && oldMac && macTable[oldMac]) {
             const nextMac = { ...macTable };
             delete nextMac[oldMac];
