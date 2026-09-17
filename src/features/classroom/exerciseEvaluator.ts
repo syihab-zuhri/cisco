@@ -222,7 +222,12 @@ async function evaluateTarget(
       }
 
       const srcDownPort = srcDev.ports.find((p) => p.ipAddress && p.status === 'down');
-      if (srcDownPort && !srcDev.ports.some((p) => p.ipAddress && p.status === 'up')) {
+      const hasUpIp = srcDev.ports.some(
+        (p) =>
+          (p.ipAddress && p.status === 'up') ||
+          (p.status === 'up' && p.subInterfaces?.some((s) => Boolean(s.ipAddress)))
+      );
+      if (srcDownPort && !hasUpIp) {
         return {
           targetId: target.id,
           title: target.title,

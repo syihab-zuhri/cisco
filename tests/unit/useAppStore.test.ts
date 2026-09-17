@@ -201,4 +201,23 @@ describe('useAppStore — anotasi kanvas (square & teks, v1.4.0)', () => {
     expect(updated.text).toBe('LAN A');
     expect(updated.fontSize).toBe(22);
   });
+
+  it('menyimpan dan mengenali sub-interface Router-on-a-Stick pada port router', () => {
+    useAppStore.getState().addDevice('router', { x: 0, y: 0 });
+    const routerNode = useAppStore.getState().nodes[0];
+    const portId = routerNode.data.ports[0].id;
+
+    useAppStore.getState().updatePortConfig(routerNode.id, portId, {
+      subInterfaces: [
+        { vlanId: 10, ipAddress: '192.168.10.1', subnetMask: '255.255.255.0' },
+        { vlanId: 20, ipAddress: '192.168.20.1', subnetMask: '255.255.255.0' },
+      ],
+    });
+
+    const updatedDev = useAppStore.getState().nodes[0].data;
+    const targetPort = updatedDev.ports.find((p) => p.id === portId);
+    expect(targetPort?.subInterfaces).toBeDefined();
+    expect(targetPort?.subInterfaces?.length).toBe(2);
+    expect(targetPort?.subInterfaces?.[0].ipAddress).toBe('192.168.10.1');
+  });
 });

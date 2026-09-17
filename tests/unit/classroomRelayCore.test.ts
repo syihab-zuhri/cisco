@@ -1,26 +1,37 @@
 import { describe, it, expect } from 'vitest';
 // @ts-expect-error importing mjs core
 import { createRelayMiddleware, cleanupStaleRooms } from '../../scripts/classroom-relay-core.mjs';
-import { EventEmitter } from 'node:events';
 
-class MockRequest extends EventEmitter {
+type Listener = (arg?: unknown) => void;
+
+class MockRequest {
   public url: string;
   public method: string;
   public headers: Record<string, string>;
   public destroyed: boolean = false;
+  private listeners: Record<string, Listener[]> = {};
 
   constructor(url: string, method: string = 'GET', headers: Record<string, string> = {}) {
-    super();
     this.url = url;
     this.method = method;
     this.headers = headers;
+  }
+
+  on(event: string, fn: Listener) {
+    if (!this.listeners[event]) this.listeners[event] = [];
+    this.listeners[event].push(fn);
+  }
+
+  emit(event: string, data?: unknown) {
+    const list = this.listeners[event] || [];
+    list.forEach((fn) => fn(data));
   }
 
   destroy() {
     this.destroyed = true;
   }
 
-  sendData(chunk: string | Buffer) {
+  sendData(chunk: string) {
     this.emit('data', chunk);
   }
 
@@ -91,7 +102,7 @@ describe('Classroom Relay Core Security & Hardening', () => {
 
     middleware(req, res);
 
-    const oversizedChunk = Buffer.alloc(2048, 'a');
+    const oversizedChunk = 'a'.repeat(2048);
     req.sendData(oversizedChunk);
     req.finish();
 

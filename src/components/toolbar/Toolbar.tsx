@@ -104,8 +104,18 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs, onOpenClassroom
     }
   }, [nodes, pingSource]);
 
+  const getNodeDisplayIp = (n: (typeof nodes)[number]): string => {
+    const directIp = n.data?.ports?.find((p) => p.ipAddress)?.ipAddress;
+    if (directIp) return directIp;
+    for (const p of n.data?.ports ?? []) {
+      const subIp = p.subInterfaces?.find((s) => s.ipAddress)?.ipAddress;
+      if (subIp) return subIp;
+    }
+    return '';
+  };
+
   const pingableNodes = nodes.filter((n) =>
-    n.data?.ports?.some((p) => p.ipAddress)
+    n.data?.ports?.some((p) => p.ipAddress || (p.subInterfaces && p.subInterfaces.some((s) => s.ipAddress)))
   );
 
   const handleExportJson = () => {
@@ -279,17 +289,20 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs, onOpenClassroom
                   if (!value) return '-- Pilih Host --';
                   const selected = pingableNodes.find((n) => n.id === value);
                   if (!selected) return value;
-                  const ip = selected.data.ports.find((p) => p.ipAddress)?.ipAddress;
+                  const ip = getNodeDisplayIp(selected);
                   return ip ? `${selected.data.label} (${ip})` : selected.data.label;
                 }}
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
-              {pingableNodes.map((n) => (
-                <SelectItem key={n.id} value={n.id}>
-                  {n.data.label} ({n.data.ports.find((p) => p.ipAddress)?.ipAddress})
-                </SelectItem>
-              ))}
+              {pingableNodes.map((n) => {
+                const ip = getNodeDisplayIp(n);
+                return (
+                  <SelectItem key={n.id} value={n.id}>
+                    {n.data.label}{ip ? ` (${ip})` : ''}
+                  </SelectItem>
+                );
+              })}
             </SelectContent>
           </Select>
 
@@ -671,17 +684,20 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs, onOpenClassroom
                   if (!value) return 'Host Sumber';
                   const selected = pingableNodes.find((n) => n.id === value);
                   if (!selected) return value;
-                  const ip = selected.data.ports.find((p) => p.ipAddress)?.ipAddress;
+                  const ip = getNodeDisplayIp(selected);
                   return ip ? `${selected.data.label} (${ip})` : selected.data.label;
                 }}
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
-              {pingableNodes.map((n) => (
-                <SelectItem key={n.id} value={n.id}>
-                  {n.data.label} ({n.data.ports.find((p) => p.ipAddress)?.ipAddress})
-                </SelectItem>
-              ))}
+              {pingableNodes.map((n) => {
+                const ip = getNodeDisplayIp(n);
+                return (
+                  <SelectItem key={n.id} value={n.id}>
+                    {n.data.label}{ip ? ` (${ip})` : ''}
+                  </SelectItem>
+                );
+              })}
             </SelectContent>
           </Select>
 

@@ -1170,6 +1170,17 @@ export class HeadlessSimulationEngine {
           return { ok: true, rttMs, replyTtl };
         }
 
+        const returnRouting = this.verifyReturnRouting(owner, returnPath, source, natInfo);
+        if (!returnRouting.ok) {
+          this.record(ctx, 'ERROR', returnRouting.error);
+          return {
+            ok: false,
+            rttMs: 0,
+            replyTtl: 0,
+            error: returnRouting.error,
+          };
+        }
+
         const replyTtl = INITIAL_TTL - routerCount;
         this.record(
           ctx,
@@ -1321,6 +1332,75 @@ export class HeadlessSimulationEngine {
 
       segStart = segEnd + 1;
     }
+  }
+
+  /**
+   * Verifikasi fidelitas rute balik (Bidirectional Routing Check RFC 1122 / CCNA).
+   * Memastikan perangkat tujuan (atau default gateway-nya) dan setiap router transit
+   * pada returnPath memiliki entri routing aktif kembali ke IP pengirim.
+   */
+  private verifyReturnRouting(
+    owner: { dev: DeviceData; port: PhysicalPort },
+    returnPath: L2Hop[],
+    source: { dev: DeviceData; port: PhysicalPort },
+    natInfo?: { routerId: string; globalIp: string; insideIp: string } | null
+  ): { ok: true } | { ok: false; error: string } {
+    if (owner.dev.type === 'cloud') {
+      return { ok: true };
+    }
+
+    // Jika perangkat penerima dan pengirim terhubung langsung dengan 1 link kabel fisik (point-to-point / directly attached)
+    if (returnPath.length === 1 && returnPath[0].toNodeId === source.dev.id) {
+      return { ok: true };
+    }
+
+    let currentTargetIp = natInfo ? natInfo.globalIp : source.port.ipAddress!;
+
+    // 1. Verifikasi keputusan rute dari perangkat penerima (pembalas echo reply)
+    const ownerHostPort =
+      owner.port.ipAddress && owner.port.subnetMask
+        ? owner.port
+        : (owner.dev.ports.find((p) => p.status === 'up' && p.ipAddress && p.subnetMask) ?? owner.port);
+
+    const ownerDecision = this.resolveNextHopIp(owner.dev, ownerHostPort, currentTargetIp);
+    if ('error' in ownerDecision) {
+      return {
+        ok: false,
+        error: `Destination Host Unreachable (rute balik): ${ownerDecision.error}`,
+      };
+    }
+
+    // 2. Verifikasi router-router transit sepanjang returnPath
+    const visitedRouters = new Set<string>();
+    for (const hop of returnPath) {
+      const dev = this.devices.get(hop.toNodeId);
+      if (dev?.type === 'router' && !visitedRouters.has(dev.id)) {
+        visitedRouters.add(dev.id);
+
+        // Jika sampai di router asal pengirim awal, routing internal pengirim sudah valid
+        if (dev.id === source.dev.id) {
+          break;
+        }
+
+        // Jika melewati router NAT, target translasi kembali ke inside IP
+        if (natInfo && dev.id === natInfo.routerId) {
+          currentTargetIp = source.port.ipAddress!;
+        }
+
+        const routerPort = dev.ports.find((p) => p.status === 'up') ?? dev.ports[0];
+        if (routerPort) {
+          const transitDecision = this.resolveNextHopIp(dev, routerPort, currentTargetIp);
+          if ('error' in transitDecision) {
+            return {
+              ok: false,
+              error: `Destination Host Unreachable (rute balik): ${transitDecision.error}`,
+            };
+          }
+        }
+      }
+    }
+
+    return { ok: true };
   }
 
   private countInteriorRouters(path: L2Hop[]): number {

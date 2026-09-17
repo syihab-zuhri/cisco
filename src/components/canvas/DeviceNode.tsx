@@ -48,7 +48,10 @@ export function DeviceNode({ id, data, selected }: NodeProps) {
     }
   };
 
-  const hasConfiguredIp = deviceData.ports.some((p) => p.ipAddress);
+  const configuredIp =
+    deviceData.ports.find((p) => p.ipAddress)?.ipAddress ||
+    deviceData.ports.flatMap((p) => p.subInterfaces ?? []).find((s) => s.ipAddress)?.ipAddress;
+  const hasConfiguredIp = Boolean(configuredIp);
 
   return (
     <div
@@ -122,7 +125,7 @@ export function DeviceNode({ id, data, selected }: NodeProps) {
       {/* IP / Info Tag */}
       {hasConfiguredIp && (
         <div className="mt-2 text-[11px] font-mono text-cyan-300 bg-cyan-950/60 px-2 py-0.5 rounded-full border border-cyan-800/60 font-semibold shadow-xs pointer-events-none">
-          {deviceData.ports.find((p) => p.ipAddress)?.ipAddress}
+          {configuredIp}
         </div>
       )}
 
