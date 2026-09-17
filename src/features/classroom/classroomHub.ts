@@ -262,6 +262,34 @@ export class ClassroomHub {
 
   // --- API Methods ---
 
+  private syncTimer: number | null = null;
+  private syncWatchersCount = 0;
+
+  public startAutoSync(): () => void {
+    this.syncWatchersCount++;
+    if (this.syncWatchersCount === 1) {
+      this.initAutoSyncTimer();
+    }
+    return () => {
+      this.syncWatchersCount = Math.max(0, this.syncWatchersCount - 1);
+      if (this.syncWatchersCount === 0 && this.syncTimer !== null) {
+        clearInterval(this.syncTimer);
+        this.syncTimer = null;
+      }
+    };
+  }
+
+  private initAutoSyncTimer(): void {
+    if (typeof window === 'undefined') return;
+    if (this.syncTimer !== null) clearInterval(this.syncTimer);
+    this.syncTimer = window.setInterval(() => {
+      const cur = this.getSession();
+      if (cur && cur.classCode && cur.status !== 'closed') {
+        void this.syncWithServer(cur.classCode);
+      }
+    }, 2000);
+  }
+
   public async syncWithServer(classCode?: string): Promise<boolean> {
     const code = (classCode || this.getSession()?.classCode || '').trim().toUpperCase();
     if (!code || typeof window === 'undefined' || !window.fetch) return false;

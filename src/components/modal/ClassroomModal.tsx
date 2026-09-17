@@ -244,17 +244,11 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
     }
   }, [isOpen]);
 
-  // Polling server relay setiap 2 detik selama modal aktif agar daftar peserta dan event sinkron lintas perangkat
+  // Sinkronisasi berkala dengan server relay selama modal aktif
   useEffect(() => {
     if (!isOpen) return;
-    const interval = setInterval(() => {
-      const cur = classroomHub.getSession();
-      if (cur && cur.classCode) {
-        void classroomHub.syncWithServer(cur.classCode);
-      }
-    }, 2000);
-
-    return () => clearInterval(interval);
+    const unsub = classroomHub.startAutoSync();
+    return unsub;
   }, [isOpen]);
 
   // Langganan event realtime BroadcastChannel

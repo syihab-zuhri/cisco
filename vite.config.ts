@@ -49,6 +49,23 @@ export default defineConfig({
       interval: 100,
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules/@xyflow')) {
+            return 'vendor-xyflow';
+          }
+          if (id.includes('node_modules/lucide-react') || id.includes('node_modules/@remixicon')) {
+            return 'vendor-icons';
+          }
+          if (id.includes('src/data/topologyTemplates')) {
+            return 'data-templates';
+          }
+        },
+      },
+    },
+  },
   test: {
     // Spesifikasi Playwright dijalankan lewat `npm run e2e`, bukan Vitest.
     exclude: ['**/node_modules/**', '**/dist/**', 'e2e/**'],

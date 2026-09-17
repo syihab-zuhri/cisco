@@ -226,54 +226,12 @@ export function ClassroomStudentHUD() {
     };
   }, [session, handleLeaveClass, pushToast]);
 
-  // Pantau perubahan participant lokal dan sinkronkan dengan server secara berkala
+  // Sinkronisasi otomatis terpadu dengan server relay saat partisipan aktif
   useEffect(() => {
-    const interval = setInterval(() => {
-      const current = classroomHub.getCurrentParticipant();
-      if (current?.id !== participant?.id) {
-        setParticipant(current);
-        if (!current) {
-          setActiveExercises([]);
-          setSelectedExerciseIndex(0);
-          setEvaluationsByExerciseId({});
-          setSession(null);
-        }
-      }
-      const curSess = classroomHub.getSession();
-      if (curSess && curSess.classCode && curSess.status !== 'closed') {
-        void classroomHub.syncWithServer(curSess.classCode);
-        const latest = classroomHub.getActiveExercises();
-        if (latest) {
-          if (
-            latest.length !== activeExercises.length ||
-            JSON.stringify(latest) !== JSON.stringify(activeExercises)
-          ) {
-            setActiveExercises(latest);
-            if (latest.length === 0) {
-              setEvaluationsByExerciseId({});
-            }
-          }
-        }
-      } else {
-        if (curSess?.status === 'closed' || !curSess) {
-          if (session) {
-            setSession(null);
-          }
-          if (participant) {
-            handleLeaveClass(false);
-          }
-        }
-        if (activeExercises.length > 0) {
-          setActiveExercises([]);
-          setSelectedExerciseIndex(0);
-          setEvaluationsByExerciseId({});
-          setIsEvaluating(false);
-        }
-      }
-    }, 2000);
-
-    return () => clearInterval(interval);
-  }, [participant, activeExercises, session]);
+    if (!participant) return;
+    const unsub = classroomHub.startAutoSync();
+    return unsub;
+  }, [participant]);
 
   // Evaluasi topologi kanvas untuk satu soal
   const runEvaluationForExercise = async (
