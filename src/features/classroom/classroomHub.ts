@@ -378,6 +378,7 @@ export class ClassroomHub {
         classCode: code,
         exercise: exercisesList[0],
         exercises: exercisesList,
+        hostToken: session.hostToken,
       });
     }
 
@@ -404,6 +405,7 @@ export class ClassroomHub {
       type: 'EXERCISES_UPDATED',
       classCode: cleanCode,
       exercises: frozenList,
+      hostToken: session?.hostToken,
     });
   }
 
@@ -418,6 +420,7 @@ export class ClassroomHub {
       type: 'CLASS_SETTINGS_CHANGED',
       classCode: cleanCode,
       allowSelfCheck: allow,
+      hostToken: session?.hostToken,
     });
   }
 
@@ -479,6 +482,7 @@ export class ClassroomHub {
       classCode: classCode.trim().toUpperCase(),
       exercise: frozenList[0],
       exercises: frozenList,
+      hostToken: session?.hostToken,
     });
   }
 
@@ -508,6 +512,7 @@ export class ClassroomHub {
       type: 'CLASS_STATUS_CHANGED',
       classCode: classCode.trim().toUpperCase(),
       status,
+      hostToken: session?.hostToken,
     });
   }
 
@@ -526,11 +531,13 @@ export class ClassroomHub {
     this.broadcast({
       type: 'CLASS_CLOSED',
       classCode: cleanCode,
+      hostToken: session?.hostToken,
     });
     this.broadcast({
       type: 'EXERCISES_UPDATED',
       classCode: cleanCode,
       exercises: [],
+      hostToken: session?.hostToken,
     });
   }
 
@@ -721,11 +728,13 @@ export class ClassroomHub {
       this.broadcast({
         type: 'CLASS_CLOSED',
         classCode,
+        hostToken: session?.hostToken,
       });
       this.broadcast({
         type: 'EXERCISES_UPDATED',
         classCode,
         exercises: [],
+        hostToken: session?.hostToken,
       });
     }
   }
@@ -765,11 +774,13 @@ export class ClassroomHub {
     this.broadcast({
       type: 'CLASS_CLOSED',
       classCode,
+      hostToken: curSession?.hostToken,
     });
     this.broadcast({
       type: 'EXERCISES_UPDATED',
       classCode,
       exercises: [],
+      hostToken: curSession?.hostToken,
     });
   }
 }

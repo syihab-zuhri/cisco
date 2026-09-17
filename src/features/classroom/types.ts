@@ -76,12 +76,12 @@ export interface Submission {
 export type ClassroomEvent =
   | { type: 'CLASS_CREATED'; session: ClassSession }
   | { type: 'PARTICIPANT_JOINED'; classCode: string; participant: Participant }
-  | { type: 'EXERCISE_STARTED'; classCode: string; exercise?: Exercise; exercises?: Exercise[] }
-  | { type: 'EXERCISES_UPDATED'; classCode: string; exercises: Exercise[] }
+  | { type: 'EXERCISE_STARTED'; classCode: string; exercise?: Exercise; exercises?: Exercise[]; hostToken?: string }
+  | { type: 'EXERCISES_UPDATED'; classCode: string; exercises: Exercise[]; hostToken?: string }
   | { type: 'SUBMISSION_RECEIVED'; classCode: string; submission: Submission }
-  | { type: 'CLASS_STATUS_CHANGED'; classCode: string; status: SessionStatus }
-  | { type: 'CLASS_SETTINGS_CHANGED'; classCode: string; allowSelfCheck: boolean }
-  | { type: 'CLASS_CLOSED'; classCode: string }
+  | { type: 'CLASS_STATUS_CHANGED'; classCode: string; status: SessionStatus; hostToken?: string }
+  | { type: 'CLASS_SETTINGS_CHANGED'; classCode: string; allowSelfCheck: boolean; hostToken?: string }
+  | { type: 'CLASS_CLOSED'; classCode: string; hostToken?: string }
   | { type: 'SYNC_REQUEST'; classCode: string }
   | {
       type: 'SYNC_RESPONSE';
