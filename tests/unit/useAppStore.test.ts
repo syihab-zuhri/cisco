@@ -52,7 +52,7 @@ describe('useAppStore — integritas status port saat penghapusan perangkat', ()
     // kabel A-B, lalu tambah C yang tidak terkabel
     useAppStore.getState().connectPorts(a.id, 'fa0', b.id, 'fa0');
     useAppStore.getState().addDevice('laptop', { x: 400, y: 0 });
-    const c = useAppStore.getState().nodes[2];
+    const c = useAppStore.getState().nodes.find((n) => n.id !== a.id && n.id !== b.id)!;
 
     useAppStore.getState().deleteNode(c.id);
 

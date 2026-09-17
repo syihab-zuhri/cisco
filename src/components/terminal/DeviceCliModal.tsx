@@ -11,6 +11,22 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 
+interface CliDeviceCache {
+  session: CliSession;
+  history: string[];
+  cmdHistory: string[];
+}
+
+const cliCacheByDeviceId = new Map<string, CliDeviceCache>();
+
+export function clearCliCache(deviceId?: string) {
+  if (deviceId) {
+    cliCacheByDeviceId.delete(deviceId);
+  } else {
+    cliCacheByDeviceId.clear();
+  }
+}
+
 export function DeviceCliModal() {
   const activeCliModalNodeId = useAppStore((s) => s.activeCliModalNodeId);
   const nodes = useAppStore((s) => s.nodes);
@@ -23,30 +39,33 @@ export function DeviceCliModal() {
   // Jika perangkat dihapus saat terminal terbuka, tutup modal dengan aman
   useEffect(() => {
     if (activeCliModalNodeId && !node) {
+      clearCliCache(activeCliModalNodeId);
       setActiveCliModalNodeId(null);
     }
   }, [activeCliModalNodeId, node, setActiveCliModalNodeId]);
 
-  const [history, setHistory] = useState<string[]>([
-    'Cisco IOS Software, C2900 Software (C2900-UNIVERSALK9-M), Version 15.1(4)M4',
-    'OpenPacket Simulated IOS Terminal v1.3.0',
-    'Ketik "help" atau "?" untuk bantuan perintah.',
-    '',
-  ]);
+  const [history, setHistory] = useState<string[]>([]);
   const [session, setSession] = useState<CliSession | null>(null);
   const [inputVal, setInputVal] = useState<string>('');
   const [isBusy, setIsBusy] = useState<boolean>(false);
-  // Riwayat perintah untuk navigasi ArrowUp/ArrowDown
   const [cmdHistory, setCmdHistory] = useState<string[]>([]);
   const [histIdx, setHistIdx] = useState<number | null>(null);
 
-  // Sesi CLI baru setiap kali modal dibuka untuk perangkat tertentu
+  // Sesi CLI persisten per perangkat
   useEffect(() => {
     if (!activeCliModalNodeId) {
       setSession(null);
       return;
     }
     const deviceId = activeCliModalNodeId;
+    const cached = cliCacheByDeviceId.get(deviceId);
+    if (cached) {
+      setSession(cached.session);
+      setHistory(cached.history);
+      setCmdHistory(cached.cmdHistory);
+      return;
+    }
+
     const cliSession = new CliSession({
       getDevice: () => {
         const current = useAppStore.getState().nodes.find((n) => n.id === deviceId);
@@ -125,14 +144,35 @@ export function DeviceCliModal() {
         useAppStore.getState().clearArpTable(deviceId);
       },
     });
-    setSession(cliSession);
-    setHistory([
+
+    const initialHistory = [
       'Cisco IOS Software, C2900 Software (C2900-UNIVERSALK9-M), Version 15.1(4)M4',
       'OpenPacket Simulated IOS Terminal v1.3.0',
       'Ketik "help" atau "?" untuk bantuan perintah.',
       '',
-    ]);
+    ];
+
+    cliCacheByDeviceId.set(deviceId, {
+      session: cliSession,
+      history: initialHistory,
+      cmdHistory: [],
+    });
+
+    setSession(cliSession);
+    setHistory(initialHistory);
+    setCmdHistory([]);
   }, [activeCliModalNodeId]);
+
+  // Simpan riwayat interaksi terbaru ke cache
+  useEffect(() => {
+    if (activeCliModalNodeId && session) {
+      const entry = cliCacheByDeviceId.get(activeCliModalNodeId);
+      if (entry) {
+        entry.history = history;
+        entry.cmdHistory = cmdHistory;
+      }
+    }
+  }, [activeCliModalNodeId, session, history, cmdHistory]);
 
   useEffect(() => {
     terminalBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -144,11 +184,22 @@ export function DeviceCliModal() {
   const handleCommand = async (cmd: string) => {
     if (isBusy) return;
     const prompt = session.prompt();
-    setHistory((prev) => [...prev, `${prompt} ${cmd}`]);
+    const newHistory = [...history, `${prompt} ${cmd}`];
+    setHistory(newHistory);
     setInputVal('');
     setHistIdx(null);
+    let newCmdHistory = cmdHistory;
     if (cmd.trim()) {
-      setCmdHistory((prev) => [...prev.slice(-49), cmd]);
+      newCmdHistory = [...cmdHistory.slice(-49), cmd];
+      setCmdHistory(newCmdHistory);
+    }
+
+    if (activeCliModalNodeId) {
+      const entry = cliCacheByDeviceId.get(activeCliModalNodeId);
+      if (entry) {
+        entry.history = newHistory;
+        entry.cmdHistory = newCmdHistory;
+      }
     }
 
     if (!cmd.trim()) return;
@@ -157,11 +208,25 @@ export function DeviceCliModal() {
     try {
       const lines = await session.handle(cmd);
       if (lines.length > 0) {
-        setHistory((prev) => [...prev, ...lines]);
+        setHistory((prev) => {
+          const updated = [...prev, ...lines];
+          if (activeCliModalNodeId) {
+            const entry = cliCacheByDeviceId.get(activeCliModalNodeId);
+            if (entry) entry.history = updated;
+          }
+          return updated;
+        });
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      setHistory((prev) => [...prev, `% Unhandled CLI exception: ${message}`]);
+      setHistory((prev) => {
+        const updated = [...prev, `% Unhandled CLI exception: ${message}`];
+        if (activeCliModalNodeId) {
+          const entry = cliCacheByDeviceId.get(activeCliModalNodeId);
+          if (entry) entry.history = updated;
+        }
+        return updated;
+      });
     } finally {
       setIsBusy(false);
     }
