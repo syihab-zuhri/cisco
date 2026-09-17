@@ -334,23 +334,10 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
     <Dialog open onOpenChange={(open) => { if (!open) setActiveConfigModalNodeId(null); }}>
       <DialogContent className="flex max-h-[90vh] w-[95vw] max-w-[540px] flex-col gap-0 p-0 sm:max-w-[540px]">
         <DialogHeader className="border-b px-4 sm:px-5 py-3">
-          <div className="flex items-center justify-between gap-2">
-            <DialogTitle className="flex items-center gap-2 text-sm font-semibold">
-              <ShieldCheck className="h-5 w-5 text-sky-400 shrink-0" />
-              <span>Konfigurasi ({device.type.toUpperCase()})</span>
-            </DialogTitle>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={handleOpenCli}
-              className="h-7 gap-1.5 text-xs text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/10 hover:text-emerald-300 shrink-0"
-              title="Buka Terminal CLI Cisco"
-            >
-              <Terminal className="h-3.5 w-3.5" />
-              <span>Terminal CLI</span>
-            </Button>
-          </div>
+          <DialogTitle className="flex items-center gap-2 text-sm font-semibold">
+            <ShieldCheck className="h-5 w-5 text-sky-400 shrink-0" />
+            <span>Konfigurasi ({device.type.toUpperCase()})</span>
+          </DialogTitle>
           <DialogDescription className="sr-only">
             Ubah konfigurasi perangkat {label}
           </DialogDescription>
