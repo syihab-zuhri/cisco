@@ -59,6 +59,9 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
+          if (/node_modules\/(react|react-dom|scheduler)\//.test(id)) {
+            return 'vendor-react';
+          }
           if (id.includes('node_modules/@xyflow')) {
             return 'vendor-xyflow';
           }

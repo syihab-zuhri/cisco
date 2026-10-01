@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { GraduationCap, Play, CheckCircle2, Circle, Lightbulb, LogOut, PartyPopper } from 'lucide-react';
-import confetti from 'canvas-confetti';
 import { useAppStore } from '../../store/useAppStore';
 import { LAB_SCENARIOS, type LabScenario } from '../../data/labs';
 import {
@@ -27,7 +26,9 @@ export function LabModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
   useEffect(() => {
     if (allDone) {
       if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-      confetti({ particleCount: 160, spread: 75, origin: { y: 0.6 } });
+      void import('canvas-confetti')
+        .then(({ default: confetti }) => confetti({ particleCount: 160, spread: 75, origin: { y: 0.6 } }))
+        .catch(() => undefined);
     }
   }, [allDone]);
 

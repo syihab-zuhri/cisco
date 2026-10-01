@@ -15,14 +15,9 @@ import {
   Download,
   Clock,
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
 import { useAppStore } from '../../store/useAppStore';
 import { classroomHub } from '../../features/classroom/classroomHub';
-import { evaluateExercise } from '../../features/classroom/exerciseEvaluator';
 import { exportSubmissionPackageFile } from '../../features/classroom/exerciseParser';
-import { edgesToLinks, evaluatePacket, buildPacketSubmission } from '../../features/classroom/submissionBuilder';
-import { prepareStarterTopology } from '../../features/classroom/starterTopology';
-import { compactTopology } from '../../features/classroom/verification';
 import type {
   ClassSession,
   Participant,
@@ -34,6 +29,16 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+
+// Mesin penilaian (HeadlessSimulationEngine, evaluator, template topologi) cukup besar dan baru
+// dibutuhkan saat siswa mengecek/mengirim jawaban, jadi dimuat sesuai kebutuhan, bukan di bundel awal.
+const loadGrading = () =>
+  Promise.all([
+    import('../../features/classroom/exerciseEvaluator'),
+    import('../../features/classroom/submissionBuilder'),
+    import('../../features/classroom/verification'),
+    import('../../features/classroom/starterTopology'),
+  ]).then(([evaluator, builder, verification, starter]) => ({ ...evaluator, ...builder, ...verification, ...starter }));
 
 export function ClassroomStudentHUD() {
   const { nodes, edges, loadTopology, pushToast, requestConfirm } = useAppStore();
@@ -316,6 +321,7 @@ export function ClassroomStudentHUD() {
   const runEvaluationForExercise = async (
     ex: Exercise
   ): Promise<ExerciseEvaluation | null> => {
+    const { evaluateExercise, edgesToLinks } = await loadGrading();
     const devices = nodes.map((n) => n.data);
     return await evaluateExercise(ex, devices, edgesToLinks(edges));
   };
@@ -375,6 +381,7 @@ export function ClassroomStudentHUD() {
 
     try {
       // Evaluasi otomatis seluruh soal dalam paket ujian; skor akhir = rata-rata.
+      const { evaluatePacket, buildPacketSubmission, compactTopology } = await loadGrading();
       const packet = await evaluatePacket(activeExercises, nodes, edges, evaluationsByExerciseId);
       const avgScore = packet.averageScore;
       setEvaluationsByExerciseId(packet.evaluations);
@@ -385,7 +392,9 @@ export function ClassroomStudentHUD() {
 
       if (avgScore === 100) {
         if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-          confetti({ particleCount: 160, spread: 80, origin: { y: 0.5, x: 0.8 } });
+          void import('canvas-confetti')
+            .then(({ default: confetti }) => confetti({ particleCount: 160, spread: 80, origin: { y: 0.5, x: 0.8 } }))
+            .catch(() => undefined);
         }
         pushToast(
           'success',
@@ -455,8 +464,14 @@ export function ClassroomStudentHUD() {
   // Handler Muat Topologi Guru (Hanya komponen dan kabel fisik, seluruh IP dibersihkan agar siswa mengonfigurasi mandiri)
   const handleLoadStarterTopology = () => {
     if (!activeExercise) return;
-    const doLoad = () => {
-      const prepared = prepareStarterTopology(activeExercise);
+    const doLoad = async () => {
+      let prepared: ReturnType<Awaited<ReturnType<typeof loadGrading>>['prepareStarterTopology']>;
+      try {
+        prepared = (await loadGrading()).prepareStarterTopology(activeExercise);
+      } catch (err) {
+        pushToast('error', `Gagal memuat topologi: ${err instanceof Error ? err.message : String(err)}`);
+        return;
+      }
       if (prepared) {
         loadTopology({ nodes: prepared.nodes, edges: prepared.edges });
         pushToast(
@@ -480,7 +495,7 @@ export function ClassroomStudentHUD() {
         onConfirm: doLoad,
       });
     } else {
-      doLoad();
+      void doLoad();
     }
   };
 
