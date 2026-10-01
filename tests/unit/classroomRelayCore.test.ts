@@ -140,7 +140,9 @@ describe('Classroom Relay Core Security & Hardening', () => {
     expect(res.statusCode).toBe(200);
     expect(rooms.has('NET-1001')).toBe(true);
     const room = rooms.get('NET-1001');
-    expect(room.session.hostToken).toBe('secret-token-123');
+    // Token disimpan terpisah dan TIDAK ada di dalam session yang bisa dibaca publik.
+    expect(room.hostToken).toBe('secret-token-123');
+    expect(room.session.hostToken).toBeUndefined();
   });
 
   it('menolak pembajakan kelas yang sedang aktif oleh host lain (403 Forbidden)', async () => {
@@ -224,7 +226,7 @@ describe('Classroom Relay Core Security & Hardening', () => {
     expect(JSON.parse(res2.body).error).toContain('memerlukan token host');
   });
 
-  it('mengizinkan event sensitif jika hostToken valid dan mengizinkan event murid tanpa token', async () => {
+  it('mengizinkan event sensitif jika hostToken valid; murid bergabung dengan participantToken (bukan hostToken)', async () => {
     const rooms = new Map();
     const middleware = createRelayMiddleware(rooms, { autoCleanup: false });
 
@@ -238,6 +240,28 @@ describe('Classroom Relay Core Security & Hardening', () => {
       submissions: {},
       updatedAt: Date.now(),
     });
+
+    // Murid bergabung (PARTICIPANT_JOINED) memakai token miliknya sendiri, bukan hostToken
+    const reqStudent = new MockRequest('/api/classroom/event', 'POST');
+    const resStudent = new MockResponse();
+    middleware(reqStudent, resStudent);
+
+    reqStudent.sendData(JSON.stringify({
+      type: 'PARTICIPANT_JOINED',
+      classCode: 'NET-7777',
+      participantToken: 'token-murid-ahmad',
+      participant: {
+        id: 'stu-1',
+        nickname: 'Ahmad',
+        joinedAt: Date.now(),
+        status: 'in_progress',
+      },
+    }));
+    reqStudent.finish();
+
+    expect(resStudent.statusCode).toBe(200);
+    expect(rooms.get('NET-7777').participants.length).toBe(1);
+    expect(rooms.get('NET-7777').participants[0].nickname).toBe('Ahmad');
 
     // Guru dengan token valid menutup kelas
     const reqHost = new MockRequest('/api/classroom/event', 'POST');
@@ -253,26 +277,5 @@ describe('Classroom Relay Core Security & Hardening', () => {
 
     expect(resHost.statusCode).toBe(200);
     expect(rooms.get('NET-7777').session.status).toBe('closed');
-
-    // Murid bergabung (PARTICIPANT_JOINED) tidak memerlukan hostToken
-    const reqStudent = new MockRequest('/api/classroom/event', 'POST');
-    const resStudent = new MockResponse();
-    middleware(reqStudent, resStudent);
-
-    reqStudent.sendData(JSON.stringify({
-      type: 'PARTICIPANT_JOINED',
-      classCode: 'NET-7777',
-      participant: {
-        id: 'stu-1',
-        nickname: 'Ahmad',
-        joinedAt: Date.now(),
-        status: 'in_progress',
-      },
-    }));
-    reqStudent.finish();
-
-    expect(resStudent.statusCode).toBe(200);
-    expect(rooms.get('NET-7777').participants.length).toBe(1);
-    expect(rooms.get('NET-7777').participants[0].nickname).toBe('Ahmad');
   });
 });

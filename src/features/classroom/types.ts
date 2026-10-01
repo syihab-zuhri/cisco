@@ -17,16 +17,24 @@ export interface ClassSession {
   activeExerciseId: string | null;
   activeExercises?: Exercise[];
   allowSelfCheck?: boolean;
+  /** Batas maksimal cek mandiri per soal (default 5). Guru dapat mengubahnya. */
+  selfCheckLimit?: number;
+  /** Nomor ronde ujian: naik setiap guru menyiarkan paket soal baru (EXERCISE_STARTED). */
+  round?: number;
+  /** Kelas lokal (latihan mandiri .oplab): tidak pernah dikirim ke relay. */
+  local?: boolean;
   createdAt: number;
 }
 
-export type ParticipantStatus = 'not_started' | 'in_progress' | 'submitted';
+export type ParticipantStatus = 'not_started' | 'in_progress' | 'submitted' | 'left';
 
 export interface Participant {
   id: string;
   nickname: string;
   joinedAt: number;
   status: ParticipantStatus;
+  /** Peserta yang ditambahkan guru dari berkas .opsub (bukan dari relay). */
+  imported?: boolean;
 }
 
 export type ExerciseTarget =
@@ -70,17 +78,38 @@ export interface Submission {
   evaluation: ExerciseEvaluation;
   evaluations?: Record<string, ExerciseEvaluation>;
   exerciseScores?: Record<string, number>;
+  /** Ronde ujian saat jawaban dikirim (diberi cap oleh relay). */
+  round?: number;
+  /** Jawaban yang diimpor guru dari berkas .opsub (bukan dari relay). */
+  imported?: boolean;
   submittedAt: number;
 }
 
+/** Arsip nilai satu ronde ujian yang sudah selesai (guru memulai soal baru). */
+export interface RoundHistory {
+  round: number;
+  endedAt: number;
+  exercises: Array<{ id: string; title: string }>;
+  participants: Array<{ id: string; nickname: string }>;
+  submissions: Record<string, Submission>;
+}
+
 export type ClassroomEvent =
-  | { type: 'CLASS_CREATED'; session: ClassSession }
-  | { type: 'PARTICIPANT_JOINED'; classCode: string; participant: Participant }
+  | { type: 'CLASS_CREATED'; session: ClassSession; restore?: boolean; history?: RoundHistory[] }
+  | { type: 'PARTICIPANT_JOINED'; classCode: string; participant: Participant; participantToken?: string }
+  | { type: 'PARTICIPANT_LEFT'; classCode: string; participantId: string; participantToken?: string }
+  | { type: 'PARTICIPANT_KICKED'; classCode: string; participantId: string; hostToken?: string }
   | { type: 'EXERCISE_STARTED'; classCode: string; exercise?: Exercise; exercises?: Exercise[]; hostToken?: string }
   | { type: 'EXERCISES_UPDATED'; classCode: string; exercises: Exercise[]; hostToken?: string }
-  | { type: 'SUBMISSION_RECEIVED'; classCode: string; submission: Submission }
+  | { type: 'SUBMISSION_RECEIVED'; classCode: string; submission: Submission; participantToken?: string }
   | { type: 'CLASS_STATUS_CHANGED'; classCode: string; status: SessionStatus; hostToken?: string }
-  | { type: 'CLASS_SETTINGS_CHANGED'; classCode: string; allowSelfCheck: boolean; hostToken?: string }
+  | {
+      type: 'CLASS_SETTINGS_CHANGED';
+      classCode: string;
+      allowSelfCheck: boolean;
+      selfCheckLimit?: number;
+      hostToken?: string;
+    }
   | { type: 'CLASS_CLOSED'; classCode: string; hostToken?: string }
   | { type: 'SYNC_REQUEST'; classCode: string }
   | {
@@ -91,6 +120,11 @@ export type ClassroomEvent =
       submissions: Record<string, Submission>;
       activeExercise: Exercise | null;
       activeExercises?: Exercise[];
+      history?: RoundHistory[];
     }
+  /** Hanya lokal: relay sempat kehilangan kelas (restart) dan perangkat ini memulihkannya otomatis. */
+  | { type: 'RELAY_RESTORED'; classCode: string; role: 'host' | 'participant' }
+  /** Hanya lokal: relay menolak sebuah event (403/404/413/...) sehingga UI dapat memberi tahu pengguna. */
+  | { type: 'RELAY_REJECTED'; eventType: string; classCode: string; status: number; message: string }
   | { type: 'ROLE_CHANGED'; role: 'teacher' | 'student' | null }
   | { type: 'PARTICIPANT_CHANGED'; participant: Participant | null };

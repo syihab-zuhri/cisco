@@ -93,6 +93,8 @@ export interface RoutingEntry {
 export type DeviceData = {
   id: string;
   label: string;
+  /** Label sebelum pertama kali diganti (hostname). Dipakai penilaian kelas agar target tetap cocok. */
+  originalLabel?: string;
   type: DeviceType;
   ports: PhysicalPort[];
   defaultGateway?: string; // for PC

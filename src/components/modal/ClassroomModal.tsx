@@ -23,18 +23,18 @@ import {
   RefreshCw,
   BookOpen,
   CheckCheck,
+  UserMinus,
+  Hash,
+  ShieldCheck,
 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
-import { TOPOLOGY_TEMPLATES } from '../../data/topologyTemplates';
 import {
   classroomHub,
 } from '../../features/classroom/classroomHub';
-import {
-  DEFAULT_EXERCISES,
-} from '../../features/classroom/defaultExercises';
-import {
-  evaluateExercise,
-} from '../../features/classroom/exerciseEvaluator';
+import { evaluatePacket, buildPacketSubmission } from '../../features/classroom/submissionBuilder';
+import { prepareStarterTopology } from '../../features/classroom/starterTopology';
+import { csvCell } from '../../features/classroom/csv';
+import { verifySubmission, type VerificationResult } from '../../features/classroom/verification';
 import {
   loadExercises,
   saveExercises,
@@ -53,6 +53,8 @@ import type {
   Exercise,
   Submission,
   ExerciseEvaluation,
+  RoundHistory,
+  StarterTopology,
 } from '../../features/classroom/types';
 import {
   Dialog,
@@ -71,6 +73,34 @@ interface ClassroomModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
+
+/** Salin teks; `navigator.clipboard` tidak ada di http:// non-localhost (kasus LAN kelas), jadi ada cadangan. */
+async function copyText(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // jatuh ke cadangan
+  }
+  try {
+    const area = document.createElement('textarea');
+    area.value = text;
+    area.setAttribute('readonly', '');
+    area.style.position = 'fixed';
+    area.style.opacity = '0';
+    document.body.appendChild(area);
+    area.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(area);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
+const exerciseKey = (list: Array<{ id: string }>) => list.map((x) => x.id).join('|');
 
 export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
   const { nodes, edges, loadTopology, pushToast, requestConfirm } = useAppStore();
@@ -109,6 +139,13 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
   const [customCode, setCustomCode] = useState('');
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [submissions, setSubmissions] = useState<Record<string, Submission>>({});
+  const [history, setHistory] = useState<RoundHistory[]>([]);
+  const [isJoining, setIsJoining] = useState(false);
+  // Hasil verifikasi ulang skor siswa (dinilai ulang dari snapshot topologi, hanya di memori perangkat guru).
+  const [verification, setVerification] = useState<Record<string, VerificationResult>>({});
+  const [isVerifying, setIsVerifying] = useState(false);
+  // Penanda paket soal aktif terakhir: seleksi centang guru hanya direset bila paket aktif benar-benar berubah.
+  const lastActiveKeyRef = useRef<string>('');
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [selectedExercise, setSelectedExercise] = useState<Exercise | null>(null);
   const [reviewedSubmission, setReviewedSubmission] = useState<Submission | null>(null);
@@ -136,7 +173,8 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
   const purgeAllTeacherData = () => {
     const curSess = session || classroomHub.getSession();
     const code = (curSess?.classCode || '').trim();
-    classroomHub.closeClass(code);
+    // closeClass sudah menyiarkan CLASS_CLOSED + EXERCISES_UPDATED lengkap dengan token host.
+    if (code) classroomHub.closeClass(code);
     classroomHub.saveActiveExercises([]);
     classroomHub.saveActiveExercise(null);
     clearExercisesStorage();
@@ -144,20 +182,13 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
     setSelectedExercise(null);
     setActiveExercise(null);
     setSelectedExamExerciseIds([]);
+    lastActiveKeyRef.current = '';
     setSession(null);
     setParticipants([]);
     setSubmissions({});
+    setHistory([]);
     setJoinedParticipant(null);
     setMyEvaluation(null);
-    classroomHub.broadcast({
-      type: 'CLASS_CLOSED',
-      classCode: code,
-    });
-    classroomHub.broadcast({
-      type: 'EXERCISES_UPDATED',
-      classCode: code,
-      exercises: [],
-    });
     classroomHub.leaveClass();
     classroomHub.setLockedRole(null);
     setLockedRole(null);
@@ -217,6 +248,7 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
       setSession(existingSession);
       setParticipants(classroomHub.getParticipants());
       setSubmissions(classroomHub.getSubmissions());
+      setHistory(classroomHub.getHistory());
       void classroomHub.syncWithServer(existingSession.classCode);
     }
 
@@ -232,6 +264,7 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
     }
 
     const activeList = classroomHub.getActiveExercises();
+    lastActiveKeyRef.current = exerciseKey(activeList);
     if (activeList && activeList.length > 0) {
       setSelectedExamExerciseIds(activeList.map((x) => x.id));
     }
@@ -260,6 +293,8 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
           setSession(event.session);
           setParticipants([]);
           setSubmissions({});
+          setHistory([]);
+          lastActiveKeyRef.current = exerciseKey(event.session.activeExercises ?? []);
           if (event.session.activeExercises && event.session.activeExercises.length > 0) {
             setSelectedExamExerciseIds(event.session.activeExercises.map((x) => x.id));
           }
@@ -272,7 +307,33 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
           });
           break;
 
+        case 'PARTICIPANT_LEFT':
+        case 'PARTICIPANT_KICKED':
+          // Hub sudah memperbarui storage (siswa yang sudah mengumpulkan ditandai "left", lainnya dihapus).
+          setParticipants(classroomHub.getParticipants());
+          break;
+
+        case 'RELAY_REJECTED':
+          // Penolakan saat PEMULIHAN otomatis tidak menghapus kelas lokal guru; hanya penolakan pembuatan awal.
+          if (event.eventType === 'CLASS_CREATED' && !classroomHub.getSession()) {
+            setSession(null);
+            setParticipants([]);
+            setSubmissions({});
+          }
+          pushToast('error', event.message);
+          break;
+
+        case 'RELAY_RESTORED':
+          pushToast(
+            'info',
+            event.role === 'host'
+              ? 'Server relay sempat restart. Kelas dipulihkan otomatis; siswa akan tersambung kembali dalam beberapa detik.'
+              : 'Server kelas sempat restart — Anda tersambung kembali otomatis.'
+          );
+          break;
+
         case 'EXERCISES_UPDATED':
+          lastActiveKeyRef.current = exerciseKey(event.exercises ?? []);
           if (event.exercises && event.exercises.length > 0) {
             setSelectedExercise(event.exercises[0]);
             setActiveExercise(event.exercises[0]);
@@ -290,7 +351,13 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
             setActiveExercise(event.exercise);
           }
           setMyEvaluation(null);
+          // Ronde baru: nilai ronde lama pindah ke riwayat, tabel berjalan dimulai ulang.
+          setHistory(classroomHub.getHistory());
+          setSubmissions(classroomHub.getSubmissions());
+          setParticipants(classroomHub.getParticipants());
+          setSession(classroomHub.getSession());
           if (event.exercises && event.exercises.length > 0) {
+            lastActiveKeyRef.current = exerciseKey(event.exercises);
             setSelectedExamExerciseIds(event.exercises.map((x) => x.id));
           }
           break;
@@ -314,7 +381,17 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
           break;
 
         case 'CLASS_SETTINGS_CHANGED':
-          setSession((prev) => (prev ? { ...prev, allowSelfCheck: event.allowSelfCheck } : null));
+          setSession((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  allowSelfCheck: event.allowSelfCheck,
+                  ...(event.selfCheckLimit !== undefined
+                    ? { selfCheckLimit: event.selfCheckLimit }
+                    : {}),
+                }
+              : null
+          );
           break;
 
         case 'CLASS_CLOSED':
@@ -344,23 +421,31 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
           }
           break;
 
-        case 'SYNC_RESPONSE':
+        case 'SYNC_RESPONSE': {
           setSession(event.session);
           setParticipants(event.participants);
           setSubmissions(event.submissions);
-          if (event.activeExercise) {
-            setSelectedExercise(event.activeExercise);
-            setActiveExercise(event.activeExercise);
-          } else {
-            setSelectedExercise(null);
-            setActiveExercise(null);
-          }
-          if (event.activeExercises && event.activeExercises.length > 0) {
-            setSelectedExamExerciseIds(event.activeExercises.map((x) => x.id));
-          } else {
-            setSelectedExamExerciseIds([]);
+          if (event.history) setHistory(event.history);
+          // Polling terjadi tiap ada siswa bergabung/mengumpulkan. Centang soal yang sedang disiapkan
+          // guru TIDAK boleh ikut ter-reset; hanya sinkronkan bila paket aktif benar-benar berubah.
+          const nextKey = exerciseKey(event.activeExercises ?? []);
+          if (nextKey !== lastActiveKeyRef.current) {
+            lastActiveKeyRef.current = nextKey;
+            if (event.activeExercise) {
+              setSelectedExercise(event.activeExercise);
+              setActiveExercise(event.activeExercise);
+            } else {
+              setSelectedExercise(null);
+              setActiveExercise(null);
+            }
+            if (event.activeExercises && event.activeExercises.length > 0) {
+              setSelectedExamExerciseIds(event.activeExercises.map((x) => x.id));
+            } else {
+              setSelectedExamExerciseIds([]);
+            }
           }
           break;
+        }
       }
     });
 
@@ -399,11 +484,20 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
     setSelectedExercise(ex);
     setSelectedExamExerciseIds([ex.id]);
     if (autoBroadcast && session) {
+      if (rejectUnscorable([ex])) return;
       classroomHub.startExercises(session.classCode, [ex]);
       pushToast('success', `Tantangan "${ex.title}" disiarkan sebagai satu-satunya soal ujian.`);
     } else {
       pushToast('info', `Soal "${ex.title}" dipilih untuk ujian.`);
     }
+  };
+
+  /** Soal tanpa target tidak bisa dinilai; jangan sampai tersiar ke siswa. */
+  const rejectUnscorable = (chosen: Exercise[]): boolean => {
+    const empty = chosen.find((e) => e.targets.length === 0);
+    if (!empty) return false;
+    pushToast('warning', `Soal "${empty.title}" belum memiliki target penilaian. Tambahkan minimal satu target di editor soal.`);
+    return true;
   };
 
   // Handler Guru: Siarkan Paket Ujian Terpilih (Multi atau Single)
@@ -414,6 +508,7 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
       pushToast('warning', 'Pilih minimal 1 soal untuk diujikan.');
       return;
     }
+    if (rejectUnscorable(chosen)) return;
     classroomHub.startExercises(session.classCode, chosen);
     setSelectedExercise(chosen[0]);
     pushToast(
@@ -430,6 +525,7 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
       pushToast('warning', 'Pilih minimal 1 soal dari Bank Soal untuk disiarkan ke kelas.');
       return;
     }
+    if (rejectUnscorable(chosen)) return;
     classroomHub.updateClassExercises(session.classCode, chosen);
     setSelectedExercise(chosen[0]);
     pushToast(
@@ -489,6 +585,7 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
   // Handler Guru: Buat Kelas Baru
   const handleCreateClass = () => {
     const chosen = exercises.filter((e) => selectedExamExerciseIds.includes(e.id));
+    if (rejectUnscorable(chosen)) return;
     const toUse = chosen.length > 0 ? chosen : [];
     const newSession = classroomHub.createClass(
       classTitle,
@@ -506,21 +603,6 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
         ? `Kelas dibuka dengan ${toUse.length} soal aktif! Kode Kelas: ${newSession.classCode}.`
         : `Kelas dibuka (0 soal aktif)! Kode Kelas: ${newSession.classCode}. Anda dapat menambahkan dan menyiarkan soal kapan saja.`
     );
-  };
-
-  const handleLoadDefaultExercises = () => {
-    if (DEFAULT_EXERCISES.length === 0) {
-      pushToast(
-        'info',
-        'Tidak ada soal bawaan (soal diatur mulai dari nol). Anda dapat membuat soal baru atau mengimpor file.'
-      );
-      return;
-    }
-    saveExercises(DEFAULT_EXERCISES);
-    setExercises(DEFAULT_EXERCISES);
-    setSelectedExercise(DEFAULT_EXERCISES[0]);
-    setSelectedExamExerciseIds([DEFAULT_EXERCISES[0].id]);
-    pushToast('info', '3 contoh materi praktikum bawaan berhasil dimuat ke Bank Soal.');
   };
 
   // Handler Import File JSON Soal
@@ -693,26 +775,62 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
 
   // Handler Guru: Tutup Kelas
   const handleCloseClass = () => {
-    purgeAllTeacherData();
-    pushToast('info', 'Sesi kelas telah diakhiri dan seluruh soal telah dibersihkan.');
+    const graded = Object.keys(submissions).length;
+    requestConfirm({
+      title: 'Tutup Kelas?',
+      message:
+        `Sesi kelas akan diakhiri untuk semua siswa, seluruh bank soal dihapus dari perangkat ini, dan Anda keluar dari Mode Guru.` +
+        (participants.length > 0
+          ? ` Rekap nilai (${participants.length} peserta, ${graded} jawaban) tidak tersimpan — unduh CSV lebih dulu bila masih diperlukan.`
+          : ''),
+      confirmLabel: 'Tutup & Hapus',
+      onConfirm: () => {
+        purgeAllTeacherData();
+        pushToast('info', 'Sesi kelas telah diakhiri dan seluruh soal telah dibersihkan.');
+      },
+    });
   };
 
   // Handler Siswa: Gabung Kelas
-  const handleJoinClass = () => {
+  const handleJoinClass = async () => {
     if (!studentClassCode.trim()) {
       pushToast('warning', 'Masukkan kode kelas yang diberikan oleh guru.');
       return;
     }
-    const participant = classroomHub.joinClass(
-      studentClassCode,
-      studentNickname || 'Siswa'
-    );
-    if (participant) {
-      setJoinedParticipant(participant);
-      const activeEx = classroomHub.getActiveExercise();
-      setActiveExercise(activeEx);
-      pushToast('success', `Selamat datang, ${participant.nickname}! Lembar kerja interaktif disematkan di pojok kanan kanvas.`);
-      handleModalClose(); // Tutup modal agar siswa langsung melihat kanvas dan HUD
+    if (isJoining) return;
+    setIsJoining(true);
+    try {
+      // Periksa dulu apakah kelas ada / terkunci / sudah ditutup, supaya siswa tidak "terhubung" ke kelas kosong.
+      const check = await classroomHub.checkClass(studentClassCode);
+      if (check.status === 'not_found') {
+        pushToast('error', 'Kode kelas tidak ditemukan. Periksa kembali kode dari guru.');
+        return;
+      }
+      if (check.status === 'found' && check.classStatus === 'closed') {
+        pushToast('error', 'Kelas ini sudah ditutup oleh guru.');
+        return;
+      }
+      if (check.status === 'found' && check.classStatus === 'locked') {
+        pushToast('warning', 'Kelas sedang dikunci oleh guru. Minta guru membuka sesi agar Anda dapat bergabung.');
+        return;
+      }
+      if (check.status === 'unreachable') {
+        pushToast('info', 'Server relay tidak terjangkau — bergabung dalam mode lokal (hanya perangkat/browser yang sama dengan guru).');
+      }
+
+      const participant = classroomHub.joinClass(
+        studentClassCode,
+        studentNickname || 'Siswa'
+      );
+      if (participant) {
+        setJoinedParticipant(participant);
+        const activeEx = classroomHub.getActiveExercise();
+        setActiveExercise(activeEx);
+        pushToast('success', `Selamat datang, ${participant.nickname}! Lembar kerja interaktif disematkan di pojok kanan kanvas.`);
+        handleModalClose(); // Tutup modal agar siswa langsung melihat kanvas dan HUD
+      }
+    } finally {
+      setIsJoining(false);
     }
   };
 
@@ -734,11 +852,15 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
       const nickname = studentNickname.trim() || 'Siswa Mandiri';
       const code = 'MANDIRI';
 
-      // Pastikan ada sesi lokal
-      let sess = classroomHub.getSession();
-      if (!sess) {
-        sess = classroomHub.createClass('Praktikum Mandiri', code);
+      // Tugas mandiri adalah sesi LOKAL: tidak dikirim ke relay, sehingga siswa lain yang juga
+      // membuka .oplab tidak saling menimpa soal di ruang "MANDIRI" bersama.
+      const existing = classroomHub.getSession();
+      if (existing && !existing.local && classroomHub.getCurrentParticipant()) {
+        pushToast('warning', 'Anda sedang mengikuti kelas guru. Keluar dari kelas lebih dulu sebelum membuka tugas mandiri.');
+        return;
       }
+      if (existing) classroomHub.leaveCurrentClass(); // buang sesi basi / latihan mandiri sebelumnya
+      const sess = classroomHub.createClass('Praktikum Mandiri', code, undefined, undefined, { local: true });
       setSession(sess);
 
       // Mulai soal dan join sebagai peserta
@@ -760,9 +882,8 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    let successCount = 0;
-    const newParticipants = [...participants];
-    const newSubmissions = { ...submissions };
+    const valid: Array<{ submission: Submission; topology?: StarterTopology }> = [];
+    const problems: string[] = [];
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
@@ -770,40 +891,129 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
         const text = await file.text();
         const res = parseSubmissionJson(text);
         if (res.success && res.submission) {
-          const sub = res.submission;
-          let p = newParticipants.find(
-            (item) => item.id === sub.participantId || item.nickname === sub.nickname
-          );
-          if (!p) {
-            p = {
-              id: sub.participantId || `stu-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-              nickname: sub.nickname,
-              joinedAt: sub.submittedAt || Date.now(),
-              status: 'submitted',
-            };
-            newParticipants.push(p);
-          } else {
-            p.status = 'submitted';
-          }
-          newSubmissions[p.id] = { ...sub, participantId: p.id };
-          successCount++;
+          valid.push({ submission: res.submission, topology: res.topology });
+        } else {
+          problems.push(`${file.name}: ${res.error ?? 'format tidak dikenali'}`);
         }
       } catch (err) {
-        console.warn('Gagal membaca file submission:', err);
+        problems.push(`${file.name}: ${err instanceof Error ? err.message : 'gagal dibaca'}`);
       }
     }
 
-    if (successCount > 0) {
-      setParticipants(newParticipants);
-      setSubmissions(newSubmissions);
-      classroomHub.saveParticipants(newParticipants);
-      classroomHub.saveSubmissions(newSubmissions);
-      pushToast('success', `${successCount} berkas lembar jawaban siswa (.opsub) berhasil diimpor dan dinilai!`);
+    if (valid.length > 0) {
+      // Hub menandai data impor agar tidak terhapus oleh sinkronisasi relay berikutnya.
+      const count = classroomHub.importSubmissions(valid);
+      setParticipants(classroomHub.getParticipants());
+      setSubmissions(classroomHub.getSubmissions());
+      pushToast('success', `${count} berkas lembar jawaban siswa (.opsub) berhasil diimpor.`);
     } else {
       pushToast('error', 'Tidak ada berkas lembar jawaban .opsub yang valid.');
     }
+    if (problems.length > 0) {
+      pushToast('warning', `${problems.length} berkas dilewati: ${problems.slice(0, 2).join('; ')}${problems.length > 2 ? '; …' : ''}`);
+    }
 
     if (e.target) e.target.value = '';
+  };
+
+  /** Soal yang berlaku pada ronde berjalan (dipakai untuk menilai ulang jawaban ronde ini). */
+  const currentRoundExercises = (): Exercise[] => {
+    const seen = new Map<string, Exercise>();
+    for (const ex of [...(session?.activeExercises ?? []), ...classroomHub.getActiveExercises()]) seen.set(ex.id, ex);
+    return [...seen.values()];
+  };
+
+  const verifyOne = async (participantId: string): Promise<VerificationResult | null> => {
+    const sub = classroomHub.getSubmissions()[participantId];
+    if (!sub || !session) return null;
+    const snapshot = await classroomHub.fetchSnapshot(session.classCode, participantId);
+    const result = await verifySubmission(sub, snapshot, currentRoundExercises());
+    setVerification((prev) => ({ ...prev, [participantId]: result }));
+    return result;
+  };
+
+  const handleVerifyOne = async (participantId: string) => {
+    if (isVerifying) return;
+    setIsVerifying(true);
+    try {
+      const r = await verifyOne(participantId);
+      if (!r) return;
+      if (r.status === 'match') pushToast('success', `Skor terverifikasi: penilaian ulang menghasilkan ${r.verifiedScore}/100, sama dengan yang diklaim.`);
+      else if (r.status === 'mismatch') pushToast('warning', `Skor TIDAK cocok: diklaim ${r.claimedScore}, hasil penilaian ulang ${r.verifiedScore}.`);
+      else pushToast('info', r.reason ?? 'Jawaban ini tidak dapat diverifikasi.');
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  const handleVerifyAll = async () => {
+    if (isVerifying) return;
+    const ids = Object.keys(classroomHub.getSubmissions());
+    if (ids.length === 0) {
+      pushToast('info', 'Belum ada jawaban untuk diverifikasi.');
+      return;
+    }
+    setIsVerifying(true);
+    let match = 0;
+    let mismatch = 0;
+    let unavailable = 0;
+    try {
+      for (const id of ids) {
+        const r = await verifyOne(id);
+        if (!r) continue;
+        if (r.status === 'match') match++;
+        else if (r.status === 'mismatch') mismatch++;
+        else unavailable++;
+      }
+      pushToast(
+        mismatch > 0 ? 'warning' : 'success',
+        `Verifikasi selesai: ${match} cocok, ${mismatch} berbeda, ${unavailable} tidak dapat diverifikasi.`
+      );
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  const verificationLabel = (participantId: string, sub: Submission | undefined): string => {
+    const v = verification[participantId];
+    if (!sub || !v || v.submittedAt !== sub.submittedAt) return 'belum diverifikasi';
+    if (v.status === 'match') return 'cocok';
+    if (v.status === 'mismatch') return `berbeda (nilai sebenarnya ${v.verifiedScore})`;
+    return 'tidak tersedia';
+  };
+
+  const renderVerification = (participantId: string, sub: Submission) => {
+    const v = verification[participantId];
+    if (!v || v.submittedAt !== sub.submittedAt) return null;
+    if (v.status === 'match') {
+      return (
+        <Badge
+          variant="outline"
+          className="ml-2 gap-1 border-viz-green/40 bg-viz-green/10 text-[10px] text-viz-green"
+          title="Penilaian ulang dari snapshot topologi siswa menghasilkan skor yang sama."
+        >
+          <ShieldCheck className="h-3 w-3" />
+          Terverifikasi
+        </Badge>
+      );
+    }
+    if (v.status === 'mismatch') {
+      return (
+        <Badge
+          variant="outline"
+          className="ml-2 gap-1 border-viz-red/40 bg-viz-red/10 text-[10px] text-viz-red"
+          title={`Skor yang diklaim siswa (${v.claimedScore}) berbeda dari hasil penilaian ulang (${v.verifiedScore}).`}
+        >
+          <XCircle className="h-3 w-3" />
+          Sebenarnya {v.verifiedScore}
+        </Badge>
+      );
+    }
+    return (
+      <Badge variant="outline" className="ml-2 text-[10px] text-muted-foreground" title={v.reason}>
+        Tak terverifikasi
+      </Badge>
+    );
   };
 
   // Handler Guru: Ekspor Nilai Peserta ke CSV
@@ -813,29 +1023,57 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
       return;
     }
 
-    const headers = ['No', 'Nama Siswa', 'Status', 'Skor', 'Target Tercapai', 'Feedback Evaluasi', 'Waktu Submit'];
-    const rows = participants.map((p, idx) => {
-      const sub = submissions[p.id];
-      const score = sub ? sub.score : 0;
-      const status = sub ? sub.status : p.status;
-      const passedTargets = sub
-        ? `${sub.evaluation.checks.filter((c) => c.passed).length}/${sub.evaluation.checks.length}`
-        : '0';
-      const feedback = sub ? sub.evaluation.feedback.replace(/"/g, '""') : '-';
-      const time = sub ? new Date(sub.submittedAt).toLocaleTimeString() : '-';
+    const headers = ['No', 'Ronde', 'Nama Siswa', 'Status', 'Skor', 'Skor per Soal', 'Target Tercapai', 'Feedback Evaluasi', 'Waktu Submit', 'Verifikasi'];
+    const titleById = new Map<string, string>();
+    for (const ex of [...(session?.activeExercises ?? []), ...exercises]) titleById.set(ex.id, ex.title);
+    for (const h of history) for (const ex of h.exercises) titleById.set(ex.id, ex.title);
 
-      return [
-        idx + 1,
-        `"${p.nickname.replace(/"/g, '""')}"`,
-        `"${status}"`,
-        score,
-        `"${passedTargets}"`,
-        `"${feedback}"`,
-        `"${time}"`,
-      ].join(',');
-    });
+    // Satu blok per ronde: ronde yang sudah diarsipkan lebih dulu, lalu ronde berjalan.
+    const rounds: Array<{
+      round: number;
+      participants: Array<{ id: string; nickname: string; status: string }>;
+      submissions: Record<string, Submission>;
+    }> = [
+      ...history.map((h) => ({ round: h.round, participants: h.participants.map((p) => ({ ...p, status: 'submitted' })), submissions: h.submissions })),
+      { round: session?.round ?? 0, participants, submissions },
+    ];
 
-    const csvContent = [headers.join(','), ...rows].join('\n');
+    let no = 0;
+    const rows: string[] = [];
+    for (const r of rounds) {
+      for (const p of r.participants) {
+        const sub = r.submissions[p.id];
+        if (!sub && r.round !== (session?.round ?? 0)) continue; // ronde lama: hanya yang mengumpulkan
+        no++;
+        const evals = sub?.evaluations && Object.keys(sub.evaluations).length > 0
+          ? Object.values(sub.evaluations)
+          : sub
+          ? [sub.evaluation]
+          : [];
+        const total = evals.reduce((n, ev) => n + ev.checks.length, 0);
+        const passed = evals.reduce((n, ev) => n + ev.checks.filter((c) => c.passed).length, 0);
+        const perExercise = sub?.exerciseScores
+          ? Object.entries(sub.exerciseScores).map(([id, s]) => `${titleById.get(id) ?? id}: ${s}`).join('; ')
+          : '-';
+        rows.push(
+          [
+            no,
+            r.round,
+            csvCell(p.nickname),
+            csvCell(sub ? sub.status : p.status),
+            sub ? sub.score : 0,
+            csvCell(perExercise),
+            csvCell(sub ? `${passed}/${total}` : '0'),
+            csvCell(sub ? sub.evaluation.feedback : '-'),
+            csvCell(sub ? new Date(sub.submittedAt).toLocaleTimeString() : '-'),
+            csvCell(sub && r.round === (session?.round ?? 0) ? verificationLabel(p.id, sub) : '-'),
+          ].join(',')
+        );
+      }
+    }
+
+    // BOM UTF-8 agar Excel membaca nama berakses/emoji dengan benar.
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\r\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -852,26 +1090,18 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
   // Handler Siswa: Muat Starter Template ke Kanvas
   const handleLoadStarterTemplate = () => {
     const doLoad = () => {
-      if (activeExercise?.starterTopology) {
-        loadTopology({
-          nodes: activeExercise.starterTopology.nodes,
-          edges: activeExercise.starterTopology.edges,
-        });
-        pushToast('success', 'Topologi soal dari guru berhasil dimuat ke kanvas Anda.');
+      // Selalu lewat pembersih yang sama dengan HUD: IP, rute, dan VLAN sasaran penilaian dikosongkan.
+      const prepared = activeExercise ? prepareStarterTopology(activeExercise) : null;
+      if (prepared) {
+        loadTopology({ nodes: prepared.nodes, edges: prepared.edges });
+        pushToast(
+          'success',
+          prepared.source.kind === 'template'
+            ? `Template "${prepared.source.name}" diterapkan ke kanvas (konfigurasi dikosongkan untuk latihan).`
+            : 'Topologi soal dari guru berhasil dimuat ke kanvas Anda (konfigurasi dikosongkan untuk latihan).'
+        );
         handleModalClose(); // Tutup modal agar siswa langsung melihat kanvas
         return;
-      }
-
-      if (activeExercise?.starterTemplateId) {
-        const tpl = TOPOLOGY_TEMPLATES.find(
-          (t) => t.id === activeExercise.starterTemplateId
-        );
-        if (tpl) {
-          loadTopology({ nodes: tpl.nodes, edges: tpl.edges });
-          pushToast('success', `Template "${tpl.name}" diterapkan ke kanvas.`);
-          handleModalClose(); // Tutup modal agar siswa langsung melihat kanvas
-          return;
-        }
       }
 
       pushToast('info', 'Soal ini dirancang untuk dirakit dari awal pada kanvas kosong.');
@@ -895,32 +1125,21 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
     setIsEvaluating(true);
 
     try {
-      const devices = nodes.map((n) => n.data);
-      const links = edges.map((e) => ({
-        sourceNodeId: e.source,
-        sourcePortId: e.sourceHandle!,
-        targetNodeId: e.target,
-        targetPortId: e.targetHandle!,
-      }));
-
-      const evaluation = await evaluateExercise(activeExercise, devices, links);
+      // Sama dengan HUD: seluruh soal dalam paket dinilai, skor akhir = rata-rata.
+      const active = classroomHub.getActiveExercises();
+      const packetExercises = active.length > 0 ? active : [activeExercise];
+      const packet = await evaluatePacket(packetExercises, nodes, edges);
+      const evaluation = packet.evaluations[activeExercise.id] ?? Object.values(packet.evaluations)[0];
       setMyEvaluation(evaluation);
 
-      const submission: Submission = {
-        participantId: joinedParticipant.id,
-        nickname: joinedParticipant.nickname,
-        exerciseId: activeExercise.id,
-        score: evaluation.score,
-        status: evaluation.status,
-        evaluation,
-        submittedAt: Date.now(),
-      };
-
+      const submission = buildPacketSubmission(joinedParticipant, packetExercises, activeExercise.id, packet);
       classroomHub.submitWork(session.classCode, submission);
 
       pushToast(
-        evaluation.status === 'passed' ? 'success' : 'info',
-        `Nilai: ${evaluation.score}/100. ${evaluation.feedback}`
+        packet.status === 'passed' ? 'success' : 'info',
+        packetExercises.length > 1
+          ? `Nilai rata-rata: ${packet.averageScore}/100 (${packetExercises.length} soal).`
+          : `Nilai: ${evaluation.score}/100. ${evaluation.feedback}`
       );
     } catch (err) {
       pushToast('error', `Evaluasi gagal: ${err instanceof Error ? err.message : String(err)}`);
@@ -929,9 +1148,13 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
     }
   };
 
-  const copyClassCode = () => {
+  const copyClassCode = async () => {
     if (!session) return;
-    navigator.clipboard.writeText(session.classCode);
+    const ok = await copyText(session.classCode);
+    if (!ok) {
+      pushToast('warning', `Gagal menyalin otomatis. Salin manual kode kelas: ${session.classCode}`);
+      return;
+    }
     setIsCopiedCode(true);
     if (copyTimerRef.current !== null) {
       clearTimeout(copyTimerRef.current);
@@ -987,7 +1210,7 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
                   size="sm"
                   variant="outline"
                   onClick={handleUpdateClassExercises}
-                  className="h-7 gap-1.5 text-xs text-emerald-400 hover:text-emerald-300 border-emerald-500/40"
+                  className="h-7 gap-1.5 text-xs text-viz-green border-viz-green/40"
                   title="Kirim pembaruan/penambahan soal ke siswa tanpa mereset lembar kerja atau nilai siswa"
                 >
                   <RefreshCw className="h-3.5 w-3.5" />
@@ -998,14 +1221,14 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
                   onClick={handleBroadcastExamPacket}
                   className="h-7 gap-1.5 text-xs bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
                 >
-                  <Sparkles className="h-3.5 w-3.5 text-amber-300" />
+                  <Sparkles className="h-3.5 w-3.5 text-viz-gold" />
                   Siarkan Paket Ujian ({selectedExamExerciseIds.length} Soal)
                 </Button>
                 <Button
                   size="sm"
                   variant="outline"
                   onClick={handleClearActiveExercises}
-                  className="h-7 gap-1.5 text-xs text-rose-400 hover:text-rose-300 border-rose-500/40"
+                  className="h-7 gap-1.5 text-xs text-viz-red border-viz-red/40"
                   title="Tarik atau kosongkan seluruh soal aktif dari kelas"
                 >
                   <XCircle className="h-3.5 w-3.5" />
@@ -1018,7 +1241,7 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
               size="sm"
               variant="outline"
               onClick={() => fileInputRef.current?.click()}
-              className="h-7 gap-1 text-[11px] text-sky-400 hover:text-sky-300"
+              className="h-7 gap-1 text-[11px] text-viz-blue"
               title="Pilih file JSON topologi (mis. openpacket-topology-*.json)"
             >
               <Upload className="h-3 w-3" />
@@ -1029,7 +1252,7 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
               size="sm"
               variant="outline"
               onClick={handleCreateFromCanvas}
-              className="h-7 gap-1 text-[11px] text-indigo-400 hover:text-indigo-300"
+              className="h-7 gap-1 text-[11px] text-viz-blue"
               title="Ubah topologi yang sedang aktif di kanvas menjadi soal praktikum"
             >
               <Sparkles className="h-3 w-3" />
@@ -1040,7 +1263,7 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
               size="sm"
               variant="outline"
               onClick={handleCreateNewExercise}
-              className="h-7 gap-1 text-[11px] text-emerald-400 hover:text-emerald-300"
+              className="h-7 gap-1 text-[11px] text-viz-green"
             >
               <Plus className="h-3 w-3" />
               Buat Soal
@@ -1051,7 +1274,7 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
               variant="outline"
               onClick={() => selectedExercise && exportLabPackageFile(selectedExercise)}
               disabled={!selectedExercise}
-              className="h-7 gap-1 text-[11px] text-amber-400 hover:text-amber-300 disabled:opacity-40"
+              className="h-7 gap-1 text-[11px] text-viz-gold disabled:opacity-40"
               title="Ekspor soal yang dipilih sebagai paket praktikum mandiri (.oplab) untuk dibagikan ke siswa"
             >
               <Download className="h-3 w-3" />
@@ -1075,7 +1298,7 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
               variant="outline"
               onClick={handleClearExerciseBank}
               disabled={exercises.length === 0}
-              className="h-7 gap-1 text-[11px] text-rose-500 hover:text-rose-400 hover:bg-rose-500/10 border-rose-500/50 font-semibold disabled:opacity-40"
+              className="h-7 gap-1 text-[11px] text-viz-red hover:bg-viz-red/10 border-viz-red/50 font-semibold disabled:opacity-40"
               title="Kosongkan seluruh bank soal praktikum"
             >
               <Trash2 className="h-3 w-3" />
@@ -1090,7 +1313,7 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
             <div className="flex flex-col gap-1 max-w-sm">
               <span className="text-xs font-bold text-foreground">Bank Soal Masih Kosong</span>
               <span className="text-[11px] text-muted-foreground">
-                Bank soal awal otomatis dikosongkan. Anda dapat membuat soal praktikum baru dari nol, mengonversi topologi dari kanvas, atau memuat paket latihan contoh bawaan.
+                Bank soal dimulai dari nol. Buat soal praktikum baru, ubah topologi kanvas menjadi soal, atau impor berkas soal (.json).
               </span>
             </div>
             <div className="flex flex-wrap items-center gap-2 mt-1">
@@ -1106,19 +1329,10 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
                 size="sm"
                 variant="outline"
                 onClick={handleCreateFromCanvas}
-                className="h-7 gap-1.5 text-xs text-indigo-400 hover:text-indigo-300"
+                className="h-7 gap-1.5 text-xs text-viz-blue"
               >
                 <Sparkles className="h-3.5 w-3.5" />
                 Ubah Dari Kanvas
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleLoadDefaultExercises}
-                className="h-7 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-              >
-                <Download className="h-3.5 w-3.5" />
-                Muat Contoh Praktikum
               </Button>
             </div>
           </div>
@@ -1133,7 +1347,7 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
                 key={ex.id}
                 className={`flex flex-col justify-between rounded-lg border p-3 transition-all ${
                   isCurrentlyRunning
-                    ? 'border-emerald-500/70 bg-emerald-500/5 shadow-xs'
+                    ? 'border-viz-green/70 bg-viz-green/5 shadow-xs'
                     : isSelectedForExam
                     ? 'border-primary bg-primary/5 shadow-xs'
                     : 'border-border bg-background/50 hover:border-muted-foreground/40'
@@ -1158,7 +1372,7 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
                         {ex.difficulty}
                       </Badge>
                       {isCurrentlyRunning ? (
-                        <span className="rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-400">
+                        <span className="rounded-full bg-viz-green/20 px-1.5 py-0.5 text-[9px] font-semibold text-viz-green">
                           Sedang Diuji
                         </span>
                       ) : isSelectedForExam ? (
@@ -1206,7 +1420,7 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
                       variant="ghost"
                       onClick={(e) => handleEditExercise(e, ex)}
                       title="Sunting Teks & Target Soal"
-                      className="h-6 w-6 p-0 text-muted-foreground hover:text-sky-400"
+                      className="h-6 w-6 p-0 text-muted-foreground hover:text-viz-blue"
                     >
                       <Pencil className="h-3 w-3" />
                     </Button>
@@ -1218,7 +1432,7 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
                         exportExercisesToJsonFile(ex);
                       }}
                       title="Unduh Soal (.json)"
-                      className="h-6 w-6 p-0 text-muted-foreground hover:text-emerald-400"
+                      className="h-6 w-6 p-0 text-muted-foreground hover:text-viz-green"
                     >
                       <Download className="h-3 w-3" />
                     </Button>
@@ -1227,7 +1441,7 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
                       variant="ghost"
                       onClick={(e) => handleDeleteExercise(e, ex.id)}
                       title="Hapus Soal"
-                      className="h-6 w-6 p-0 text-muted-foreground hover:text-rose-400"
+                      className="h-6 w-6 p-0 text-muted-foreground hover:text-viz-red"
                     >
                       <Trash2 className="h-3 w-3" />
                     </Button>
@@ -1274,7 +1488,7 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
                   </>
                 ) : (
                   <>
-                    <Users className="h-3.5 w-3.5 text-sky-400" />
+                    <Users className="h-3.5 w-3.5 text-viz-blue" />
                     <span>Mode Siswa Aktif</span>
                   </>
                 )}
@@ -1389,7 +1603,7 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
                             className="h-7 w-7 p-0 text-muted-foreground"
                           >
                             {isCopiedCode ? (
-                              <Check className="h-3.5 w-3.5 text-emerald-400" />
+                              <Check className="h-3.5 w-3.5 text-viz-green" />
                             ) : (
                               <Copy className="h-3.5 w-3.5" />
                             )}
@@ -1431,8 +1645,8 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
                         onClick={handleToggleSelfCheck}
                         className={`gap-1.5 text-xs ${
                           session.allowSelfCheck === false
-                            ? 'border-amber-500/50 text-amber-400 hover:bg-amber-500/10'
-                            : 'border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/10'
+                            ? 'border-viz-gold/50 text-viz-gold hover:bg-viz-gold/10'
+                            : 'border-viz-green/50 text-viz-green hover:bg-viz-green/10'
                         }`}
                         title={
                           session.allowSelfCheck === false
@@ -1448,6 +1662,35 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
                         </span>
                       </Button>
 
+                      {/* Batas Cek Mandiri */}
+                      <div className="flex items-center gap-1.5 rounded-md border border-input bg-input/30 px-2 py-1">
+                        <Hash className="h-3.5 w-3.5 text-muted-foreground" />
+                        <span className="text-[11px] text-muted-foreground">Batas Cek</span>
+                        <input
+                          type="number"
+                          min={1}
+                          max={99}
+                          value={session.selfCheckLimit ?? 5}
+                          onChange={(e) => {
+                            const val = Number(e.target.value);
+                            if (Number.isNaN(val)) return;
+                            const safe = Math.max(1, Math.min(99, Math.floor(val)));
+                            setSession({ ...session, selfCheckLimit: safe });
+                          }}
+                          onBlur={(e) => {
+                            const val = Number(e.target.value);
+                            const safe = Number.isNaN(val)
+                              ? 5
+                              : Math.max(1, Math.min(99, Math.floor(val)));
+                            classroomHub.setSelfCheckLimit(session.classCode, safe);
+                            pushToast('info', `Batas cek mandiri diatur ke ${safe} kali per soal.`);
+                          }}
+                          className="w-12 bg-transparent text-xs font-semibold text-foreground outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                          title="Berapa kali siswa boleh melakukan cek mandiri per soal"
+                        />
+                        <span className="text-[11px] text-muted-foreground">kali</span>
+                      </div>
+
                       <Button
                         size="sm"
                         variant="outline"
@@ -1456,12 +1699,12 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
                       >
                         {session.status === 'open' ? (
                           <>
-                            <Lock className="h-3.5 w-3.5 text-amber-400" />
+                            <Lock className="h-3.5 w-3.5 text-viz-gold" />
                             Kunci Sesi
                           </>
                         ) : (
                           <>
-                            <Unlock className="h-3.5 w-3.5 text-emerald-400" />
+                            <Unlock className="h-3.5 w-3.5 text-viz-green" />
                             Buka Sesi
                           </>
                         )}
@@ -1496,21 +1739,38 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
                   <Card className="flex flex-col gap-3 p-4">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <FileCheck2 className="h-4 w-4 text-emerald-400" />
+                        <FileCheck2 className="h-4 w-4 text-viz-green" />
                         <h4 className="text-xs font-bold uppercase tracking-wider text-foreground">
                           Daftar Peserta &amp; Penilaian Langsung ({participants.length})
                         </h4>
+                        {(session.round ?? 0) > 0 && (
+                          <Badge variant="outline" className="font-mono text-[10px]" title="Soal baru yang disiarkan memulai ronde baru; nilai ronde lama diarsipkan dan ikut di CSV.">
+                            Ronde {session.round}
+                            {history.length > 0 ? ` · ${history.length} diarsipkan` : ''}
+                          </Badge>
+                        )}
                       </div>
                       <div className="flex items-center gap-2">
                         <Button
                           size="sm"
                           variant="outline"
                           onClick={() => opsubInputRef.current?.click()}
-                          className="h-7 gap-1.5 text-xs text-sky-400 hover:text-sky-300"
+                          className="h-7 gap-1.5 text-xs text-viz-blue"
                           title="Impor berkas lembar jawaban siswa (.opsub) secara massal"
                         >
                           <Upload className="h-3.5 w-3.5" />
                           Impor Jawaban (.opsub)
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void handleVerifyAll()}
+                          disabled={isVerifying || Object.keys(submissions).length === 0}
+                          className="h-7 gap-1.5 text-xs text-viz-teal"
+                          title="Nilai ulang topologi setiap siswa di perangkat ini untuk memastikan skor yang dikirim memang hasil jawabannya"
+                        >
+                          <ShieldCheck className="h-3.5 w-3.5" />
+                          {isVerifying ? 'Memverifikasi…' : 'Verifikasi Semua'}
                         </Button>
                         <Button
                           size="sm"
@@ -1535,7 +1795,7 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
                           Belum ada siswa yang bergabung.
                         </p>
                         <p className="text-[11px] text-muted-foreground/70">
-                          Minta siswa memasukkan kode <b>{session.classCode}</b> pada Mode Siswa, atau klik &quot;Simulasikan Siswa&quot;.
+                          Minta siswa memasukkan kode <b>{session.classCode}</b> pada Mode Siswa.
                         </p>
                       </div>
                     ) : (
@@ -1564,17 +1824,21 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
                                     {new Date(p.joinedAt).toLocaleTimeString()}
                                   </td>
                                   <td className="p-2.5">
-                                    {sub ? (
+                                    {p.status === 'left' ? (
+                                      <Badge variant="outline" className="text-muted-foreground">
+                                        Keluar{sub ? ' (nilai tersimpan)' : ''}
+                                      </Badge>
+                                    ) : sub ? (
                                       <Badge
                                         variant="outline"
-                                        className="border-emerald-800 bg-emerald-950/60 text-emerald-300"
+                                        className="border-viz-green/40 bg-viz-green/10 text-viz-green"
                                       >
                                         Terkumpul
                                       </Badge>
                                     ) : (
                                       <Badge
                                         variant="outline"
-                                        className="border-amber-800 bg-amber-950/60 text-amber-300"
+                                        className="border-viz-gold/40 bg-viz-gold/10 text-viz-gold"
                                       >
                                         Mengerjakan
                                       </Badge>
@@ -1585,10 +1849,10 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
                                       <span
                                         className={`font-mono font-bold ${
                                           sub.score === 100
-                                            ? 'text-emerald-400'
+                                            ? 'text-viz-green'
                                             : sub.score >= 70
-                                            ? 'text-amber-400'
-                                            : 'text-rose-400'
+                                            ? 'text-viz-gold'
+                                            : 'text-viz-red'
                                         }`}
                                       >
                                         {sub.score} / 100
@@ -1596,23 +1860,70 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
                                     ) : (
                                       <span className="font-mono text-muted-foreground">-</span>
                                     )}
+                                    {sub && renderVerification(p.id, sub)}
                                   </td>
                                   <td className="p-2.5 text-right">
-                                    {sub ? (
-                                      <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        onClick={() => setReviewedSubmission(sub)}
-                                        className="h-7 gap-1 text-[11px] text-sky-400 hover:text-sky-300"
-                                      >
-                                        <Eye className="h-3 w-3" />
-                                        Review
-                                      </Button>
-                                    ) : (
-                                      <span className="text-[11px] text-muted-foreground/60 italic">
-                                        Menunggu…
-                                      </span>
-                                    )}
+                                    <div className="flex items-center justify-end gap-1">
+                                      {sub ? (
+                                        <>
+                                          <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            onClick={() => void handleVerifyOne(p.id)}
+                                            disabled={isVerifying}
+                                            className="h-7 gap-1 text-[11px] text-viz-teal"
+                                            title="Nilai ulang topologi siswa ini dan bandingkan dengan skor yang dikirim"
+                                          >
+                                            <ShieldCheck className="h-3 w-3" />
+                                            Verifikasi
+                                          </Button>
+                                          <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            onClick={() => setReviewedSubmission(sub)}
+                                            className="h-7 gap-1 text-[11px] text-viz-blue"
+                                          >
+                                            <Eye className="h-3 w-3" />
+                                            Review
+                                          </Button>
+                                        </>
+                                      ) : (
+                                        <span className="text-[11px] text-muted-foreground/60 italic">
+                                          Menunggu…
+                                        </span>
+                                      )}
+                                      {session && session.status !== 'closed' && (
+                                        <Button
+                                          size="sm"
+                                          variant="ghost"
+                                          onClick={() =>
+                                            requestConfirm({
+                                              title: `Keluarkan ${p.nickname}?`,
+                                              message: `Siswa ${p.nickname} akan dikeluarkan dari sesi kelas dan tidak dapat melanjutkan pengerjaan. Tindakan ini tidak bisa dibatalkan.`,
+                                              confirmLabel: 'Keluarkan Siswa',
+                                              onConfirm: () => {
+                                                classroomHub.kickParticipant(
+                                                  session.classCode,
+                                                  p.id
+                                                );
+                                                setParticipants((prev) =>
+                                                  prev.filter((x) => x.id !== p.id)
+                                                );
+                                                pushToast(
+                                                  'info',
+                                                  `${p.nickname} telah dikeluarkan dari kelas.`
+                                                );
+                                              },
+                                            })
+                                          }
+                                          className="h-7 gap-1 text-[11px] text-viz-red"
+                                          title={`Keluarkan ${p.nickname} dari kelas`}
+                                        >
+                                          <UserMinus className="h-3 w-3" />
+                                          Keluarkan
+                                        </Button>
+                                      )}
+                                    </div>
                                   </td>
                                 </tr>
                               );
@@ -1628,7 +1939,7 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
                     <Card className="border-primary/50 bg-primary/5 p-4">
                       <div className="mb-2 flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                          <CheckCircle2 className="h-4 w-4 text-viz-green" />
                           <h4 className="text-xs font-bold text-foreground">
                             Detail Lembar Kerja: {reviewedSubmission.nickname}
                           </h4>
@@ -1643,29 +1954,51 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
                         </Button>
                       </div>
 
-                      <p className="mb-3 text-xs text-muted-foreground">
-                        {reviewedSubmission.evaluation.feedback}
-                      </p>
-
-                      <div className="flex flex-col gap-1.5 rounded-lg border bg-background/80 p-3">
-                        {reviewedSubmission.evaluation.checks.map((chk) => (
-                          <div key={chk.targetId} className="flex items-start gap-2 text-xs">
-                            {chk.passed ? (
-                              <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-400" />
-                            ) : (
-                              <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-rose-400" />
-                            )}
-                            <div className="flex flex-col">
-                              <span className={chk.passed ? 'font-medium text-foreground' : 'text-foreground/90'}>
-                                {chk.title}
-                              </span>
-                              <span className="text-[11px] text-muted-foreground">
-                                {chk.reason}
-                              </span>
-                            </div>
+                      {(() => {
+                        // Paket ujian multi-soal: tampilkan rincian PER SOAL (skor akhir = rata-rata semua soal).
+                        const perExercise = reviewedSubmission.evaluations
+                          ? Object.entries(reviewedSubmission.evaluations)
+                          : [];
+                        const titleOf = (id: string) =>
+                          [...(session?.activeExercises ?? []), ...exercises].find((x) => x.id === id)?.title ??
+                          history.flatMap((h) => h.exercises).find((x) => x.id === id)?.title ??
+                          id;
+                        const blocks: Array<{ key: string; heading: string | null; ev: ExerciseEvaluation }> =
+                          perExercise.length > 0
+                            ? perExercise.map(([id, ev]) => ({ key: id, heading: titleOf(id), ev }))
+                            : [{ key: 'single', heading: null, ev: reviewedSubmission.evaluation }];
+                        return (
+                          <div className="flex flex-col gap-3">
+                            {blocks.map(({ key, heading, ev }) => (
+                              <div key={key} className="flex flex-col gap-1.5">
+                                <p className="text-xs text-muted-foreground">
+                                  {heading && <b className="text-foreground">{heading} — {ev.score}/100. </b>}
+                                  {ev.feedback}
+                                </p>
+                                <div className="flex flex-col gap-1.5 rounded-lg border bg-background/80 p-3">
+                                  {ev.checks.map((chk) => (
+                                    <div key={chk.targetId} className="flex items-start gap-2 text-xs">
+                                      {chk.passed ? (
+                                        <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-viz-green" />
+                                      ) : (
+                                        <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-viz-red" />
+                                      )}
+                                      <div className="flex flex-col">
+                                        <span className={chk.passed ? 'font-medium text-foreground' : 'text-foreground/90'}>
+                                          {chk.title}
+                                        </span>
+                                        <span className="text-[11px] text-muted-foreground">
+                                          {chk.reason}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
                           </div>
-                        ))}
-                      </div>
+                        );
+                      })()}
                     </Card>
                   )}
                 </div>
@@ -1715,7 +2048,7 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
                         type="button"
                         variant="outline"
                         onClick={() => oplabInputRef.current?.click()}
-                        className="gap-2 text-xs text-amber-400 hover:text-amber-300"
+                        className="gap-2 text-xs text-viz-gold"
                         title="Buka file paket praktikum tugas mandiri (.oplab atau .json)"
                       >
                         <Upload className="h-4 w-4" />
@@ -1732,9 +2065,9 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
                       </Button>
                     </div>
 
-                    <Button onClick={handleJoinClass} className="gap-2">
+                    <Button onClick={() => void handleJoinClass()} disabled={isJoining} className="gap-2">
                       <Users className="h-4 w-4" />
-                      Masuk ke Ruang Kelas
+                      {isJoining ? 'Memeriksa kelas…' : 'Masuk ke Ruang Kelas'}
                     </Button>
                   </div>
                 </Card>
@@ -1762,9 +2095,11 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
                         size="sm"
                         variant="outline"
                         onClick={() => {
-                          classroomHub.setCurrentParticipant(null);
+                          // Kirim PARTICIPANT_LEFT ke guru (sebelumnya hanya menghapus peserta secara lokal).
+                          classroomHub.leaveCurrentClass();
                           setJoinedParticipant(null);
                           setActiveExercise(null);
+                          setSession(null);
                           pushToast('info', 'Anda telah keluar dari ruang kelas.');
                         }}
                         className="gap-1.5 text-xs text-muted-foreground hover:text-foreground"
@@ -1859,18 +2194,18 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
                     <Card
                       className={`p-5 border ${
                         myEvaluation.status === 'passed'
-                          ? 'border-emerald-700/60 bg-emerald-950/20'
+                          ? 'border-viz-green/40 bg-viz-green/10'
                           : myEvaluation.status === 'partial'
-                          ? 'border-amber-700/60 bg-amber-950/20'
-                          : 'border-rose-700/60 bg-rose-950/20'
+                          ? 'border-viz-gold/40 bg-viz-gold/10'
+                          : 'border-viz-red/40 bg-viz-red/10'
                       }`}
                     >
                       <div className="mb-3 flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           {myEvaluation.status === 'passed' ? (
-                            <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+                            <CheckCircle2 className="h-5 w-5 text-viz-green" />
                           ) : (
-                            <HelpCircle className="h-5 w-5 text-amber-400" />
+                            <HelpCircle className="h-5 w-5 text-viz-gold" />
                           )}
                           <span className="text-sm font-bold text-foreground">
                             Hasil Evaluasi Otomatis
@@ -1879,10 +2214,10 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
                         <span
                           className={`font-mono text-xl font-extrabold ${
                             myEvaluation.score === 100
-                              ? 'text-emerald-400'
+                              ? 'text-viz-green'
                               : myEvaluation.score >= 70
-                              ? 'text-amber-400'
-                              : 'text-rose-400'
+                              ? 'text-viz-gold'
+                              : 'text-viz-red'
                           }`}
                         >
                           {myEvaluation.score} / 100
@@ -1897,9 +2232,9 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
                         {myEvaluation.checks.map((chk) => (
                           <div key={chk.targetId} className="flex items-start gap-2.5 text-xs">
                             {chk.passed ? (
-                              <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-400" />
+                              <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-viz-green" />
                             ) : (
-                              <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-rose-400" />
+                              <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-viz-red" />
                             )}
                             <div className="flex flex-col">
                               <span className={chk.passed ? 'font-semibold text-foreground' : 'text-foreground'}>

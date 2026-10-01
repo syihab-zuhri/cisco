@@ -549,10 +549,17 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     set((state) => ({
       nodes: state.nodes.map((node) => {
         if (node.id !== nodeId) return node;
+        // Simpan nama asli saat perangkat pertama kali diganti namanya (GUI maupun CLI),
+        // supaya penilaian kelas tetap menemukan perangkat yang dimaksud soal.
+        const renamed =
+          typeof updates.label === 'string' &&
+          updates.label !== node.data.label &&
+          !node.data.originalLabel;
         return {
           ...node,
           data: {
             ...node.data,
+            ...(renamed ? { originalLabel: node.data.label } : {}),
             ...updates,
           },
         };
@@ -1035,7 +1042,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         type: 'pc',
         nodeKind: 'square',
         ports: [],
-        fill: 'rgba(59,130,246,0.16)',
+        fill: 'rgba(59,130,246,0.14)',
         stroke: '#3B82F6',
         width: 260,
         height: 160,

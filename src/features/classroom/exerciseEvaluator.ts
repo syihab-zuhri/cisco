@@ -3,11 +3,25 @@ import type { DeviceData, TopologyLink } from '../../types/network';
 import { isSameSubnet, prefixLength } from '../../utils/ipUtils';
 import type { Exercise, ExerciseCheck, ExerciseEvaluation, ExerciseTarget } from './types';
 
+/**
+ * Cari perangkat menurut id atau label. Bila siswa mengganti hostname, label lama
+ * (`originalLabel`) tetap dikenali. Jika beberapa perangkat berlabel sama, utamakan yang
+ * memang berasal dari nama itu (bukan perangkat lain yang diganti namanya menjadi itu).
+ */
 function matchDevice(devices: DeviceData[], identifier: string): DeviceData | undefined {
-  const lower = identifier.toLowerCase();
-  return devices.find(
+  const lower = identifier.trim().toLowerCase();
+  const exact = devices.filter(
     (d) => d.id.toLowerCase() === lower || d.label.toLowerCase() === lower
   );
+  if (exact.length === 1) return exact[0];
+  if (exact.length > 1) {
+    return (
+      exact.find(
+        (d) => d.id.toLowerCase() === lower || (d.originalLabel ?? d.label).toLowerCase() === lower
+      ) ?? exact[0]
+    );
+  }
+  return devices.find((d) => d.originalLabel?.toLowerCase() === lower);
 }
 
 export async function evaluateExercise(
@@ -17,10 +31,21 @@ export async function evaluateExercise(
 ): Promise<ExerciseEvaluation> {
   const engine = new HeadlessSimulationEngine();
   // Filter out annotations before passing to simulation engine
-  const networkDevices = devices.filter((d) => !('nodeKind' in d));
+  // Anotasi kanvas (square/teks) bukan perangkat; nodeKind 'device' / kosong = perangkat.
+  const networkDevices = devices.filter((d) => (d.nodeKind ?? 'device') === 'device');
   engine.setTopology(networkDevices, links);
 
   const checks: ExerciseCheck[] = [];
+
+  if (exercise.targets.length === 0) {
+    return {
+      status: 'failed',
+      score: 0,
+      checks,
+      feedback: 'Soal ini belum memiliki target penilaian sehingga tidak dapat dinilai. Hubungi guru.',
+      evaluatedAt: new Date().toLocaleTimeString(),
+    };
+  }
 
   for (const target of exercise.targets) {
     const check = await evaluateTarget(target, networkDevices, links, engine);
@@ -116,6 +141,15 @@ async function evaluateTarget(
           title: target.title,
           passed: false,
           reason: `Subnet mask tidak cocok (diharapkan: ${target.subnetMask}, saat ini: ${activeMask || '-'}).`,
+        };
+      }
+
+      if (target.prefix !== undefined && !activeMask) {
+        return {
+          targetId: target.id,
+          title: target.title,
+          passed: false,
+          reason: `Subnet mask belum dikonfigurasi (diharapkan prefix /${target.prefix}).`,
         };
       }
 

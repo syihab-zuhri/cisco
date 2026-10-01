@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   GraduationCap,
   Send,
@@ -20,8 +20,9 @@ import { useAppStore } from '../../store/useAppStore';
 import { classroomHub } from '../../features/classroom/classroomHub';
 import { evaluateExercise } from '../../features/classroom/exerciseEvaluator';
 import { exportSubmissionPackageFile } from '../../features/classroom/exerciseParser';
-import { cleanNodesForStarterTopology } from '../../features/classroom/topologyExerciseConverter';
-import { TOPOLOGY_TEMPLATES } from '../../data/topologyTemplates';
+import { edgesToLinks, evaluatePacket, buildPacketSubmission } from '../../features/classroom/submissionBuilder';
+import { prepareStarterTopology } from '../../features/classroom/starterTopology';
+import { compactTopology } from '../../features/classroom/verification';
 import type {
   ClassSession,
   Participant,
@@ -50,6 +51,15 @@ export function ClassroomStudentHUD() {
     Record<string, ExerciseEvaluation>
   >({});
   const [isEvaluating, setIsEvaluating] = useState(false);
+  // Kuota cek mandiri disimpan di hub (sessionStorage): tidak hilang saat refresh dan otomatis
+  // kembali penuh pada ronde baru. State ini hanya memicu render ulang.
+  const [, setSelfCheckTick] = useState(0);
+  const participantRef = useRef<Participant | null>(participant);
+  participantRef.current = participant;
+  // Pelacak perubahan soal/ronde dari polling (siswa lintas perangkat tidak menerima event realtime).
+  const lastRoundRef = useRef<number>(classroomHub.getSession()?.round ?? 0);
+  const lastExerciseKeyRef = useRef<string>(classroomHub.getActiveExercises().map((x) => x.id).join('|'));
+  const syncedOnceRef = useRef<boolean>(false);
   const [isMinimized, setIsMinimized] = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth < 640 : false
   );
@@ -113,29 +123,66 @@ export function ClassroomStudentHUD() {
         case 'SYNC_RESPONSE':
           setSession(event.session);
           if (!event.session || event.session.status === 'closed') {
-            setActiveExercises([]);
-            setSelectedExerciseIndex(0);
-            setEvaluationsByExerciseId({});
-            setIsEvaluating(false);
-            setSession(null);
-            handleLeaveClass(false);
+            // Hanya keluarkan siswa jika memang kelas yang sama yang ditutup.
+            // Jangan keluarkan jika siswa baru join dan session stale dari sesi lama.
+            const curParticipant = classroomHub.getCurrentParticipant();
+            if (curParticipant) {
+              setActiveExercises([]);
+              setSelectedExerciseIndex(0);
+              setEvaluationsByExerciseId({});
+              setIsEvaluating(false);
+              setSession(null);
+              handleLeaveClass(false);
+            }
             break;
           }
-          if (event.activeExercises && event.activeExercises.length > 0) {
-            setActiveExercises(event.activeExercises);
-            setSelectedExerciseIndex((prev) => (prev >= event.activeExercises!.length ? 0 : prev));
-          } else if (event.activeExercise) {
-            setActiveExercises([event.activeExercise]);
-            setSelectedExerciseIndex(0);
-          } else {
-            setActiveExercises([]);
-            setSelectedExerciseIndex(0);
-            setEvaluationsByExerciseId({});
-            setIsEvaluating(false);
+          {
+            const nextList =
+              event.activeExercises && event.activeExercises.length > 0
+                ? event.activeExercises
+                : event.activeExercise
+                ? [event.activeExercise]
+                : [];
+            const nextKey = nextList.map((x) => x.id).join('|');
+            const nextRound = event.session?.round ?? 0;
+            // Polling menggantikan event realtime untuk perangkat lain: bangkitkan notifikasi yang sama.
+            if (syncedOnceRef.current) {
+              if (nextList.length > 0 && nextRound !== lastRoundRef.current) {
+                setEvaluationsByExerciseId({});
+                setSelectedExerciseIndex(0);
+                pushToast(
+                  'info',
+                  nextList.length > 1
+                    ? `Paket ujian baru dimulai (${nextList.length} soal).`
+                    : `Materi baru dimulai: "${nextList[0].title || 'Praktikum'}"`
+                );
+              } else if (nextKey !== lastExerciseKeyRef.current) {
+                pushToast(
+                  'info',
+                  nextList.length === 0
+                    ? 'Materi/soal aktif telah ditiadakan oleh guru.'
+                    : `Guru memperbarui paket soal (${nextList.length} soal aktif). Pengerjaan Anda tetap aman tersimpan.`
+                );
+              }
+            }
+            syncedOnceRef.current = true;
+            lastRoundRef.current = nextRound;
+            lastExerciseKeyRef.current = nextKey;
+
+            if (nextList.length > 0) {
+              setActiveExercises(nextList);
+              setSelectedExerciseIndex((prev) => (prev >= nextList.length ? 0 : prev));
+            } else {
+              setActiveExercises([]);
+              setSelectedExerciseIndex(0);
+              setEvaluationsByExerciseId({});
+              setIsEvaluating(false);
+            }
           }
           break;
 
         case 'EXERCISES_UPDATED':
+          lastExerciseKeyRef.current = (event.exercises ?? []).map((x) => x.id).join('|');
           if (event.exercises && event.exercises.length > 0) {
             setActiveExercises(event.exercises);
             setSelectedExerciseIndex((prev) => (prev >= event.exercises.length ? 0 : prev));
@@ -153,6 +200,10 @@ export function ClassroomStudentHUD() {
           break;
 
         case 'EXERCISE_STARTED':
+          // Soal baru → kuota cek mandiri otomatis kembali penuh (kunci kuota memuat nomor ronde)
+          lastRoundRef.current = classroomHub.getSession()?.round ?? lastRoundRef.current;
+          lastExerciseKeyRef.current = (event.exercises ?? (event.exercise ? [event.exercise] : [])).map((x) => x.id).join('|');
+          setSelfCheckTick((t) => t + 1);
           if (event.exercises && event.exercises.length > 0) {
             setActiveExercises(event.exercises);
             setSelectedExerciseIndex(0);
@@ -218,6 +269,28 @@ export function ClassroomStudentHUD() {
             setSession(null);
           }
           break;
+
+        case 'PARTICIPANT_KICKED': {
+          // Hub sudah mengosongkan peserta aktif sebelum event ini sampai ke sini, jadi bandingkan dengan ref.
+          if (participantRef.current && participantRef.current.id === event.participantId) {
+            pushToast('warning', 'Anda telah dikeluarkan dari kelas oleh guru.');
+            setActiveExercises([]);
+            setSelectedExerciseIndex(0);
+            setEvaluationsByExerciseId({});
+            setIsEvaluating(false);
+            setSession(null);
+            setParticipant(null);
+          }
+          break;
+        }
+
+        case 'RELAY_REJECTED':
+          pushToast('error', event.message);
+          break;
+
+        case 'RELAY_RESTORED':
+          pushToast('info', 'Server kelas sempat restart — Anda tersambung kembali otomatis.');
+          break;
       }
     });
 
@@ -233,19 +306,18 @@ export function ClassroomStudentHUD() {
     return unsub;
   }, [participant]);
 
+  // Bergabung ke kelas baru: polling pertama hanya menetapkan acuan (tanpa notifikasi "soal baru").
+  const participantId = participant?.id ?? null;
+  useEffect(() => {
+    syncedOnceRef.current = false;
+  }, [participantId]);
+
   // Evaluasi topologi kanvas untuk satu soal
   const runEvaluationForExercise = async (
     ex: Exercise
   ): Promise<ExerciseEvaluation | null> => {
     const devices = nodes.map((n) => n.data);
-    const links = edges.map((e) => ({
-      sourceNodeId: e.source,
-      sourcePortId: e.sourceHandle!,
-      targetNodeId: e.target,
-      targetPortId: e.targetHandle!,
-    }));
-
-    return await evaluateExercise(ex, devices, links);
+    return await evaluateExercise(ex, devices, edgesToLinks(edges));
   };
 
   // Handler Cek Mandiri (Self-Check untuk soal aktif saat ini)
@@ -255,10 +327,20 @@ export function ClassroomStudentHUD() {
       pushToast('warning', 'Fitur cek mandiri dinonaktifkan oleh guru untuk sesi ini.');
       return;
     }
+    const limit = session?.selfCheckLimit ?? 5;
+    const used = classroomHub.getSelfCheckCount(activeExercise.id);
+    if (used >= limit) {
+      pushToast('warning', `Kuota cek mandiri untuk soal ini sudah habis (${limit}/${limit}).`);
+      return;
+    }
     setIsEvaluating(true);
     try {
       const evalResult = await runEvaluationForExercise(activeExercise);
       if (!evalResult) return;
+
+      // Increment counter (persisten per ronde)
+      classroomHub.incrementSelfCheckCount(activeExercise.id);
+      setSelfCheckTick((t) => t + 1);
 
       setEvaluationsByExerciseId((prev) => ({
         ...prev,
@@ -292,55 +374,14 @@ export function ClassroomStudentHUD() {
     setIsEvaluating(true);
 
     try {
-      const updatedEvals: Record<string, ExerciseEvaluation> = {
-        ...evaluationsByExerciseId,
-      };
-      const exerciseScores: Record<string, number> = {};
+      // Evaluasi otomatis seluruh soal dalam paket ujian; skor akhir = rata-rata.
+      const packet = await evaluatePacket(activeExercises, nodes, edges, evaluationsByExerciseId);
+      const avgScore = packet.averageScore;
+      setEvaluationsByExerciseId(packet.evaluations);
 
-      // Evaluasi otomatis seluruh soal dalam paket ujian
-      for (const ex of activeExercises) {
-        const res = await runEvaluationForExercise(ex);
-        if (res) {
-          updatedEvals[ex.id] = res;
-          exerciseScores[ex.id] = res.score;
-        } else {
-          exerciseScores[ex.id] = 0;
-        }
-      }
-
-      setEvaluationsByExerciseId(updatedEvals);
-
-      // Hitung skor rata-rata paket ujian
-      const scores = Object.values(exerciseScores);
-      const totalScore = scores.reduce((a, b) => a + b, 0);
-      const avgScore =
-        scores.length > 0 ? Math.round(totalScore / scores.length) : 0;
-      const overallStatus =
-        avgScore === 100 ? 'passed' : avgScore > 0 ? 'partial' : 'failed';
-
-      const currentEval = activeExercise
-        ? updatedEvals[activeExercise.id]
-        : Object.values(updatedEvals)[0];
-
-      const submission: Submission = {
-        participantId: participant.id,
-        nickname: participant.nickname,
-        exerciseId: activeExercise?.id || activeExercises[0].id,
-        score: avgScore,
-        status: overallStatus,
-        evaluation: currentEval || {
-          status: overallStatus,
-          score: avgScore,
-          feedback: `Pengerjaan selesai dengan skor rata-rata ${avgScore}/100.`,
-          evaluatedAt: new Date().toLocaleTimeString(),
-          checks: [],
-        },
-        evaluations: updatedEvals,
-        exerciseScores,
-        submittedAt: Date.now(),
-      };
-
-      classroomHub.submitWork(session.classCode, submission);
+      const submission = buildPacketSubmission(participant, activeExercises, activeExercise?.id, packet);
+      // Snapshot topologi ikut dikirim agar guru dapat menilai ulang dan memverifikasi skor ini.
+      classroomHub.submitWork(session.classCode, submission, compactTopology(nodes, edges));
 
       if (avgScore === 100) {
         if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
@@ -415,25 +456,16 @@ export function ClassroomStudentHUD() {
   const handleLoadStarterTopology = () => {
     if (!activeExercise) return;
     const doLoad = () => {
-      if (activeExercise.starterTopology) {
-        loadTopology({
-          nodes: cleanNodesForStarterTopology(activeExercise.starterTopology.nodes),
-          edges: activeExercise.starterTopology.edges,
-        });
-        pushToast('success', 'Topologi perangkat guru berhasil dimuat (konfigurasi IP kosong untuk latihan).');
+      const prepared = prepareStarterTopology(activeExercise);
+      if (prepared) {
+        loadTopology({ nodes: prepared.nodes, edges: prepared.edges });
+        pushToast(
+          'success',
+          prepared.source.kind === 'template'
+            ? `Template "${prepared.source.name}" diterapkan ke kanvas (konfigurasi kosong untuk latihan).`
+            : 'Topologi perangkat guru berhasil dimuat (konfigurasi kosong untuk latihan).'
+        );
         return;
-      }
-
-      if (activeExercise.starterTemplateId) {
-        const tpl = TOPOLOGY_TEMPLATES.find((t) => t.id === activeExercise.starterTemplateId);
-        if (tpl) {
-          loadTopology({
-            nodes: cleanNodesForStarterTopology(tpl.nodes),
-            edges: tpl.edges,
-          });
-          pushToast('success', `Template "${tpl.name}" diterapkan ke kanvas (konfigurasi IP kosong untuk latihan).`);
-          return;
-        }
       }
 
       pushToast('info', 'Soal ini dirancang untuk dirakit dari awal pada kanvas kosong.');
@@ -466,7 +498,7 @@ export function ClassroomStudentHUD() {
     return (
       <div
         className={cn(
-          'absolute top-3 z-30 flex items-center gap-2 rounded-full border border-primary/40 bg-background/90 px-3 py-1.5 shadow-2xl backdrop-blur transition-all duration-200 max-w-[calc(100vw-1rem)]',
+          'absolute top-3 z-30 flex items-center gap-2 rounded-full border border-primary/40 bg-card px-3 py-1.5 shadow-2xl transition-all duration-200 max-w-[calc(100vw-1rem)]',
           positionClass
         )}
       >
@@ -492,8 +524,8 @@ export function ClassroomStudentHUD() {
             variant="outline"
             className={`text-[10px] font-bold shrink-0 ${
               evaluation.score === 100
-                ? 'border-emerald-800 bg-emerald-950/60 text-emerald-300'
-                : 'border-amber-800 bg-amber-950/60 text-amber-300'
+                ? 'border-viz-green/40 bg-viz-green/10 text-viz-green'
+                : 'border-viz-gold/40 bg-viz-gold/10 text-viz-gold'
             }`}
           >
             {evaluation.score}/100
@@ -518,7 +550,7 @@ export function ClassroomStudentHUD() {
     return (
       <Card
         className={cn(
-          'absolute top-3 z-30 flex flex-col border border-primary/40 bg-background/95 shadow-2xl backdrop-blur transition-all duration-200 w-[calc(100vw-1rem)] sm:w-[380px] max-w-[380px]',
+          'absolute top-3 z-30 flex flex-col border border-primary/40 bg-card shadow-2xl transition-all duration-200 w-[calc(100vw-1rem)] sm:w-[380px] max-w-[380px]',
           positionClass
         )}
       >
@@ -548,7 +580,7 @@ export function ClassroomStudentHUD() {
               size="sm"
               variant="ghost"
               onClick={() => handleLeaveClass(true)}
-              className="h-7 px-2 text-xs text-rose-400 hover:bg-rose-500/10 hover:text-rose-300"
+              className="h-7 px-2 text-xs text-viz-red hover:bg-viz-red/10"
             >
               <LogOut className="h-3.5 w-3.5 mr-1" />
               Keluar
@@ -556,7 +588,7 @@ export function ClassroomStudentHUD() {
           </div>
         </div>
         <div className="flex flex-col items-center justify-center p-6 text-center gap-3">
-          <Clock className="h-8 w-8 text-amber-400 animate-pulse" />
+          <Clock className="h-8 w-8 text-viz-gold animate-pulse" />
           <div className="flex flex-col gap-1">
             <h4 className="text-xs font-bold text-foreground">Menunggu Soal dari Guru</h4>
             <p className="text-[11px] text-muted-foreground leading-relaxed">
@@ -572,7 +604,7 @@ export function ClassroomStudentHUD() {
   return (
     <Card
       className={cn(
-        'absolute top-3 z-30 flex max-h-[80vh] w-[calc(100vw-1rem)] sm:w-[380px] max-w-[380px] flex-col overflow-hidden border-border/80 bg-background/95 shadow-2xl backdrop-blur transition-all duration-200',
+        'absolute top-3 z-30 flex max-h-[80vh] w-[calc(100vw-1rem)] sm:w-[380px] max-w-[380px] flex-col overflow-hidden border-border/80 bg-card shadow-2xl transition-all duration-200',
         positionClass
       )}
     >
@@ -650,11 +682,11 @@ export function ClassroomStudentHUD() {
                       'rounded px-1 text-[9px] font-bold',
                       exEval.score === 100
                         ? isSelected
-                          ? 'bg-emerald-300 text-black'
-                          : 'bg-emerald-500/15 text-emerald-400'
+                          ? 'bg-viz-green text-on-viz'
+                          : 'bg-viz-green/15 text-viz-green'
                         : isSelected
-                        ? 'bg-amber-300 text-black'
-                        : 'bg-amber-500/15 text-amber-400'
+                        ? 'bg-viz-gold text-on-viz'
+                        : 'bg-viz-gold/15 text-viz-gold'
                     )}
                   >
                     {exEval.score}%
@@ -737,10 +769,10 @@ export function ClassroomStudentHUD() {
               <span
                 className={`font-mono text-xs font-bold ${
                   evaluation.score === 100
-                    ? 'text-emerald-400'
+                    ? 'text-viz-green'
                     : evaluation.score >= 70
-                    ? 'text-amber-400'
-                    : 'text-rose-400'
+                    ? 'text-viz-gold'
+                    : 'text-viz-red'
                 }`}
               >
                 {evaluation.score}/100
@@ -759,9 +791,9 @@ export function ClassroomStudentHUD() {
                   <div className="flex items-start gap-2">
                     {check ? (
                       check.passed ? (
-                        <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-400" />
+                        <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-viz-green" />
                       ) : (
-                        <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-rose-400" />
+                        <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-viz-red" />
                       )
                     ) : (
                       <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-muted text-[9px] font-bold text-muted-foreground">
@@ -773,7 +805,7 @@ export function ClassroomStudentHUD() {
                       <span
                         className={
                           check?.passed
-                            ? 'font-medium text-emerald-300'
+                            ? 'font-medium text-viz-green'
                             : 'font-medium text-foreground/90'
                         }
                       >
@@ -782,7 +814,7 @@ export function ClassroomStudentHUD() {
                       {check && (
                         <span
                           className={`text-[10px] leading-tight ${
-                            check.passed ? 'text-muted-foreground' : 'text-rose-400/90'
+                            check.passed ? 'text-muted-foreground' : 'text-viz-red/90'
                           }`}
                         >
                           {check.reason}
@@ -801,15 +833,15 @@ export function ClassroomStudentHUD() {
           <div
             className={`rounded-lg border p-2.5 text-[11px] ${
               evaluation.status === 'passed'
-                ? 'border-emerald-800/60 bg-emerald-950/20 text-emerald-300'
-                : 'border-amber-800/60 bg-amber-950/20 text-amber-200'
+                ? 'border-viz-green/40 bg-viz-green/10 text-viz-green'
+                : 'border-viz-gold/40 bg-viz-gold/10 text-viz-gold'
             }`}
           >
             <div className="flex items-center gap-1.5 font-bold">
               {evaluation.status === 'passed' ? (
-                <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                <CheckCircle2 className="h-4 w-4 text-viz-green" />
               ) : (
-                <AlertCircle className="h-4 w-4 text-amber-400" />
+                <AlertCircle className="h-4 w-4 text-viz-gold" />
               )}
               {evaluation.status === 'passed' ? 'Tuntas Sempurna' : 'Perlu Diperbaiki'}
             </div>
@@ -825,24 +857,35 @@ export function ClassroomStudentHUD() {
         <div className="flex items-center justify-between gap-2">
           {session?.allowSelfCheck === false ? (
             <div
-              className="flex items-center gap-1.5 text-[11px] font-medium text-amber-400 bg-amber-500/10 px-2.5 py-1.5 rounded border border-amber-500/20"
+              className="flex items-center gap-1.5 text-[11px] font-medium text-viz-gold bg-viz-gold/10 px-2.5 py-1.5 rounded border border-viz-gold/20"
               title="Guru menonaktifkan fitur cek mandiri untuk sesi ujian ini."
             >
               <AlertCircle className="h-3.5 w-3.5 shrink-0" />
               <span>Cek Mandiri Dinonaktifkan (Ujian)</span>
             </div>
-          ) : (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleSelfCheck}
-              disabled={isEvaluating}
-              className="h-8 gap-1.5 text-xs"
-            >
-              <CheckCheck className="h-3.5 w-3.5" />
-              {isEvaluating ? 'Mengecek…' : 'Cek Mandiri'}
-            </Button>
-          )}
+          ) : (() => {
+            const limit = session?.selfCheckLimit ?? 5;
+            const used = activeExercise ? classroomHub.getSelfCheckCount(activeExercise.id) : 0;
+            const remaining = Math.max(0, limit - used);
+            const exhausted = remaining <= 0;
+            return (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleSelfCheck}
+                disabled={isEvaluating || exhausted}
+                className="h-8 gap-1.5 text-xs"
+                title={exhausted ? `Kuota cek mandiri habis (${limit}/${limit})` : `Sisa ${remaining}/${limit} cek mandiri`}
+              >
+                <CheckCheck className="h-3.5 w-3.5" />
+                {isEvaluating
+                  ? 'Mengecek…'
+                  : exhausted
+                  ? `Cek Habis (${limit}/${limit})`
+                  : `Cek Mandiri (${used}/${limit})`}
+              </Button>
+            );
+          })()}
 
           <Button
             size="sm"

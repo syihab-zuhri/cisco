@@ -1339,4 +1339,153 @@ describe('Classroom Feature Suite', () => {
       expect(res.checks[0].passed).toBe(true);
     });
   });
+
+  // ============================================================
+  // Fitur Baru Mode Kelas: Peserta Realtime, Kick, Batas Cek Mandiri
+  // ============================================================
+  describe('Fitur Mode Kelas: Peserta, Kick, Batas Cek Mandiri', () => {
+    beforeEach(() => {
+      classroomHub.clearAll();
+      classroomHub.setLockedRole(null);
+    });
+
+    it('createClass() menetapkan batas cek mandiri default 5', () => {
+      const session = classroomHub.createClass('Kelas Uji', 'TST01');
+      expect(session.selfCheckLimit).toBe(5);
+    });
+
+    it('setSelfCheckLimit() mengubah batas dan tersimpan di session', () => {
+      const session = classroomHub.createClass('Kelas Uji', 'TST02');
+      classroomHub.setSelfCheckLimit(session.classCode, 3);
+      const updated = classroomHub.getSession();
+      expect(updated?.selfCheckLimit).toBe(3);
+    });
+
+    it('setSelfCheckLimit() mengapit nilai di luar rentang 1-99', () => {
+      const s1 = classroomHub.createClass('Kelas Uji', 'TST03');
+      classroomHub.setSelfCheckLimit(s1.classCode, 0);
+      expect(classroomHub.getSession()?.selfCheckLimit).toBe(1);
+
+      classroomHub.setSelfCheckLimit(s1.classCode, 500);
+      expect(classroomHub.getSession()?.selfCheckLimit).toBe(99);
+    });
+
+    it('event CLASS_SETTINGS_CHANGED membawa selfCheckLimit', async () => {
+      const session = classroomHub.createClass('Kelas Uji', 'TST04');
+      const received: Array<{ allowSelfCheck: boolean; selfCheckLimit?: number }> = [];
+      const unsub = classroomHub.subscribe((ev) => {
+        if (ev.type === 'CLASS_SETTINGS_CHANGED') {
+          received.push({
+            allowSelfCheck: ev.allowSelfCheck,
+            selfCheckLimit: ev.selfCheckLimit,
+          });
+        }
+      });
+
+      classroomHub.setSelfCheckLimit(session.classCode, 7);
+      // notifyListeners memakai queueMicrotask — flush dulu sebelum assert
+      await Promise.resolve();
+      await Promise.resolve();
+      unsub();
+
+      expect(received.length).toBeGreaterThan(0);
+      expect(received[received.length - 1].selfCheckLimit).toBe(7);
+    });
+
+    it('joinClass() membuat session placeholder agar HUD langsung render', () => {
+      classroomHub.setLockedRole('student');
+      const p = classroomHub.joinClass('JOIN1', 'Siswa Uji');
+      expect(p).not.toBeNull();
+
+      const session = classroomHub.getSession();
+      expect(session).not.toBeNull();
+      expect(session?.classCode).toBe('JOIN1');
+      expect(session?.status).toBe('open');
+      expect(classroomHub.getCurrentParticipant()?.id).toBe(p?.id);
+    });
+
+    it('event PARTICIPANT_LEFT menghapus peserta dari daftar', () => {
+      const session = classroomHub.createClass('Kelas Uji', 'LFT01');
+      const p = classroomHub.joinClass(session.classCode, 'Siswa A');
+      expect(classroomHub.getParticipants().some((x) => x.id === p?.id)).toBe(true);
+
+      classroomHub.broadcast({
+        type: 'PARTICIPANT_LEFT',
+        classCode: session.classCode,
+        participantId: p!.id,
+      });
+      classroomHub.notifyListeners({
+        type: 'PARTICIPANT_LEFT',
+        classCode: session.classCode,
+        participantId: p!.id,
+      });
+
+      expect(classroomHub.getParticipants().some((x) => x.id === p?.id)).toBe(false);
+    });
+
+    it('event PARTICIPANT_KICKED menghapus peserta dari daftar guru', async () => {
+      classroomHub.setLockedRole('teacher');
+      const session = classroomHub.createClass('Kelas Uji', 'KCK01');
+      const p = classroomHub.joinClass(session.classCode, 'Siswa B');
+      expect(classroomHub.getParticipants().some((x) => x.id === p?.id)).toBe(true);
+
+      classroomHub.broadcast({
+        type: 'PARTICIPANT_KICKED',
+        classCode: session.classCode,
+        participantId: p!.id,
+      });
+      classroomHub.notifyListeners({
+        type: 'PARTICIPANT_KICKED',
+        classCode: session.classCode,
+        participantId: p!.id,
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(classroomHub.getParticipants().some((x) => x.id === p?.id)).toBe(false);
+    });
+
+    it('event PARTICIPANT_KICKED untuk diri sendiri membersihkan sesi siswa', () => {
+      classroomHub.setLockedRole('student');
+      const session = classroomHub.createClass('Kelas Uji', 'KCK02');
+      const p = classroomHub.joinClass(session.classCode, 'Siswa C');
+
+      classroomHub.broadcast({
+        type: 'PARTICIPANT_KICKED',
+        classCode: session.classCode,
+        participantId: p!.id,
+      });
+      classroomHub.notifyListeners({
+        type: 'PARTICIPANT_KICKED',
+        classCode: session.classCode,
+        participantId: p!.id,
+      });
+
+      // Siswa yang di-kick tidak lagi punya participant aktif
+      expect(classroomHub.getCurrentParticipant()).toBeNull();
+      expect(classroomHub.getActiveExercises()).toHaveLength(0);
+    });
+
+    it('kickParticipant() mengirim event yang bisa diterima listener', async () => {
+      const session = classroomHub.createClass('Kelas Uji', 'KCK03');
+      const p = classroomHub.joinClass(session.classCode, 'Siswa D');
+
+      const received: string[] = [];
+      const unsub = classroomHub.subscribe((ev) => {
+        if (ev.type === 'PARTICIPANT_KICKED') received.push(ev.participantId);
+      });
+
+      classroomHub.kickParticipant(session.classCode, p!.id);
+      classroomHub.notifyListeners({
+        type: 'PARTICIPANT_KICKED',
+        classCode: session.classCode,
+        participantId: p!.id,
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+      unsub();
+
+      expect(received).toContain(p!.id);
+    });
+  });
 });
