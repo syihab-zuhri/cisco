@@ -4,14 +4,19 @@ import { Square, X } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { type DeviceData } from '../../types/network';
 
-/** Preset warna square (isi semi-transparan + border solid). */
+/**
+ * Preset warna square (isi semi-transparan + border solid). Berupa literal,
+ * bukan var(--...), karena nilainya disimpan ke JSON topologi. Luminans stroke
+ * sengaja di tengah (≥ 3 : 1 di atas kanvas krem MAUPUN kanvas gelap) supaya
+ * zona tetap terbaca di kedua mode tema.
+ */
 export const SQUARE_SWATCHES: Array<{ fill: string; stroke: string; name: string }> = [
-  { fill: 'rgba(59,130,246,0.16)', stroke: '#3B82F6', name: 'Biru' },
-  { fill: 'rgba(16,185,129,0.16)', stroke: '#10B981', name: 'Hijau' },
-  { fill: 'rgba(245,158,11,0.16)', stroke: '#F59E0B', name: 'Kuning' },
-  { fill: 'rgba(239,68,68,0.14)', stroke: '#EF4444', name: 'Merah' },
-  { fill: 'rgba(168,85,247,0.14)', stroke: '#A855F7', name: 'Ungu' },
-  { fill: 'rgba(148,163,184,0.14)', stroke: '#94A3B8', name: 'Abu' },
+  { fill: 'rgba(59,130,246,0.14)', stroke: '#3B82F6', name: 'Biru' },
+  { fill: 'rgba(30,154,90,0.14)', stroke: '#1E9A5A', name: 'Hijau' },
+  { fill: 'rgba(176,127,16,0.16)', stroke: '#B07F10', name: 'Kuning' },
+  { fill: 'rgba(226,74,74,0.12)', stroke: '#E24A4A', name: 'Merah' },
+  { fill: 'rgba(139,92,246,0.14)', stroke: '#8B5CF6', name: 'Ungu' },
+  { fill: 'rgba(124,138,165,0.14)', stroke: '#7C8AA5', name: 'Abu' },
 ];
 
 /**
@@ -96,9 +101,9 @@ export function SquareNode({ id, data, selected }: NodeProps) {
               e.stopPropagation();
               deleteNode(id);
             }}
-            title="Hapus square"
-            aria-label="Hapus square"
-            className="ml-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-950/80 text-red-300 hover:bg-red-600 hover:text-white"
+            title="Hapus Square"
+            aria-label="Hapus Square"
+            className="ml-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-viz-red/10 text-viz-red hover:bg-viz-red hover:text-on-viz"
           >
             <X className="h-3 w-3" />
           </button>

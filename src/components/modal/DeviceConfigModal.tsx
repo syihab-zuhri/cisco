@@ -335,7 +335,7 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
       <DialogContent className="flex max-h-[90vh] w-[95vw] max-w-[540px] flex-col gap-0 p-0 sm:max-w-[540px]">
         <DialogHeader className="border-b px-4 sm:px-5 py-3">
           <DialogTitle className="flex items-center gap-2 text-sm font-semibold">
-            <ShieldCheck className="h-5 w-5 text-sky-400 shrink-0" />
+            <ShieldCheck className="h-5 w-5 text-viz-blue shrink-0" />
             <span>Konfigurasi ({device.type.toUpperCase()})</span>
           </DialogTitle>
           <DialogDescription className="sr-only">
@@ -388,7 +388,7 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
             <div className="flex flex-col gap-3 rounded-lg border bg-muted/30 p-3.5">
               <div className="flex items-center justify-between text-xs">
                 <span className="text-muted-foreground">Port Name:</span>
-                <span className="font-mono font-semibold text-emerald-400">{selectedPort.name}</span>
+                <span className="font-mono font-semibold text-viz-green">{selectedPort.name}</span>
               </div>
               <div className="flex flex-col gap-1 text-xs">
                 <Label htmlFor="cfg-mac" className="text-xs text-muted-foreground">
@@ -406,7 +406,7 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
               <div className="flex items-center justify-between text-xs">
                 <div className="flex flex-col gap-0.5">
                   <span className="text-muted-foreground">Status Port (Admin):</span>
-                  <span className={`font-mono text-[11px] font-semibold uppercase ${portStatus === 'up' ? 'text-emerald-400' : 'text-amber-500'}`}>
+                  <span className={`font-mono text-[11px] font-semibold uppercase ${portStatus === 'up' ? 'text-viz-green' : 'text-viz-gold'}`}>
                     {portStatus === 'up' ? 'UP' : 'ADMIN DOWN'}
                   </span>
                 </div>
@@ -424,7 +424,7 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
                 <>
                   <Separator />
                   <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="cfg-ssid" className="flex items-center gap-1.5 text-xs text-violet-300">
+                    <Label htmlFor="cfg-ssid" className="flex items-center gap-1.5 text-xs text-viz-violet">
                       <Wifi className="h-3.5 w-3.5" />
                       {device.type === 'accessPoint' ? 'SSID yang Di-broadcast' : 'SSID Access Point Tujuan'}
                     </Label>
@@ -434,7 +434,7 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
                       placeholder={device.type === 'accessPoint' ? 'e.g. KantorWiFi' : 'e.g. KantorWiFi (harus sama dengan AP)'}
                       value={ssid}
                       onChange={(e) => setSsid(e.target.value)}
-                      className="border-violet-800/60 font-mono text-xs focus-visible:border-violet-500"
+                      className="border-viz-violet/40 font-mono text-xs focus-visible:border-viz-violet"
                     />
                     <p className="text-[11px] leading-relaxed text-muted-foreground">
                       {device.type === 'accessPoint'
@@ -452,7 +452,7 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
                     {['pc', 'laptop', 'server'].includes(device.type) && (
                       <label className="flex cursor-pointer items-center gap-2 pt-1 text-xs text-foreground">
                         <Checkbox checked={dhcpClient} onCheckedChange={(checked) => setDhcpClient(checked === true)} />
-                        <Server className="h-3.5 w-3.5 text-sky-400" />
+                        <Server className="h-3.5 w-3.5 text-viz-blue" />
                         Obtain IP via DHCP (otomatis dari router)
                       </label>
                     )}
@@ -491,13 +491,13 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
                       <div className="flex flex-col gap-2 rounded-md border bg-background/60 p-2.5">
                         <label className="flex cursor-pointer items-center gap-2 text-xs text-foreground">
                           <Checkbox checked={natEnabled} onCheckedChange={(checked) => setNatEnabled(checked === true)} />
-                          <Globe className="h-3.5 w-3.5 text-sky-400" />
+                          <Globe className="h-3.5 w-3.5 text-viz-blue" />
                           NAT/PAT keluar pada interface ini (WAN)
                         </label>
 
                         <label className="flex cursor-pointer items-center gap-2 text-xs text-foreground">
                           <Checkbox checked={poolEnabled} onCheckedChange={(checked) => setPoolEnabled(checked === true)} />
-                          <Server className="h-3.5 w-3.5 text-emerald-400" />
+                          <Server className="h-3.5 w-3.5 text-viz-green" />
                           DHCP Server pada interface ini
                         </label>
 
@@ -550,7 +550,7 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
           {/* VLAN untuk port switch */}
           {selectedPort && device.type === 'switch' && (
             <div className="rounded-lg border bg-muted/30 p-3.5">
-              <Label className="flex items-center gap-1.5 text-xs font-medium text-emerald-300">
+              <Label className="flex items-center gap-1.5 text-xs font-medium text-viz-green">
                 <Network className="h-3.5 w-3.5" />
                 VLAN 802.1Q — {selectedPort.name}
               </Label>
@@ -592,7 +592,7 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
           {/* Sub-interface router (router-on-a-stick) */}
           {selectedPort && device.type === 'router' && (
             <div className="rounded-lg border bg-muted/30 p-3.5">
-              <Label className="flex items-center gap-1.5 text-xs font-medium text-sky-300">
+              <Label className="flex items-center gap-1.5 text-xs font-medium text-viz-blue">
                 <Network className="h-3.5 w-3.5" />
                 Sub-interface VLAN (router-on-a-stick) — {selectedPort.name}
               </Label>
@@ -651,7 +651,7 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
               <Button
                 variant="secondary"
                 size="xs"
-                className="mt-2 text-sky-300"
+                className="mt-2 text-viz-blue"
                 onClick={() => {
                   const vlan = Number(subVlan);
                   if (!vlan || vlan < 1 || vlan > 4094 || !Number.isInteger(vlan) || !isValidIp(subIp) || !isValidSubnetMask(subMask)) {
@@ -712,7 +712,7 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
           {/* Static Route editor (router) */}
           {device.type === 'router' && (
             <div className="rounded-lg border bg-muted/30 p-3.5">
-              <Label className="flex items-center gap-1.5 text-xs font-medium text-sky-300">
+              <Label className="flex items-center gap-1.5 text-xs font-medium text-viz-blue">
                 <Route className="h-3.5 w-3.5" />
                 Static Route (termasuk default route 0.0.0.0/0 untuk internet)
               </Label>
@@ -766,7 +766,7 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
                   className="font-mono text-[11px]"
                 />
               </div>
-              <Button variant="secondary" size="xs" className="mt-2 text-sky-300" onClick={handleAddRoute}>
+              <Button variant="secondary" size="xs" className="mt-2 text-viz-blue" onClick={handleAddRoute}>
                 <Plus data-icon="inline-start" />
                 Tambah Route
               </Button>
@@ -775,14 +775,14 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
               <div className="mt-3 border-t pt-2.5">
                 <label className="flex cursor-pointer items-center gap-2 text-xs text-foreground">
                   <Checkbox checked={ripEnabled} onCheckedChange={(checked) => setRipEnabled(checked === true)} />
-                  <Route className="h-3.5 w-3.5 text-violet-400" />
+                  <Route className="h-3.5 w-3.5 text-viz-violet" />
                   Aktifkan RIPv2 pada router ini
                 </label>
                 {ripEnabled && (
                   <Button
                     variant="secondary"
                     size="xs"
-                    className="mt-2 text-violet-300"
+                    className="mt-2 text-viz-violet"
                     onClick={() => {
                       addSimulationLog('INFO', 'Menjalankan konvergensi RIPv2...');
                       void requestRip().catch((err: unknown) => {
@@ -806,7 +806,7 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
             variant="outline"
             size="sm"
             onClick={handleOpenCli}
-            className="gap-1.5 text-xs text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/10 hover:text-emerald-300"
+            className="gap-1.5 text-xs text-viz-green border-viz-green/40 hover:bg-viz-green/10"
           >
             <Terminal className="h-3.5 w-3.5" />
             <span>Terminal CLI</span>

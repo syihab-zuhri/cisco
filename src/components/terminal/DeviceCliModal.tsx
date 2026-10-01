@@ -147,7 +147,7 @@ export function DeviceCliModal() {
 
     const initialHistory = [
       'Cisco IOS Software, C2900 Software (C2900-UNIVERSALK9-M), Version 15.1(4)M4',
-      'OpenPacket Simulated IOS Terminal v1.3.0',
+      'OpenPacket Simulated IOS Terminal v2.3.0',
       'Ketik "help" atau "?" untuk bantuan perintah.',
       '',
     ];
@@ -266,12 +266,12 @@ export function DeviceCliModal() {
     >
       <DialogContent
         showCloseButton
-        className="flex h-[85vh] sm:h-[520px] w-[95vw] max-w-[640px] flex-col gap-0 overflow-hidden border p-0 font-mono sm:max-w-[640px]"
+        className="df-inverse flex h-[85vh] sm:h-[520px] w-[95vw] max-w-[640px] flex-col gap-0 overflow-hidden border p-0 font-mono sm:max-w-[640px]"
         style={{ backgroundColor: 'var(--term-bg)' }}
       >
         <DialogHeader className="flex-row items-center justify-between border-b bg-muted/60 px-4 py-0">
           <DialogTitle className="flex items-center gap-2 py-2.5 text-xs font-semibold">
-            <TermIcon className="h-4 w-4 text-emerald-400" />
+            <TermIcon className="h-4 w-4 text-gold" />
             Cisco IOS Terminal — {device.label}
           </DialogTitle>
           <DialogDescription className="sr-only">

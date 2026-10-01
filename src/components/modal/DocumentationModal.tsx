@@ -61,24 +61,24 @@ const NAV_GROUPS: Array<{ group: string; items: Array<{ id: SectionId; label: st
   {
     group: 'Mulai',
     items: [
-      { id: 'home', label: 'Beranda', icon: <Sparkles className="h-4 w-4 text-blue-400" /> },
-      { id: 'devices', label: 'Perangkat & Kanvas', icon: <Layers className="h-4 w-4 text-sky-400" /> },
+      { id: 'home', label: 'Beranda', icon: <Sparkles className="h-4 w-4 text-viz-blue" /> },
+      { id: 'devices', label: 'Perangkat & Kanvas', icon: <Layers className="h-4 w-4 text-viz-blue" /> },
     ],
   },
   {
     group: 'Simulasi',
     items: [
-      { id: 'protocols', label: 'Mesin Protokol (RFC)', icon: <Play className="h-4 w-4 text-cyan-400" /> },
-      { id: 'simmode', label: 'Simulation Mode & PDU', icon: <ScanLine className="h-4 w-4 text-violet-400" /> },
-      { id: 'cli', label: 'Terminal Cisco IOS', icon: <Terminal className="h-4 w-4 text-green-400" /> },
+      { id: 'protocols', label: 'Mesin Protokol (RFC)', icon: <Play className="h-4 w-4 text-viz-teal" /> },
+      { id: 'simmode', label: 'Simulation Mode & PDU', icon: <ScanLine className="h-4 w-4 text-viz-violet" /> },
+      { id: 'cli', label: 'Terminal Cisco IOS', icon: <Terminal className="h-4 w-4 text-viz-green" /> },
     ],
   },
   {
     group: 'Lanjutan',
     items: [
-      { id: 'classroom', label: 'Ruang Kelas & Lab Ujian', icon: <GraduationCap className="h-4 w-4 text-amber-400" /> },
-      { id: 'build', label: 'Build & Porting', icon: <Download className="h-4 w-4 text-emerald-400" /> },
-      { id: 'architecture', label: 'Arsitektur & Keamanan', icon: <Cpu className="h-4 w-4 text-purple-400" /> },
+      { id: 'classroom', label: 'Ruang Kelas & Lab Ujian', icon: <GraduationCap className="h-4 w-4 text-viz-gold" /> },
+      { id: 'build', label: 'Build & Porting', icon: <Download className="h-4 w-4 text-viz-green" /> },
+      { id: 'architecture', label: 'Arsitektur & Keamanan', icon: <Cpu className="h-4 w-4 text-viz-violet" /> },
     ],
   },
 ];
@@ -144,7 +144,7 @@ const PROTOCOL_ITEMS: Array<{ id: string; title: string; tag: string; body: Reac
     body: (
       <>
         Host memutuskan lokal vs luar subnet dengan operasi:
-        <code className="my-2 block rounded bg-background/60 p-2 text-center font-mono text-amber-300">
+        <code className="my-2 block rounded bg-background/60 p-2 text-center font-mono text-viz-gold">
           (IP_Dest &amp; Mask) === (IP_Src &amp; Mask)
         </code>
         Jika <b>false</b>, paket wajib diarahkan ke Default Gateway — tanpa gateway, ping gagal dengan pesan eksplisit.
@@ -214,36 +214,36 @@ const PROTOCOL_ITEMS: Array<{ id: string; title: string; tag: string; body: Reac
 ];
 
 const DEVICE_ROWS: Array<{ icon: React.ReactNode; name: string; ports: string; role: string }> = [
-  { icon: <Monitor className="h-3.5 w-3.5 text-sky-400" />, name: 'PC', ports: '1 FE + WiFi', role: 'End device — sumber/tujuan ping' },
-  { icon: <Laptop className="h-3.5 w-3.5 text-cyan-400" />, name: 'Laptop', ports: '1 FE + WiFi', role: 'End device — bisa pindah ke WiFi' },
-  { icon: <Server className="h-3.5 w-3.5 text-violet-400" />, name: 'Server', ports: '1 FE', role: 'End device kabel (file/web server)' },
-  { icon: <Network className="h-3.5 w-3.5 text-emerald-400" />, name: 'Switch L2', ports: '8 FE', role: 'CAM learning, VLAN access/trunk' },
-  { icon: <Cable className="h-3.5 w-3.5 text-orange-400" />, name: 'Hub', ports: '8 FE', role: 'Repeater murni — tanpa CAM' },
-  { icon: <Wifi className="h-3.5 w-3.5 text-fuchsia-400" />, name: 'Access Point', ports: 'Radio + 1 FE', role: 'Bridge WiFi ↔ kabel (SSID)' },
-  { icon: <Router className="h-3.5 w-3.5 text-amber-400" />, name: 'Router L3', ports: '3 FE', role: 'Routing, DHCP server, NAT, sub-interface' },
-  { icon: <Cloud className="h-3.5 w-3.5 text-sky-300" />, name: 'Cloud Internet', ports: '2 WAN', role: 'IP publik 8.8.8.8 / 1.1.1.1 tersimulasi' },
+  { icon: <Monitor className="h-3.5 w-3.5 text-viz-blue" />, name: 'PC', ports: '1 FE + WiFi', role: 'End device — sumber/tujuan ping' },
+  { icon: <Laptop className="h-3.5 w-3.5 text-viz-teal" />, name: 'Laptop', ports: '1 FE + WiFi', role: 'End device — bisa pindah ke WiFi' },
+  { icon: <Server className="h-3.5 w-3.5 text-viz-violet" />, name: 'Server', ports: '1 FE', role: 'End device kabel (file/web server)' },
+  { icon: <Network className="h-3.5 w-3.5 text-viz-green" />, name: 'Switch L2', ports: '8 FE', role: 'CAM learning, VLAN access/trunk' },
+  { icon: <Cable className="h-3.5 w-3.5 text-viz-orange" />, name: 'Hub', ports: '8 FE', role: 'Repeater murni — tanpa CAM' },
+  { icon: <Wifi className="h-3.5 w-3.5 text-viz-plum" />, name: 'Access Point', ports: 'Radio + 1 FE', role: 'Bridge WiFi ↔ kabel (SSID)' },
+  { icon: <Router className="h-3.5 w-3.5 text-viz-gold" />, name: 'Router L3', ports: '3 FE', role: 'Routing, DHCP server, NAT, sub-interface' },
+  { icon: <Cloud className="h-3.5 w-3.5 text-viz-blue" />, name: 'Cloud Internet', ports: '2 WAN', role: 'IP publik 8.8.8.8 / 1.1.1.1 tersimulasi' },
 ];
 
 const CLI_ROWS: Array<{ mode: string; modeColor: string; cmd: string; desc: string }> = [
-  { mode: 'User (>)', modeColor: 'text-sky-400', cmd: 'enable', desc: 'Masuk privileged EXEC' },
-  { mode: 'Privileged (#)', modeColor: 'text-amber-400', cmd: 'configure terminal (conf t)', desc: 'Global configuration mode' },
-  { mode: 'Privileged (#)', modeColor: 'text-amber-400', cmd: 'ping <ip>', desc: 'ICMP 5 echo via engine penuh — output gaya Cisco (!!!!!)' },
-  { mode: 'Privileged (#)', modeColor: 'text-amber-400', cmd: 'show ip interface brief (sh ip int br)', desc: 'Status ringkas semua interface' },
-  { mode: 'Privileged (#)', modeColor: 'text-amber-400', cmd: 'show ip route', desc: 'Tabel routing (C connected, S static, R rip)' },
-  { mode: 'Privileged (#)', modeColor: 'text-amber-400', cmd: 'show running-config (sh run)', desc: 'Tampilkan konfigurasi aktif lengkap (hostname, port, route, sub-if)' },
-  { mode: 'Privileged (#)', modeColor: 'text-amber-400', cmd: 'write memory (wr / copy run start)', desc: 'Simpan running-config ke memori perangkat' },
-  { mode: 'Privileged (#)', modeColor: 'text-amber-400', cmd: 'show vlan brief (sh vlan)', desc: 'Tampilkan tabel VLAN dan port access pada Switch' },
-  { mode: 'Privileged (#)', modeColor: 'text-amber-400', cmd: 'show mac-address-table · show arp', desc: 'Ekstensi: CAM table & cache ARP' },
-  { mode: 'Config (config)#', modeColor: 'text-purple-400', cmd: 'hostname <nama>', desc: 'Ubah hostname (tersinkron ke GUI)' },
-  { mode: 'Config (config)#', modeColor: 'text-purple-400', cmd: 'ip route <net> <mask|/cidr> <nextHop>', desc: 'Tambah static route (hapus: no ip route ...)' },
-  { mode: 'Config (config)#', modeColor: 'text-purple-400', cmd: 'ip default-gateway <ip>', desc: 'Atur gateway default switch L2 (hapus: no ip default-gateway)' },
-  { mode: 'Config (config)#', modeColor: 'text-purple-400', cmd: 'interface <id> (int)', desc: 'Masuk konfigurasi port fisik, contoh: int fa0/0' },
-  { mode: 'Config (config)#', modeColor: 'text-purple-400', cmd: 'interface <id>.<subif>', desc: 'Masuk/buat sub-interface router, contoh: int fa0/0.10' },
-  { mode: 'Config-if', modeColor: 'text-emerald-400', cmd: 'ip address <ip> <mask|/cidr>', desc: 'IPv4 + subnet mask port (hapus: no ip address)' },
-  { mode: 'Config-if', modeColor: 'text-emerald-400', cmd: 'no shutdown (no shut) · shutdown', desc: 'Naikkan / turunkan status administratif port' },
-  { mode: 'Config-if (Switch)', modeColor: 'text-emerald-400', cmd: 'switchport mode <access|trunk>', desc: 'Set mode port access atau trunk 802.1Q' },
-  { mode: 'Config-if (Switch)', modeColor: 'text-emerald-400', cmd: 'switchport access vlan <vlanId>', desc: 'Tetapkan nomor VLAN pada port mode access' },
-  { mode: 'Config-subif (Router)', modeColor: 'text-cyan-400', cmd: 'encapsulation dot1q <vlanId>', desc: 'Enkapsulasi IEEE 802.1Q untuk Router-on-a-stick' },
+  { mode: 'User (>)', modeColor: 'text-viz-blue', cmd: 'enable', desc: 'Masuk privileged EXEC' },
+  { mode: 'Privileged (#)', modeColor: 'text-viz-gold', cmd: 'configure terminal (conf t)', desc: 'Global configuration mode' },
+  { mode: 'Privileged (#)', modeColor: 'text-viz-gold', cmd: 'ping <ip>', desc: 'ICMP 5 echo via engine penuh — output gaya Cisco (!!!!!)' },
+  { mode: 'Privileged (#)', modeColor: 'text-viz-gold', cmd: 'show ip interface brief (sh ip int br)', desc: 'Status ringkas semua interface' },
+  { mode: 'Privileged (#)', modeColor: 'text-viz-gold', cmd: 'show ip route', desc: 'Tabel routing (C connected, S static, R rip)' },
+  { mode: 'Privileged (#)', modeColor: 'text-viz-gold', cmd: 'show running-config (sh run)', desc: 'Tampilkan konfigurasi aktif lengkap (hostname, port, route, sub-if)' },
+  { mode: 'Privileged (#)', modeColor: 'text-viz-gold', cmd: 'write memory (wr / copy run start)', desc: 'Simpan running-config ke memori perangkat' },
+  { mode: 'Privileged (#)', modeColor: 'text-viz-gold', cmd: 'show vlan brief (sh vlan)', desc: 'Tampilkan tabel VLAN dan port access pada Switch' },
+  { mode: 'Privileged (#)', modeColor: 'text-viz-gold', cmd: 'show mac-address-table · show arp', desc: 'Ekstensi: CAM table & cache ARP' },
+  { mode: 'Config (config)#', modeColor: 'text-viz-violet', cmd: 'hostname <nama>', desc: 'Ubah hostname (tersinkron ke GUI)' },
+  { mode: 'Config (config)#', modeColor: 'text-viz-violet', cmd: 'ip route <net> <mask|/cidr> <nextHop>', desc: 'Tambah static route (hapus: no ip route ...)' },
+  { mode: 'Config (config)#', modeColor: 'text-viz-violet', cmd: 'ip default-gateway <ip>', desc: 'Atur gateway default switch L2 (hapus: no ip default-gateway)' },
+  { mode: 'Config (config)#', modeColor: 'text-viz-violet', cmd: 'interface <id> (int)', desc: 'Masuk konfigurasi port fisik, contoh: int fa0/0' },
+  { mode: 'Config (config)#', modeColor: 'text-viz-violet', cmd: 'interface <id>.<subif>', desc: 'Masuk/buat sub-interface router, contoh: int fa0/0.10' },
+  { mode: 'Config-if', modeColor: 'text-viz-green', cmd: 'ip address <ip> <mask|/cidr>', desc: 'IPv4 + subnet mask port (hapus: no ip address)' },
+  { mode: 'Config-if', modeColor: 'text-viz-green', cmd: 'no shutdown (no shut) · shutdown', desc: 'Naikkan / turunkan status administratif port' },
+  { mode: 'Config-if (Switch)', modeColor: 'text-viz-green', cmd: 'switchport mode <access|trunk>', desc: 'Set mode port access atau trunk 802.1Q' },
+  { mode: 'Config-if (Switch)', modeColor: 'text-viz-green', cmd: 'switchport access vlan <vlanId>', desc: 'Tetapkan nomor VLAN pada port mode access' },
+  { mode: 'Config-subif (Router)', modeColor: 'text-viz-teal', cmd: 'encapsulation dot1q <vlanId>', desc: 'Enkapsulasi IEEE 802.1Q untuk Router-on-a-stick' },
   { mode: 'Semua mode', modeColor: 'text-muted-foreground', cmd: 'exit / end', desc: 'Navigasi antar mode (end → langsung #)' },
 ];
 
@@ -254,7 +254,7 @@ const TEMPLATE_NAMES = [
   'Tree Hierarkis', 'Mesh Jala', 'Kantor 2 VLAN', 'Hybrid Campuran',
 ];
 
-function CodeBlock({ children, color = 'text-blue-300' }: { children: string; color?: string }) {
+function CodeBlock({ children, color = 'text-viz-blue' }: { children: string; color?: string }) {
   return (
     <pre className={`overflow-x-auto rounded-lg border bg-background/60 p-3 font-mono text-xs leading-relaxed ${color}`}>
       {children}
@@ -291,7 +291,7 @@ function Accordion({
         return (
           <div
             key={item.id}
-            className={`rounded-lg border bg-muted/40 transition-colors ${open ? 'border-blue-600/60' : 'border-border'}`}
+            className={`rounded-lg border bg-muted/40 transition-colors ${open ? 'border-viz-blue/60' : 'border-border'}`}
           >
             <button onClick={() => onToggle(item.id)} className="flex w-full items-center justify-between gap-2 p-3.5 text-left">
               <span className="text-xs font-bold">{item.title}</span>
@@ -346,13 +346,13 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
         {/* Header */}
         <DialogHeader className="flex-row items-center justify-between border-b px-4 sm:px-6 py-2.5 sm:py-3">
           <div className="flex items-center gap-2.5 sm:gap-3 truncate">
-            <div className="rounded-lg border border-blue-500/40 bg-blue-600/20 p-1.5 sm:p-2 shrink-0">
-              <BookOpen className="h-4 w-4 sm:h-5 sm:w-5 text-blue-400" />
+            <div className="rounded-lg border border-viz-blue/40 bg-viz-blue/20 p-1.5 sm:p-2 shrink-0">
+              <BookOpen className="h-4 w-4 sm:h-5 sm:w-5 text-viz-blue" />
             </div>
             <div className="truncate">
               <DialogTitle className="text-sm sm:text-base font-bold tracking-wide truncate">Pusat Bantuan OpenPacket</DialogTitle>
               <DialogDescription className="text-[11px] sm:text-xs truncate">
-                Panduan fitur, protokol jaringan, &amp; build — v2.2.1
+                Panduan fitur, protokol jaringan, &amp; build — v2.3.0
               </DialogDescription>
             </div>
           </div>
@@ -534,8 +534,8 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
             )}
 
             <div className="border-t p-3">
-              <div className="rounded-lg border border-blue-900/60 bg-blue-950/40 p-2.5">
-                <div className="mb-0.5 text-[10px] font-bold text-blue-300">Butuh tantangan?</div>
+              <div className="rounded-lg border border-viz-blue/40 bg-viz-blue/10 p-2.5">
+                <div className="mb-0.5 text-[10px] font-bold text-viz-blue">Butuh tantangan?</div>
                 <div className="text-[10px] leading-relaxed text-muted-foreground">
                   Coba <b>Mode Lab</b> di toolbar — misi berpandu dengan verifikasi otomatis.
                 </div>
@@ -549,7 +549,7 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
             {activeSection === 'home' && (
               <div className="flex flex-col gap-5">
                 <SectionTitle
-                  icon={<Sparkles className="h-5 w-5 text-blue-400" />}
+                  icon={<Sparkles className="h-5 w-5 text-viz-blue" />}
                   title="Mulai di Sini"
                   subtitle="Tiga langkah dari kanvas kosong menjadi jaringan yang berfungsi."
                 />
@@ -571,7 +571,7 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
 
                 <div>
                   <div className="mb-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">
-                    Yang bisa kamu lakukan
+                    Yang bisa Anda lakukan
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {[
@@ -586,17 +586,17 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
                       { icon: <Square className="h-3.5 w-3.5" />, text: 'Anotasi: square & teks custom di belakang perangkat' },
                     ].map((f, i) => (
                       <div key={i} className="flex items-center gap-2 rounded-lg border bg-background/60 px-3 py-2 text-xs text-foreground/90">
-                        <span className="text-blue-400">{f.icon}</span>
+                        <span className="text-viz-blue">{f.icon}</span>
                         {f.text}
                       </div>
                     ))}
                   </div>
                 </div>
 
-                <Card className="border-amber-800/50 bg-amber-950/20">
+                <Card className="border-viz-gold/40 bg-viz-gold/10">
                   <div className="mb-1.5 flex items-center gap-2">
-                    <GraduationCap className="h-4 w-4 text-amber-400" />
-                    <span className="text-xs font-bold text-amber-200">Cara tercepat belajar: Mode Lab</span>
+                    <GraduationCap className="h-4 w-4 text-viz-gold" />
+                    <span className="text-xs font-bold text-viz-gold">Cara tercepat belajar: Mode Lab</span>
                   </div>
                   <p className="text-xs leading-relaxed text-muted-foreground">
                     Klik tombol <b>Lab</b> di toolbar — misi berpandu dengan topologi terkunci,
@@ -611,7 +611,7 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
             {activeSection === 'devices' && (
               <div className="flex flex-col gap-4">
                 <SectionTitle
-                  icon={<Layers className="h-5 w-5 text-sky-400" />}
+                  icon={<Layers className="h-5 w-5 text-viz-blue" />}
                   title="Perangkat & Kanvas"
                   subtitle="Referensi 8 jenis perangkat dan aturan penyambungannya."
                 />
@@ -660,7 +660,7 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
                   <div className="mb-2 text-xs font-bold">Anotasi kanvas (square & teks)</div>
                   <ul className="flex flex-col gap-1.5 list-inside list-disc text-xs leading-relaxed text-muted-foreground">
                     <li>Tombol <b>Square</b> &amp; <b>Teks</b> di palet (bagian Anotasi) → muncul di tengah layar, digeser bebas.</li>
-                    <li><b>Square</b> berada di belakang perangkat (untuk menandai area): klik → pilih warna, tarik handle kanan-bawah untuk resize.</li>
+                    <li><b>Square</b> berada di belakang perangkat (untuk menandai area): klik → pilih warna, tarik handle kanan-bawah untuk mengubah ukuran.</li>
                     <li><b>Teks</b>: dobel-klik untuk mengedit isi; saat dipilih, atur ukuran font lewat tombol −/+.</li>
                     <li>Keduanya ikut tersimpan &amp; dimuat di file JSON topologi.</li>
                   </ul>
@@ -687,7 +687,7 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
             {activeSection === 'protocols' && (
               <div className="flex flex-col gap-4">
                 <SectionTitle
-                  icon={<Play className="h-5 w-5 text-cyan-400" />}
+                  icon={<Play className="h-5 w-5 text-viz-teal" />}
                   title="Mesin Protokol (RFC)"
                   subtitle="Klik topik untuk membuka penjelasan — semua alur dikunci unit test deterministik."
                 />
@@ -703,14 +703,14 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
             {activeSection === 'simmode' && (
               <div className="flex flex-col gap-4">
                 <SectionTitle
-                  icon={<ScanLine className="h-5 w-5 text-violet-400" />}
+                  icon={<ScanLine className="h-5 w-5 text-viz-violet" />}
                   title="Simulation Mode & PDU Inspector"
                   subtitle="Alat inspeksi ala Packet Tracer — aliran simulasi direncanakan sebagai event deterministik."
                 />
                 <div className="flex flex-col gap-3">
                   <Card>
                     <div className="mb-1.5 flex items-center gap-2">
-                      <Play className="h-4 w-4 text-violet-400" />
+                      <Play className="h-4 w-4 text-viz-violet" />
                       <span className="text-xs font-bold">Step Mode & Timeline</span>
                     </div>
                     <p className="text-xs leading-relaxed text-muted-foreground">
@@ -722,22 +722,22 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
                   </Card>
                   <Card>
                     <div className="mb-1.5 flex items-center gap-2">
-                      <ScanLine className="h-4 w-4 text-cyan-400" />
+                      <ScanLine className="h-4 w-4 text-viz-teal" />
                       <span className="text-xs font-bold">PDU Inspector (drawer kanan)</span>
                     </div>
                     <p className="text-xs leading-relaxed text-muted-foreground">
                       Klik event mana pun di timeline untuk membongkar header berlapisnya:
                       <span className="mt-2 flex flex-col gap-1">
-                        <span className="flex items-center gap-2 text-emerald-300"><b className="w-8">L2</b> Ethernet Frame — src/dst MAC (ditulis ulang per hop!), ethertype</span>
-                        <span className="flex items-center gap-2 text-violet-300"><b className="w-8">L3</b> IPv4 Packet — src/dst IP end-to-end, TTL menurun di router</span>
-                        <span className="flex items-center gap-2 text-cyan-300"><b className="w-8">L4</b> ARP / ICMP / DHCP — opcode, type, sequence, yiaddr</span>
+                        <span className="flex items-center gap-2 text-viz-green"><b className="w-8">L2</b> Ethernet Frame — src/dst MAC (ditulis ulang per hop!), ethertype</span>
+                        <span className="flex items-center gap-2 text-viz-violet"><b className="w-8">L3</b> IPv4 Packet — src/dst IP end-to-end, TTL menurun di router</span>
+                        <span className="flex items-center gap-2 text-viz-teal"><b className="w-8">L4</b> ARP / ICMP / DHCP — opcode, type, sequence, yiaddr</span>
                       </span>
                       Mode <b>auto-follow</b> (ikon pin) mengikuti paket yang sedang berjalan.
                     </p>
                   </Card>
                   <Card>
                     <div className="mb-1.5 flex items-center gap-2">
-                      <Layers className="h-4 w-4 text-sky-400" />
+                      <Layers className="h-4 w-4 text-viz-blue" />
                       <span className="text-xs font-bold">Table Viewer (tab Tabel)</span>
                     </div>
                     <p className="text-xs leading-relaxed text-muted-foreground">
@@ -754,7 +754,7 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
             {activeSection === 'cli' && (
               <div className="flex flex-col gap-4">
                 <SectionTitle
-                  icon={<Terminal className="h-5 w-5 text-green-400" />}
+                  icon={<Terminal className="h-5 w-5 text-viz-green" />}
                   title="Terminal Cisco IOS"
                   subtitle="Klik ikon terminal pada hover perangkat atau tombol Terminal CLI. Perintah Cisco IOS kanonik + konfigurasi L2/L3 lengkap."
                 />
@@ -771,15 +771,15 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
                       {CLI_ROWS.map((row) => (
                         <tr key={row.cmd} className="hover:bg-muted/40">
                           <td className={`p-2.5 ${row.modeColor}`}>{row.mode}</td>
-                          <td className="p-2.5 text-green-400">{row.cmd}</td>
+                          <td className="p-2.5 text-viz-green">{row.cmd}</td>
                           <td className="p-2.5 font-sans text-foreground/90">{row.desc}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
-                <Card className="border-green-800/50 bg-green-950/20">
-                  <span className="mb-1 block text-xs font-bold text-green-300">Format output ping</span>
+                <Card className="border-viz-green/40 bg-viz-green/10">
+                  <span className="mb-1 block text-xs font-bold text-viz-green">Format output ping</span>
                   <p className="text-xs leading-relaxed text-foreground/90">
                     Dari terminal IOS: gaya Cisco — <code>!!!!! Success rate is 100 percent (5/5)</code>.
                     Dari Toolbar (PC): gaya Windows — <code>Reply from x.x.x.x: bytes=32 time&lt;1ms TTL=128</code>.
@@ -793,17 +793,17 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
             {activeSection === 'classroom' && (
               <div className="flex flex-col gap-4">
                 <SectionTitle
-                  icon={<GraduationCap className="h-5 w-5 text-amber-400" />}
+                  icon={<GraduationCap className="h-5 w-5 text-viz-gold" />}
                   title="Ruang Kelas & Lab Ujian"
                   subtitle="Platform evaluasi praktikum: sesi kelas guru, pengerjaan siswa, proteksi anti-cheat template, dan evaluasi otomatis."
                 />
 
                 <Card>
                   <div className="mb-2 flex items-center justify-between">
-                    <h4 className="text-xs font-bold uppercase tracking-wide text-amber-300">
+                    <h4 className="text-xs font-bold uppercase tracking-wide text-viz-gold">
                       Prinsip Independensi Peran (Role Isolation)
                     </h4>
-                    <span className="rounded border border-amber-800 bg-amber-950/70 px-2 py-0.5 text-[10px] text-amber-400">
+                    <span className="rounded border border-viz-gold/40 bg-viz-gold/10 px-2 py-0.5 text-[10px] text-viz-gold">
                       Multi-Role
                     </span>
                   </div>
@@ -813,8 +813,8 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
                 </Card>
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <Card className="border-sky-800/40 bg-sky-950/20">
-                    <div className="mb-2 flex items-center gap-2 font-bold text-sky-300 text-xs">
+                  <Card className="border-viz-blue/40 bg-viz-blue/10">
+                    <div className="mb-2 flex items-center gap-2 font-bold text-viz-blue text-xs">
                       <Users className="h-4 w-4" />
                       Mode Guru (Pengajar)
                     </div>
@@ -826,27 +826,27 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
                     </ul>
                   </Card>
 
-                  <Card className="border-emerald-800/40 bg-emerald-950/20">
-                    <div className="mb-2 flex items-center gap-2 font-bold text-emerald-300 text-xs">
+                  <Card className="border-viz-green/40 bg-viz-green/10">
+                    <div className="mb-2 flex items-center gap-2 font-bold text-viz-green text-xs">
                       <GraduationCap className="h-4 w-4" />
                       Mode Siswa (Peserta)
                     </div>
                     <ul className="flex flex-col gap-1.5 list-inside list-disc text-xs leading-relaxed text-muted-foreground">
                       <li><b>Gabung Kelas</b>: Masukkan kode kelas dan nama/nickname Anda.</li>
-                      <li><b>Classroom Student HUD</b>: Panel mengambang di pojok kanan-bawah kanvas menampilkan instruksi tugas aktif, target konfigurasi, dan tombol aksi.</li>
+                      <li><b>Classroom Student HUD</b>: Panel mengambang di pojok kanan atas kanvas menampilkan instruksi tugas aktif, target konfigurasi, dan tombol aksi.</li>
                       <li><b>Self-Check Mandiri</b>: Siswa dapat menguji validitas jaringan kapan saja sebelum mengumpulkan tugas.</li>
                       <li><b>Submit Jawaban</b>: Kirim konfigurasi topologi ke guru dengan satu klik setelah semua target tercapai.</li>
                     </ul>
                   </Card>
                 </div>
 
-                <Card className="border-amber-800/50 bg-amber-950/25">
-                  <div className="mb-2 flex items-center gap-2 text-xs font-bold text-amber-300">
-                    <Lock className="h-4 w-4 text-amber-400" />
+                <Card className="border-viz-gold/40 bg-viz-gold/10">
+                  <div className="mb-2 flex items-center gap-2 text-xs font-bold text-viz-gold">
+                    <Lock className="h-4 w-4 text-viz-gold" />
                     Proteksi Ujian: Sistem Kunci Template Jaringan (Anti-Cheat)
                   </div>
                   <p className="text-xs leading-relaxed text-foreground/90 mb-3">
-                    Saat berada dalam <b>Mode Siswa</b> atau sedang mengikuti kelas praktikum aktif, tab <b>Template</b> pada palet perangkat sebelah kiri akan otomatis <b>terkunci</b> (<span className="inline-flex items-center gap-1 font-mono text-[11px] text-amber-300"><Lock className="inline h-3 w-3" /> Template</span>).
+                    Saat berada dalam <b>Mode Siswa</b> atau sedang mengikuti kelas praktikum aktif, tab <b>Template</b> pada palet perangkat sebelah kiri akan otomatis <b>terkunci</b> (<span className="inline-flex items-center gap-1 font-mono text-[11px] text-viz-gold"><Lock className="inline h-3 w-3" /> Template</span>).
                   </p>
                   <ul className="flex flex-col gap-1.5 list-inside list-disc text-xs leading-relaxed text-muted-foreground">
                     <li><b>Mencegah Jalan Pintas</b>: Siswa diwajibkan menyusun dan menghubungkan perangkat dari nol sesuai spesifikasi soal ujian, bukan dengan memuat topologi template yang sudah jadi.</li>
@@ -862,23 +862,38 @@ export function DocumentationModal({ isOpen, onClose }: DocsModalProps) {
 
                 <Card>
                   <div className="mb-2 flex items-center justify-between">
-                    <h4 className="text-xs font-bold uppercase tracking-wide text-cyan-300">
+                    <h4 className="text-xs font-bold uppercase tracking-wide text-viz-teal">
                       Relay Server Mandiri &amp; Mode Offline
                     </h4>
-                    <span className="rounded border border-cyan-800 bg-cyan-950/70 px-2 py-0.5 text-[10px] text-cyan-400">
+                    <span className="rounded border border-viz-teal/40 bg-viz-teal/10 px-2 py-0.5 text-[10px] text-viz-teal">
                       100% Offline LAN
                     </span>
                   </div>
                   <p className="text-xs leading-relaxed text-muted-foreground mb-2">
                     OpenPacket mendukung sinkronisasi real-time antar-laptop di lab komputer sekolah tanpa memerlukan akses internet ke cloud luar:
                   </p>
-                  <CodeBlock color="text-cyan-300">{`# Jalankan server relay kelas mandiri di laptop guru / lab:
-npm run relay         # Server relay aktif di port 5174 / 5173
+                  <CodeBlock color="text-viz-teal">{`# Cara termudah — relay sudah menyatu dengan server aplikasi:
+npm run dev           # relay aktif di port 5173 (satu alamat dengan aplikasi)
+npm run preview       # build produksi + relay di port 4173
 
-# Atau jalankan mode preview produksi dengan relay bawaan:
-npm run preview       # Frontend + Relay aktif di port 4173`}</CodeBlock>
+# Relay terpisah (port 5174) — arahkan aplikasi ke alamatnya:
+npm run relay
+#   a) saat build/dev:  VITE_CLASSROOM_RELAY_URL=http://192.168.1.10:5174
+#   b) atau per perangkat (konsol browser):
+#      localStorage.setItem('openpacket_relay_url', 'http://192.168.1.10:5174')`}</CodeBlock>
                   <p className="mt-2 text-[11px] text-muted-foreground">
                     Laptop siswa cukup membuka alamat IP lokal laptop guru (contoh: <code>http://192.168.1.10:5173</code>) dan memasukkan kode kelas yang sama.
+                    Tanpa relay (mis. hosting statis), kelas hanya berjalan antar-tab di browser yang sama.
+                  </p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    Keamanan: token guru tidak pernah dikirim ke siswa; setiap siswa punya token sendiri; <b>Kunci Sesi</b> menolak peserta baru,
+                    dan soal baru memulai <b>ronde</b> baru (nilai ronde lama diarsipkan dan ikut di CSV).
+                  </p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    <b>Verifikasi skor:</b> jawaban siswa menyertakan salinan topologinya. Tombol <b>Verifikasi</b> / <b>Verifikasi Semua</b> di
+                    tabel peserta menilai ulang topologi itu di perangkat guru dan menandai skor yang tidak cocok
+                    (&quot;Sebenarnya N&quot;). <b>Pemulihan otomatis:</b> bila server relay restart, kelas guru didaftarkan ulang dan siswa
+                    tersambung kembali sendiri (jawaban dikirim ulang) tanpa perlu membuka kelas baru.
                   </p>
                 </Card>
               </div>
@@ -888,14 +903,14 @@ npm run preview       # Frontend + Relay aktif di port 4173`}</CodeBlock>
             {activeSection === 'build' && (
               <div className="flex flex-col gap-4">
                 <SectionTitle
-                  icon={<Download className="h-5 w-5 text-emerald-400" />}
+                  icon={<Download className="h-5 w-5 text-viz-green" />}
                   title="Build & Porting"
                   subtitle="Dari mode development sampai installer Windows — semuanya client-side."
                 />
                 <Card>
                   <div className="mb-2 flex items-center justify-between">
-                    <h4 className="text-xs font-bold uppercase tracking-wide text-blue-300">Menjalankan Lokal</h4>
-                    <span className="rounded border border-blue-800 bg-blue-950/70 px-2 py-0.5 text-[10px] text-blue-400">Node 20/22</span>
+                    <h4 className="text-xs font-bold uppercase tracking-wide text-viz-blue">Menjalankan Lokal</h4>
+                    <span className="rounded border border-viz-blue/40 bg-viz-blue/10 px-2 py-0.5 text-[10px] text-viz-blue">Node 20/22</span>
                   </div>
                   <CodeBlock>{`git clone https://github.com/syihab-zuhri/cisco.git
 cd cisco && npm install
@@ -909,26 +924,26 @@ npm run e2e          # E2E Playwright (Edge/Chromium)`}</CodeBlock>
                 </Card>
                 <Card>
                   <div className="mb-2 flex items-center justify-between">
-                    <h4 className="text-xs font-bold uppercase tracking-wide text-emerald-300">Web Statis (Vercel / Pages)</h4>
-                    <span className="rounded border border-emerald-800 bg-emerald-950/70 px-2 py-0.5 text-[10px] text-emerald-400">~139 KB gzip</span>
+                    <h4 className="text-xs font-bold uppercase tracking-wide text-viz-green">Web Statis (Vercel / Pages)</h4>
+                    <span className="rounded border border-viz-green/40 bg-viz-green/10 px-2 py-0.5 text-[10px] text-viz-green">~139 KB gzip</span>
                   </div>
-                  <CodeBlock color="text-emerald-400">{`npm run build   # output: ./dist — unggah ke hosting statis apa pun`}</CodeBlock>
+                  <CodeBlock color="text-viz-green">{`npm run build   # output: ./dist — unggah ke hosting statis apa pun`}</CodeBlock>
                 </Card>
                 <Card>
                   <div className="mb-2 flex items-center justify-between">
-                    <h4 className="text-xs font-bold uppercase tracking-wide text-sky-300">Desktop Windows (.exe via Tauri v2)</h4>
-                    <span className="rounded border border-sky-800 bg-sky-950/70 px-2 py-0.5 text-[10px] text-sky-400">CI membangun otomatis</span>
+                    <h4 className="text-xs font-bold uppercase tracking-wide text-viz-blue">Desktop Windows (.exe via Tauri v2)</h4>
+                    <span className="rounded border border-viz-blue/40 bg-viz-blue/10 px-2 py-0.5 text-[10px] text-viz-blue">CI membangun otomatis</span>
                   </div>
-                  <CodeBlock color="text-sky-400">{`npm run tauri build
+                  <CodeBlock color="text-viz-blue">{`npm run tauri build
 # installer: src-tauri/target/release/bundle/nsis/*.exe
 # GitHub Actions job "desktop" membangun ini di setiap push`}</CodeBlock>
                 </Card>
                 <Card>
                   <div className="mb-2 flex items-center justify-between">
-                    <h4 className="text-xs font-bold uppercase tracking-wide text-amber-300">Android (Capacitor)</h4>
-                    <span className="rounded border border-amber-800 bg-amber-950/70 px-2 py-0.5 text-[10px] text-amber-400">Opsional</span>
+                    <h4 className="text-xs font-bold uppercase tracking-wide text-viz-gold">Android (Capacitor)</h4>
+                    <span className="rounded border border-viz-gold/40 bg-viz-gold/10 px-2 py-0.5 text-[10px] text-viz-gold">Opsional</span>
                   </div>
-                  <CodeBlock color="text-amber-400">{`npm install @capacitor/core @capacitor/cli @capacitor/android
+                  <CodeBlock color="text-viz-gold">{`npm install @capacitor/core @capacitor/cli @capacitor/android
 npx cap init OpenPacket com.openpacket.app --web-dir dist
 npm run build && npx cap add android`}</CodeBlock>
                 </Card>
@@ -939,20 +954,20 @@ npm run build && npx cap add android`}</CodeBlock>
             {activeSection === 'architecture' && (
               <div className="flex flex-col gap-4">
                 <SectionTitle
-                  icon={<Cpu className="h-5 w-5 text-purple-400" />}
+                  icon={<Cpu className="h-5 w-5 text-viz-violet" />}
                   title="Arsitektur & Keamanan"
                   subtitle="Delapan invariants non-negotiable dan kualitas yang terukur."
                 />
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                   {[
-                    { t: 'Zero DOM in Engine', c: 'text-emerald-400', b: 'Engine murni TypeScript di Web Worker — tanpa React/DOM (INV-001).' },
-                    { t: 'Typed IPC (INV-002)', c: 'text-cyan-400', b: 'Semua pesan UI ↔ Worker adalah tagged union di src/types/ipc.ts.' },
-                    { t: 'Port Cardinality (INV-003)', c: 'text-amber-400', b: 'Ethernet 1-kabel-1-port; radio WiFi 1-ke-N (amandemen v1.1.0).' },
-                    { t: 'Deterministik (INV-004)', c: 'text-sky-400', b: 'Urutan paket selalu sama — dikunci test paritas otomatis.' },
-                    { t: 'Clean-Room (INV-005)', c: 'text-purple-400', b: 'Tanpa kode proprietary Cisco — murni dari RFC publik IETF.' },
-                    { t: 'Single State (INV-006)', c: 'text-blue-400', b: 'Satu store Zustand untuk GUI, CLI, dan engine — sinkron dua arah.' },
-                    { t: 'No Secrets (INV-007)', c: 'text-rose-400', b: 'Tanpa API key/credential — aman di-push publik.' },
-                    { t: '100% Offline (INV-008)', c: 'text-orange-400', b: 'Nol request jaringan eksternal — internet disimulasikan oleh Cloud.' },
+                    { t: 'Zero DOM in Engine', c: 'text-viz-green', b: 'Engine murni TypeScript di Web Worker — tanpa React/DOM (INV-001).' },
+                    { t: 'Typed IPC (INV-002)', c: 'text-viz-teal', b: 'Semua pesan UI ↔ Worker adalah tagged union di src/types/ipc.ts.' },
+                    { t: 'Port Cardinality (INV-003)', c: 'text-viz-gold', b: 'Ethernet 1-kabel-1-port; radio WiFi 1-ke-N (amandemen v1.1.0).' },
+                    { t: 'Deterministik (INV-004)', c: 'text-viz-blue', b: 'Urutan paket selalu sama — dikunci test paritas otomatis.' },
+                    { t: 'Clean-Room (INV-005)', c: 'text-viz-violet', b: 'Tanpa kode proprietary Cisco — murni dari RFC publik IETF.' },
+                    { t: 'Single State (INV-006)', c: 'text-viz-blue', b: 'Satu store Zustand untuk GUI, CLI, dan engine — sinkron dua arah.' },
+                    { t: 'No Secrets (INV-007)', c: 'text-viz-red', b: 'Tanpa API key/credential — aman di-push publik.' },
+                    { t: '100% Offline (INV-008)', c: 'text-viz-orange', b: 'Nol request jaringan eksternal — internet disimulasikan oleh Cloud.' },
                   ].map((inv) => (
                     <div key={inv.t} className="rounded-lg border bg-muted/40 p-3">
                       <span className={`mb-1 block font-bold ${inv.c}`}>{inv.t}</span>
@@ -960,9 +975,9 @@ npm run build && npx cap add android`}</CodeBlock>
                     </div>
                   ))}
                 </div>
-                <Card className="border-emerald-800/50">
+                <Card className="border-viz-green/40">
                   <div className="mb-1.5 flex items-center gap-2">
-                    <ShieldCheck className="h-4 w-4 text-emerald-400" />
+                    <ShieldCheck className="h-4 w-4 text-viz-green" />
                     <span className="text-xs font-bold">Quality Gates (terverifikasi CI)</span>
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">

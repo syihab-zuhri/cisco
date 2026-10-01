@@ -47,10 +47,10 @@ export function ClassroomRoleGate({ onSelectRole }: ClassroomRoleGateProps) {
         {/* Pilihan 2: Siswa */}
         <div
           onClick={() => onSelectRole('student')}
-          className="group relative flex flex-col justify-between rounded-xl border border-border/80 bg-card p-5 transition-all hover:border-sky-500 hover:shadow-lg cursor-pointer hover:bg-sky-500/5"
+          className="group relative flex flex-col justify-between rounded-xl border border-border/80 bg-card p-5 transition-all hover:border-viz-blue hover:shadow-lg cursor-pointer hover:bg-viz-blue/5"
         >
           <div className="flex flex-col gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-sky-500/10 text-sky-400 group-hover:bg-sky-500 group-hover:text-white transition-all">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-viz-blue/10 text-viz-blue group-hover:bg-viz-blue group-hover:text-on-viz transition-all">
               <Users className="h-6 w-6" />
             </div>
             <div>

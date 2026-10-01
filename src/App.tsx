@@ -8,6 +8,7 @@ import { ClassroomStudentHUD } from '@/components/canvas/ClassroomStudentHUD';
 import { EventLogPanel } from '@/components/log/EventLogPanel';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { ToastHost } from '@/components/ui/ToastHost';
+import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { useSimulationEngine } from '@/hooks/useSimulationEngine';
 
 const DeviceConfigModal = lazy(() =>
@@ -59,7 +60,9 @@ export default function App() {
             <div className="relative flex-1">
               <TopologyCanvas />
               <PduInspectorDrawer />
-              <ClassroomStudentHUD />
+              <ErrorBoundary label="HUD kelas" variant="panel">
+                <ClassroomStudentHUD />
+              </ErrorBoundary>
             </div>
             <EventLogPanel />
           </main>
@@ -71,10 +74,12 @@ export default function App() {
           <DeviceCliModal />
           {isLabOpen && <LabModal isOpen={isLabOpen} onClose={() => setIsLabOpen(false)} />}
           {isClassroomOpen && (
-            <ClassroomModal
-              isOpen={isClassroomOpen}
-              onClose={() => setIsClassroomOpen(false)}
-            />
+            <ErrorBoundary label="Portal Kelas" variant="panel" onReset={() => setIsClassroomOpen(false)}>
+              <ClassroomModal
+                isOpen={isClassroomOpen}
+                onClose={() => setIsClassroomOpen(false)}
+              />
+            </ErrorBoundary>
           )}
           {isDocsOpen && (
             <DocumentationModal

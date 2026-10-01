@@ -1,10 +1,64 @@
 <!doctype html>
-<html lang="id" class="dark">
+<html lang="id">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>OpenPacket - Educational Network Simulator</title>
+    <title>OpenPacket - Simulator Jaringan Edukasi untuk Belajar Cisco</title>
+
+    <!-- SEO dasar -->
+    <meta
+      name="description"
+      content="OpenPacket adalah simulator jaringan edukasi berbasis web untuk belajar konfigurasi Cisco: subnetting, ARP, ICMP ping, VLAN, NAT, dan routing. Gratis, offline, dan tanpa instalasi."
+    />
+    <meta
+      name="keywords"
+      content="simulator jaringan, belajar cisco, subnetting, VLAN, NAT, routing, ARP, ICMP ping, packet tracer alternatif, simulator cisco online, praktikum jaringan komputer"
+    />
+    <meta name="author" content="OpenPacket" />
+    <meta name="robots" content="index, follow" />
+    <meta name="language" content="Indonesian" />
+    <meta name="theme-color" content="#1B2A4A" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="canonical" href="https://openpacket.zuhri.my.id/" />
+
+    <!-- Open Graph (preview saat dibagikan) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="OpenPacket" />
+    <meta property="og:locale" content="id_ID" />
+    <meta property="og:url" content="https://openpacket.zuhri.my.id/" />
+    <meta property="og:title" content="OpenPacket - Simulator Jaringan Edukasi" />
+    <meta
+      property="og:description"
+      content="Simulator jaringan berbasis web untuk praktikum Cisco: subnetting, ARP, ICMP ping, VLAN, NAT, dan routing. Gratis dan langsung di browser."
+    />
+    <meta property="og:image" content="https://openpacket.zuhri.my.id/og-image.svg" />
+    <meta property="og:image:alt" content="OpenPacket - Simulator Jaringan Edukasi" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="OpenPacket - Simulator Jaringan Edukasi" />
+    <meta
+      name="twitter:description"
+      content="Praktikum jaringan Cisco langsung di browser: subnetting, ARP, ICMP ping, VLAN, NAT, dan routing. Gratis, tanpa instalasi."
+    />
+    <meta name="twitter:image" content="https://openpacket.zuhri.my.id/og-image.svg" />
+    <script>
+      // Pasang tema sebelum CSS/React dimuat agar tidak berkedip. Logikanya
+      // harus sama dengan parseThemePreference + resolveTheme di src/lib/theme.ts.
+      (function () {
+        try {
+          var pref = localStorage.getItem('openpacket-theme');
+          var dark =
+            pref === 'dark' ||
+            (pref !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          if (dark) {
+            document.documentElement.classList.add('dark');
+            document.documentElement.style.colorScheme = 'dark';
+          }
+        } catch (e) {}
+      })();
+    </script>
     <script>
       // Filter out benign ResizeObserver loop errors before Vite client attaches listeners
       window.addEventListener(
@@ -25,6 +79,45 @@
   </head>
   <body class="bg-background text-foreground overflow-hidden">
     <div id="root"></div>
+
+    <!--
+      Konten statis untuk crawler (Googlebot, Bingbot) dan pengunjung
+      tanpa JavaScript. Aplikasi OpenPacket adalah SPA, sehingga konten
+      utama baru muncul setelah React mount. Blok ini memberi crawler
+      teks yang bisa diindeks tanpa menunggu eksekusi JS.
+    -->
+    <noscript>
+      <div style="padding: 2rem; font-family: system-ui, sans-serif; color: #ffffff; background: #1b2a4a">
+        <h1>OpenPacket - Simulator Jaringan Edukasi</h1>
+        <p>
+          OpenPacket adalah simulator jaringan komputer berbasis web untuk belajar
+          konfigurasi perangkat Cisco. Aplikasi ini berjalan langsung di browser
+          tanpa instalasi dan dapat digunakan secara offline.
+        </p>
+        <h2>Fitur utama</h2>
+        <ul>
+          <li>Simulasi protokol jaringan: ARP (RFC 826), ICMP Echo / ping (RFC 792), dan IPv4 subnetting (RFC 791)</li>
+          <li>Konfigurasi perangkat melalui antarmuka visual maupun terminal CLI bergaya Cisco IOS</li>
+          <li>Perangkat yang didukung: PC, laptop, router, switch, server, access point, cloud, dan kabel jaringan</li>
+          <li>Mode Lab Praktikum dengan studi kasus: gateway salah, NAT internet, dan VLAN router-on-a-stick</li>
+          <li>Mode Kelas untuk guru dan siswa: distribusi soal, pengumpulan jawaban, penilaian otomatis, dan batas cek mandiri</li>
+          <li>Visualisasi perjalanan paket secara animasi dan log event simulasi</li>
+          <li>12 template topologi siap pakai dan dukungan muat/simpan topologi dalam format JSON</li>
+        </ul>
+        <h2>Untuk siapa</h2>
+        <p>
+          Cocok untuk siswa SMK jurusan TKJ, mahasiswa Teknik Informatika dan
+          Sistem Informasi, peserta pelatihan jaringan, serta guru dan dosen yang
+          membutuhkan media praktikum jaringan komputer tanpa harus memasang
+          perangkat lunak berat seperti Cisco Packet Tracer atau GNS3.
+        </p>
+        <p>
+          <strong>Catatan:</strong> aplikasi ini memerlukan JavaScript aktif untuk
+          menjalankan simulasi. Silakan aktifkan JavaScript pada browser Anda.
+        </p>
+      </div>
+    </noscript>
+
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
