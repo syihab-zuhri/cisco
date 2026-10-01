@@ -166,6 +166,15 @@ export function abortSimulation(): void {
   if (store.activePackets.length > 0) {
     store.setActivePackets([]);
   }
+  // ABORT di worker ikut mematikan step gate (untuk melepas waiter yang tertahan).
+  // Sinkronkan ulang dengan state UI agar Step Mode tidak diam-diam mati setelah
+  // abort — mis. saat memuat template atau memulai lab selepas mengaktifkan Step.
+  if (worker) {
+    worker.postMessage({
+      type: 'ENABLE_STEP_MODE',
+      payload: { enabled: store.stepMode },
+    } as UIWorkerMessage);
+  }
 }
 
 export function setEngineSpeed(speed: SimulationSpeed): void {

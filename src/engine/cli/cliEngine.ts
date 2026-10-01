@@ -957,7 +957,7 @@ export class CliSession {
   private showVersion(): string[] {
     return [
       'Cisco IOS Software, C2900 Software (C2900-UNIVERSALK9-M), Version 15.1(4)M4',
-      'OpenPacket Simulated IOS Terminal v1.3.0',
+      'OpenPacket Simulated IOS Terminal v2.3.0',
     ];
   }
 }

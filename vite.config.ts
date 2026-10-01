@@ -30,6 +30,14 @@ function classroomRelayPlugin(): Plugin {
 }
 
 // https://vite.dev/config/
+// HMR clientPort: saat diakses lewat Cloudflare Tunnel (pc.zuhrirey.my.id) browser
+// membuka HTTPS 443, jadi socket HMR harus diarahkan ke 443. Untuk dev lokal / E2E /
+// CI, biarkan Vite memakai port server sendiri (5173) supaya tidak ada ERR_CONNECTION_REFUSED.
+// Override manual: VITE_HMR_CLIENT_PORT=<port>.
+const hmrClientPort = process.env.VITE_HMR_CLIENT_PORT
+  ? Number(process.env.VITE_HMR_CLIENT_PORT)
+  : undefined;
+
 export default defineConfig({
   plugins: [react(), tailwindcss(), classroomRelayPlugin()],
   resolve: {
@@ -41,9 +49,7 @@ export default defineConfig({
     port: 5173,
     host: true,
     allowedHosts: true,
-    hmr: {
-      clientPort: 443,
-    },
+    hmr: hmrClientPort ? { clientPort: hmrClientPort } : undefined,
     watch: {
       usePolling: true,
       interval: 100,
