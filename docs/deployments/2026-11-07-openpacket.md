@@ -76,3 +76,23 @@ ssh vps 'sudo -n /var/backups/openpacket/20261107T073714Z/rollback.sh'
 ```
 
 Rollback mengembalikan `index.html` dari backup lewat rename atomik. Karena relay core belum diganti, rollback tidak akan me-restart PM2. Sintaks skrip diperiksa, rollback tidak dijalankan.
+
+## Adendum — verifikasi kompatibilitas Fase A (lokal, setelah deploy)
+
+Ditambahkan setelah laporan agent untuk menutup butir yang belum terverifikasi di produksi. Produksi saat ini menjalankan
+**frontend `a2baed9` dengan relay core rilis 25 Oktober**.
+
+- Relay core rilis 25 Oktober direkonstruksi dari `a2baed9` (perubahan relay 7 November dibalik). SHA-256 hasilnya
+  `ad43e90b…986c`, **identik** dengan relay yang berjalan di produksi.
+- E2E `report-fixes.spec.ts` + `audit-followup.spec.ts` dengan dev server baru (port 5199) yang memuat relay lama tersebut:
+  **15/15 lulus**. Cakupannya: siswa bergabung dan melihat soal, konfirmasi dua langkah, tepat satu jawaban tercatat di sisi
+  guru (dibaca dengan token host), tombol tetap terkunci setelah polling, penolakan kode kustom, serta alasan kelas
+  ditutup/dikeluarkan.
+- Unit test integrasi hub "Kirim Jawaban hanya satu kali per ronde" dengan relay lama: 4/5 lulus (kiriman kedua diabaikan,
+  ronde baru membuka kembali, kiriman gagal jaringan, kiriman masih di perjalanan). Satu-satunya yang gagal adalah penolakan
+  422 untuk soal yang sudah diganti, fitur relay Fase B yang memang belum terpasang.
+- "Menunggu Soal dari Guru" pada uji produksi tidak terulang secara lokal. Penyebab yang paling mungkin: bank soal guru
+  kosong secara default, sehingga kelas yang dibuat lewat form tanpa memilih soal berjalan dengan 0 soal sampai guru
+  menyiarkannya. Ini belum dibuktikan.
+- Kelas uji `DEPLOY-1107-B`/`-C` tidak dapat ditutup karena token host tidak disimpan. Keduanya terhapus otomatis oleh relay
+  24 jam setelah event terakhirnya (pembersihan tiap 30 menit), atau saat relay direstart pada Fase B.
