@@ -10,6 +10,92 @@
 > **Supersedes:** None  
 
 ---
+## [2026-11-07] — Kode Kelas yang Dipakai Ulang Guru Lain & Kirim Jawaban Satu Kali
+
+### Changed
+- Siswa hanya dapat mengirim jawaban **satu kali per ronde**. Tombol Kirim Jawaban (HUD siswa dan modal kelas) kini membuka dialog konfirmasi ("Ya, Kirim Jawaban") yang menjelaskan bahwa jawaban tidak dapat diubah dan menyarankan Cek Mandiri bila diizinkan guru. Setelah terkirim, tombol berubah menjadi "Jawaban Terkirim" dan terkunci, termasuk setelah refresh. Ronde baru dari guru (siarkan soal) membuka kembali kesempatan kirim; memperbarui soal tanpa ronde baru tidak.
+- Relay menegakkan aturan yang sama: kiriman kedua pada ronde yang sama ditolak 409 dan jawaban pertama tidak tertimpa.
+
+### Fixed
+- Jawaban yang tidak sampai ke server (galat jaringan) tidak mengunci siswa: selama jawaban belum dikonfirmasi relay, sinkronisasi meminta tampilan penuh; bila relay ternyata tidak memegangnya, siswa diberi tahu dan tombol kirim aktif lagi. Jawaban yang masih di perjalanan tidak dihapus oleh polling. Kiriman yang ditolak relay (mis. soal sudah diganti) dibatalkan di perangkat.
+- Tes integrasi "ronde, status locked, dan arsip nilai dipertahankan…" sebelumnya flaky saat dijalankan sendiri (siswa bergabung sebelum kelas tercatat di relay); kini menunggu kelas tercatat lebih dulu.
+- Siswa yang tab-nya masih terbuka tidak lagi ikut tersambung ke kelas guru lain ketika kode kelas lamanya dipakai ulang (setelah relay restart, kelas dihapus otomatis karena tidak aktif 24 jam, atau kelas ditutup). Relay menyertakan `session.id` (bukan rahasia) pada tampilan anonim; hub siswa membandingkannya dengan sesi lokal dan, bila berbeda, mengakhiri sesi dengan alasan `replaced` beserta pesan yang jelas, tanpa bergabung ulang atau mengirim ulang jawaban. Pemulihan oleh guru yang sama tetap berjalan karena id sesinya dipertahankan.
+- Relay menolak (422) jawaban untuk soal yang tidak aktif di kelas tersebut, sehingga jawaban dari kelas atau ronde lain dengan kode sama tidak masuk ke tabel nilai. `session.id` dibatasi 64 karakter.
+- Form Buat Kelas memeriksa kode kustom ke relay terlebih dahulu. Kode yang masih dipakai kelas aktif ditolak sebelum kelas dibuka, sehingga guru tidak lagi melihat notifikasi "Kelas dibuka" yang langsung disusul penolakan.
+
+### Verification
+- `npm run type-check`: lulus.
+- `npx vitest run`: 480 tes dalam 35 berkas lulus (13 tes baru). Tes regresi terbukti gagal saat perbaikan dinonaktifkan: siswa lama, soal tidak aktif, penjaga satu-kali-kirim di hub, penolakan 409 di relay, dan tampilan penuh saat jawaban belum dikonfirmasi.
+- `npx playwright test`: seluruh 24 tes lulus, termasuk penolakan kode kustom lewat UI dan alur kirim satu kali (batal → kirim + konfirmasi → terkunci, juga setelah polling dan refresh). Tes lama yang mengirim dua kali disesuaikan agar mengirim sekali setelah refresh.
+
+---
+## [2026-10-25] — Pemulihan Pekerjaan dan Konsistensi Penilaian
+
+### Fixed
+- Kanvas, konfigurasi, anotasi, dan status lab disimpan otomatis sebagai draft per tab dan dipulihkan setelah refresh. Reset tetap tersimpan sebagai kanvas kosong. Kegagalan penyimpanan memberi peringatan untuk mengekspor berkas.
+- Setiap soal mempunyai kanvas sendiri, dipisahkan berdasarkan kelas, peserta, dan ronde. Berpindah soal menyimpan serta memulihkan pekerjaannya; pengumpulan dan verifikasi guru menilai snapshot masing-masing soal.
+- Perubahan konfigurasi membatalkan nilai mandiri yang sudah usang; perubahan pekerjaan atau rubrik saat evaluasi berlangsung tidak menghasilkan nilai yang dipasang pada pekerjaan berbeda.
+- Ekspor `.opsub` memakai format pekerjaan tanpa nilai (`openpacket_work`), sehingga tidak memakai nilai lama dan tidak membuka penilaian saat Cek Mandiri dinonaktifkan. Guru menilai snapshot saat impor, termasuk untuk berkas format lama. Berkas tanpa soal/snapshot yang dapat dinilai ditandai belum dinilai.
+- Animasi paket kabel dan WiFi mengikuti Jeda, Lanjutkan, Step, kecepatan, serta preferensi pengurangan gerak. Satu hop dianimasikan sekali dan tidak berulang tanpa batas.
+- Tinggi HUD dibatasi area kanvas agar tombol pengumpulan/ekspor tetap dapat diklik ketika panel log terbuka.
+- `write memory` menyimpan draft tab dan menjelaskan bahwa running-config/startup-config belum dipisahkan; kegagalan simpan tidak menampilkan `[OK]`.
+
+### Verification
+- `npm run test:coverage -- --reporter=dot`: 467 tes dalam 35 berkas lulus. Line coverage protokol `src/engine` 91,1%; `simulationEngine.ts` 90,96%.
+- `npm run type-check`, `npm run build`, `git diff --check`, dan pemeriksaan sintaks relay lulus.
+- `npm run e2e -- --workers=1 --retries=1`: seluruh 22 tes lulus pada percobaan pertama di putaran akhir, termasuk pemulihan setelah refresh, dua jawaban independen, ekspor dalam mode ujian, impor berkas baru/lama, dan animasi jeda/lanjut.
+- Draft bertahan pada tab yang sama setelah refresh. Untuk penyimpanan di luar tab/perangkat, gunakan ekspor berkas. Snapshot relay tetap privat dan tunduk pada batas ukuran yang sudah ada.
+- Rilis produksi `20261025T012131Z` terpasang; dua soal independen mendapat 100/100 terverifikasi, draft pulih setelah refresh, ekspor Mode Ujian tanpa nilai, dan ping 4/4 setelah Jeda/Lanjutkan. Lihat [catatan deployment](docs/deployments/2026-10-25-openpacket.md).
+
+---
+## [2026-10-24] — Perbaikan Laporan Pengujian Zuhri
+
+### Fixed
+- Diagnostik ping dan DHCP membedakan kabel yang belum terhubung dari interface yang dinonaktifkan secara administratif (ADMIN DOWN).
+- Memuat template pada kanvas berisi perangkat, kabel, atau anotasi kini meminta konfirmasi. Membatalkan dialog mempertahankan pekerjaan pengguna.
+- Konflik IP pada segmen Layer 2 yang sama memunculkan peringatan dan catatan log, baik perubahan berasal dari GUI, CLI, impor, maupun pengkabelan. Jaringan terpisah, batas router, dan VLAN berbeda tetap dibedakan; konfigurasi sengaja dibiarkan dapat disimpan untuk latihan troubleshooting.
+- Panel TABEL dan CLI `show ip route` memakai perhitungan connected route yang sama, termasuk sub-interface VLAN. Connected route interface DOWN tidak ditampilkan.
+- Penutupan kelas dan pengeluaran siswa membawa alasan akhir sesi melalui event lokal bertipe ketat. Siswa menerima pesan yang sesuai dan topologinya tetap ada di kanvas; perangkat guru tidak lagi mendapat pesan keluar Mode Siswa.
+- Durasi notifikasi pada store diteruskan ke komponen toast, termasuk pemberitahuan akhir sesi selama delapan detik.
+
+### Changed
+- Penjelasan nilai pada evaluator dan lembar kerja siswa mengikuti cakupan rubrik. Soal tanpa target `reachability` menyatakan bahwa konektivitas tidak diuji; skor konfigurasi IP tetap dinilai sesuai target yang dibuat guru.
+- Editor soal mengingatkan guru untuk menambahkan kriteria Ping jika tujuan tugas mensyaratkan konektivitas. Setiap target pada lembar kerja siswa diberi kategori konfigurasi IP/VLAN, kabel, jumlah perangkat, atau konektivitas.
+
+### Verification
+- `npm run type-check`: lulus.
+- `npm run test:coverage -- --reporter=dot`: 455 tes dalam 32 berkas lulus; line coverage `simulationEngine.ts` 90,96%.
+- `npm run build`: lulus.
+- `npm run e2e -- --workers=2`: seluruh 15 tes lulus, termasuk penutupan/pengeluaran siswa melalui panel guru pada dua konteks browser terpisah.
+- Dialog konfirmasi diperiksa di desktop dan viewport 390 × 844 melalui agent-browser.
+- Build perbaikan telah dideploy ke `https://openpacket.zuhri.my.id/` sebagai release `20261024T151549Z`. Backup dan rollback tersedia; relay tetap berjalan tanpa restart. Konfigurasi header HTTP dan sertifikat tidak diubah. Lihat [catatan deployment](docs/deployments/2026-10-24-openpacket.md).
+
+---
+## [2026-09-16] — Version 2.3.0 (Cisco IOS CLI Parity, Port Administrative Toggle, Code Splitting & Production Classroom Relay)
+
+### Added & Improved
+- **Parity Perintah Cisco IOS Lengkap pada Terminal CLI (`cliEngine.ts`, `DeviceCliModal.tsx`)**:
+  - **Routing Statis:** Penambahan perintah `ip route <network> <mask|prefix> <next-hop>` dan `no ip route` untuk konfigurasi tabel routing langsung via CLI terminal.
+  - **Konfigurasi Switchport & VLAN:** Penambahan perintah `switchport mode {access|trunk}`, `switchport access vlan <vlanId>`, dan `switchport trunk allowed vlan`.
+  - **Sub-interface & 802.1Q (Router-on-a-stick):** Dukungan navigasi interface bertitik (`interface fa0/0.10`), prompt `hostname(config-subif)#`, perintah `encapsulation dot1q <vlanId>`, serta penetapan IP sub-interface.
+  - **Inspeksi & Simpan Konfigurasi:** Dukungan perintah `show running-config` (alias `sh run`), `write memory` (alias `wr`), dan `show vlan brief` (alias `sh vlan`).
+  - **Default Gateway:** Dukungan perintah `ip default-gateway <ip>` dan `no ip default-gateway`.
+- **Toggle Status Administratif Port di GUI & Penanganan Port Router (`DeviceConfigModal.tsx`, `useAppStore.ts`)**:
+  - Penambahan tombol `<Switch>` interaktif pada form konfigurasi port untuk menyetel status administratif port (`UP` vs `ADMIN DOWN`).
+  - Penyesuaian `connectPorts`: kabel yang dicolokkan ke port router tidak lagi memaksa status port menjadi `UP` jika port router berstatus `administratively down`, mendidik siswa tentang fungsi perintah `no shutdown`.
+- **Code Splitting & Optimasi Ukuran Bundel (`App.tsx`)**:
+  - Penerapan `React.lazy()` dan `<Suspense>` pada modal berat (`DeviceConfigModal`, `DeviceCliModal`, `DocumentationModal`, `ClassroomModal`, `LabModal`).
+  - Memangkas ukuran bundel produksi `index.js` dari **1,012 kB** menjadi **557 kB** (~45% penurunan ukuran aset muat awal).
+- **Relay Kelas Realtime Mandiri & Mode Preview (`vite.config.ts`, `scripts/classroom-relay.mjs`, `package.json`)**:
+  - Integrasi `configurePreviewServer` pada `vite.config.ts` sehingga relay kelas berfungsi pada mode `npm run preview`.
+  - Skrip relay mandiri tanpa dependensi luar `scripts/classroom-relay.mjs` yang dapat dijalankan dengan `npm run relay` untuk server lokal di lab sekolah.
+- **Sinkronisasi Versi Desktop Tauri (`tauri.conf.json`, `Cargo.toml`)**:
+  - Sinkronisasi nomor versi Tauri dan Cargo ke `2.2.2` / `2.3.0`.
+- **Rangkaian Pengujian Unit Komprehensif (`tests/unit/auditImprovements.test.ts`)**:
+  - 14 test baru yang memvalidasi seluruh fungsionalitas CLI baru, persistensi rute statis, sub-interface, running-config, dan status port router (total 167 unit test lulus 100%).
+
+---
+
 
 ## [2026-09-15] — Version 2.2.2 (Mobile Documentation UI/UX Overhaul & Topic Selector Bar)
 

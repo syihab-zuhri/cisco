@@ -17,26 +17,28 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { getDeviceRoutes, routeInterfaceName } from '../../utils/routing';
+import { prefixLength } from '../../utils/ipUtils';
 
 type PanelTab = 'log' | 'sim' | 'tables';
 
 const EVENT_KIND_COLORS: Record<string, string> = {
-  ARP_REQ: 'text-emerald-300 bg-emerald-950/60 border-emerald-800/60',
-  ARP_REP: 'text-emerald-200 bg-emerald-900/60 border-emerald-700/60',
-  ICMP_REQ: 'text-cyan-300 bg-cyan-950/60 border-cyan-800/60',
-  ICMP_REP: 'text-cyan-200 bg-cyan-900/60 border-cyan-700/60',
+  ARP_REQ: 'text-viz-green bg-viz-green/10 border-viz-green/40',
+  ARP_REP: 'text-viz-green bg-viz-green/15 border-viz-green/40',
+  ICMP_REQ: 'text-viz-teal bg-viz-teal/10 border-viz-teal/40',
+  ICMP_REP: 'text-viz-teal bg-viz-teal/15 border-viz-teal/40',
 };
 
 const getBadgeColor = (type: string) => {
   switch (type) {
     case 'ARP':
-      return 'text-emerald-400 bg-emerald-950/60 border-emerald-800/60';
+      return 'text-viz-green bg-viz-green/10 border-viz-green/40';
     case 'ICMP':
-      return 'text-cyan-400 bg-cyan-950/60 border-cyan-800/60';
+      return 'text-viz-teal bg-viz-teal/10 border-viz-teal/40';
     case 'ERROR':
-      return 'text-red-400 bg-red-950/60 border-red-800/60';
+      return 'text-viz-red bg-viz-red/10 border-viz-red/40';
     case 'SUCCESS':
-      return 'text-green-400 bg-green-950/60 border-green-800/60';
+      return 'text-viz-green bg-viz-green/10 border-viz-green/40';
     default:
       return 'text-muted-foreground bg-muted border-border';
   }
@@ -57,7 +59,7 @@ function SimTimelineRow({ event, isPlayed, isCurrent, onSelect }: {
       onClick={() => onSelect(event)}
       className={cn(
         'flex w-full items-start gap-2 rounded px-1 py-0.5 text-left leading-relaxed',
-        isCurrent ? 'bg-violet-950/50 ring-1 ring-violet-700/60' : 'hover:bg-muted/50',
+        isCurrent ? 'bg-viz-violet/10 ring-1 ring-viz-violet/40' : 'hover:bg-muted/50',
         !isPlayed && 'opacity-40'
       )}
     >
@@ -70,7 +72,7 @@ function SimTimelineRow({ event, isPlayed, isCurrent, onSelect }: {
       <span className="break-words text-foreground/90">{event.message}</span>
       {event.effects && event.effects.length > 0 && (
         <span
-          className="ml-auto shrink-0 rounded border border-amber-800/60 bg-amber-950/60 px-1 text-[11px] text-amber-300"
+          className="ml-auto shrink-0 rounded border border-viz-gold/40 bg-viz-gold/10 px-1 text-[11px] text-viz-gold"
           title="Event ini mengubah tabel (CAM/ARP)"
         >
           table
@@ -124,6 +126,7 @@ export function EventLogPanel() {
 
   const deviceNodes = nodes.filter((n) => n.type === 'deviceNode');
   const selectedDevice = nodes.find((n) => n.id === selectedNodeId)?.data;
+  const routingTable = selectedDevice?.type === 'router' ? getDeviceRoutes(selectedDevice) : [];
 
   // Mouse Dragging
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -256,7 +259,7 @@ export function EventLogPanel() {
         className="flex h-10 sm:h-8 items-center justify-between border-b bg-muted/80 px-3 cursor-pointer select-none hover:bg-muted/95 transition-colors touch-manipulation"
       >
         <div className="flex items-center gap-2 truncate">
-          <ScrollText className="h-4 w-4 sm:h-3.5 sm:w-3.5 text-blue-400 shrink-0" />
+          <ScrollText className="h-4 w-4 sm:h-3.5 sm:w-3.5 text-viz-blue shrink-0" />
           <span className="text-xs sm:text-[11px] font-semibold tracking-wider uppercase text-foreground/90 truncate">
             <span className="hidden sm:inline">Log Simulasi &amp; Tabel Jaringan</span>
             <span className="sm:hidden">Log &amp; Tabel Simulasi</span>
@@ -279,7 +282,7 @@ export function EventLogPanel() {
             onClick={clearSimulationLogs}
             title="Bersihkan Log"
             aria-label="Bersihkan Log"
-            className="text-muted-foreground hover:text-red-400 h-7 w-7"
+            className="text-muted-foreground hover:text-viz-red h-7 w-7"
           >
             <Trash2 className="h-3.5 w-3.5" />
           </Button>
@@ -329,21 +332,21 @@ export function EventLogPanel() {
                 value="log"
                 className="gap-1.5 px-3 text-xs sm:text-[11px] font-semibold tracking-wider uppercase after:hidden data-active:border-b-2 data-active:border-primary data-active:rounded-none touch-manipulation"
               >
-                <ScrollText className="h-3.5 w-3.5 sm:h-3 sm:w-3 text-sky-400" />
+                <ScrollText className="h-3.5 w-3.5 sm:h-3 sm:w-3 text-viz-blue" />
                 <span>Log</span>
               </TabsTrigger>
               <TabsTrigger
                 value="sim"
                 className="gap-1.5 px-3 text-xs sm:text-[11px] font-semibold tracking-wider uppercase after:hidden data-active:border-b-2 data-active:border-primary data-active:rounded-none touch-manipulation"
               >
-                <ListTree className="h-3.5 w-3.5 sm:h-3 sm:w-3 text-violet-400" />
+                <ListTree className="h-3.5 w-3.5 sm:h-3 sm:w-3 text-viz-violet" />
                 <span>Simulasi</span>
               </TabsTrigger>
               <TabsTrigger
                 value="tables"
                 className="gap-1.5 px-3 text-xs sm:text-[11px] font-semibold tracking-wider uppercase after:hidden data-active:border-b-2 data-active:border-primary data-active:rounded-none touch-manipulation"
               >
-                <Table2 className="h-3.5 w-3.5 sm:h-3 sm:w-3 text-emerald-400" />
+                <Table2 className="h-3.5 w-3.5 sm:h-3 sm:w-3 text-viz-green" />
                 <span>Tabel</span>
               </TabsTrigger>
             </TabsList>
@@ -450,7 +453,7 @@ export function EventLogPanel() {
                 {selectedDevice.type === 'switch' && (
                   <div className="rounded border bg-background/80 p-2 shadow-xs">
                     <div className="mb-1.5 flex items-center justify-between border-b border-border/50 pb-1">
-                      <span className="text-[11px] font-bold uppercase text-emerald-400">
+                      <span className="text-[11px] font-bold uppercase text-viz-green">
                         CAM Table (MAC)
                       </span>
                       <span className="text-[10px] text-muted-foreground font-mono">
@@ -466,7 +469,7 @@ export function EventLogPanel() {
                             <span className="font-mono text-[11px]">{mac.toLowerCase()}</span>
                             <div className="flex items-center gap-1 shrink-0">
                               <ArrowRight className="h-2.5 w-2.5 text-muted-foreground/50" />
-                              <span className="font-semibold text-emerald-400 font-mono">{port}</span>
+                              <span className="font-semibold text-viz-green font-mono">{port}</span>
                             </div>
                           </div>
                         ))}
@@ -479,7 +482,7 @@ export function EventLogPanel() {
                 {selectedDevice.type !== 'switch' && (
                   <div className="rounded border bg-background/80 p-2 shadow-xs">
                     <div className="mb-1.5 flex items-center justify-between border-b border-border/50 pb-1">
-                      <span className="text-[11px] font-bold uppercase text-cyan-400">
+                      <span className="text-[11px] font-bold uppercase text-viz-teal">
                         ARP Cache (IP ↔ MAC)
                       </span>
                       <span className="text-[10px] text-muted-foreground font-mono">
@@ -495,7 +498,7 @@ export function EventLogPanel() {
                             <span className="font-mono text-[11px] text-foreground font-medium">{ip}</span>
                             <div className="flex items-center gap-1 shrink-0">
                               <ArrowRight className="h-2.5 w-2.5 text-muted-foreground/50" />
-                              <span className="font-mono text-[11px] text-cyan-300">{mac.toLowerCase()}</span>
+                              <span className="font-mono text-[11px] text-viz-teal">{mac.toLowerCase()}</span>
                             </div>
                           </div>
                         ))}
@@ -508,25 +511,28 @@ export function EventLogPanel() {
                 {selectedDevice.type === 'router' && (
                   <div className="rounded border bg-background/80 p-2 shadow-xs">
                     <div className="mb-1.5 flex items-center justify-between border-b border-border/50 pb-1">
-                      <span className="text-[11px] font-bold uppercase text-amber-400">
+                      <span className="text-[11px] font-bold uppercase text-viz-gold">
                         Routing Table
                       </span>
                       <span className="text-[10px] text-muted-foreground font-mono">
                         {selectedDevice.label}
                       </span>
                     </div>
-                    {(selectedDevice.routes ?? []).length === 0 ? (
-                      <div className="italic text-muted-foreground/60 py-1">(kosong — belum ada rute statis)</div>
+                    {routingTable.length === 0 ? (
+                      <div className="italic text-muted-foreground/60 py-1">(kosong — belum ada interface IP aktif atau rute terkonfigurasi)</div>
                     ) : (
                       <div className="space-y-1">
-                        {(selectedDevice.routes ?? []).map((r, idx) => (
+                        {routingTable.map((r, idx) => (
                           <div key={idx} className="flex items-center justify-between gap-1 text-foreground/90 bg-muted/30 px-1.5 py-0.5 rounded">
                             <span className="font-mono text-[11px]">
-                              {r.network}/{r.subnetMask}
+                              {r.source === 'connected' ? 'C' : r.source === 'rip' ? 'R' : 'S'}{' '}
+                              {r.network}/{prefixLength(r.subnetMask)}
                             </span>
                             <div className="flex items-center gap-1 shrink-0">
                               <ArrowRight className="h-2.5 w-2.5 text-muted-foreground/50" />
-                              <span className="font-semibold text-amber-300 font-mono">{r.nextHop}</span>
+                              <span className="font-semibold text-viz-gold font-mono">
+                                {r.source === 'connected' ? `Terhubung langsung · ${routeInterfaceName(selectedDevice, r.interfaceId)}` : r.nextHop}
+                              </span>
                             </div>
                           </div>
                         ))}
@@ -539,7 +545,7 @@ export function EventLogPanel() {
                 {selectedDevice.type === 'router' && (
                   <div className="rounded border bg-background/80 p-2 shadow-xs">
                     <div className="mb-1.5 flex items-center justify-between border-b border-border/50 pb-1">
-                      <span className="text-[11px] font-bold uppercase text-sky-400">
+                      <span className="text-[11px] font-bold uppercase text-viz-blue">
                         NAT Translations
                       </span>
                       <span className="text-[10px] text-muted-foreground font-mono">
@@ -555,7 +561,7 @@ export function EventLogPanel() {
                             <span className="font-mono text-[11px]">{t.insideIp}</span>
                             <div className="flex items-center gap-1 shrink-0">
                               <ArrowRight className="h-2.5 w-2.5 text-muted-foreground/50" />
-                              <span className="font-semibold text-sky-300 font-mono">{t.globalIp}</span>
+                              <span className="font-semibold text-viz-blue font-mono">{t.globalIp}</span>
                             </div>
                           </div>
                         ))}

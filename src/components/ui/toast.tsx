@@ -35,7 +35,7 @@ function Toast({ className, ...props }: ToastPrimitive.Root.Props) {
     <ToastPrimitive.Root
       data-slot="toast"
       className={cn(
-        "group/toast pointer-events-auto absolute right-0 bottom-0 z-[calc(1000-var(--toast-index))] w-full origin-bottom rounded-none border bg-popover text-popover-foreground shadow-lg will-change-transform outline-none select-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50",
+        "group/toast pointer-events-auto absolute right-0 bottom-0 z-[calc(1000-var(--toast-index))] w-full origin-bottom rounded-md border bg-popover text-popover-foreground shadow-overlay data-[type=success]:border-success-border data-[type=success]:bg-success-bg data-[type=error]:border-danger-border data-[type=error]:bg-danger-bg data-[type=warning]:border-warning-border data-[type=warning]:bg-warning-bg data-[type=info]:border-info-border data-[type=info]:bg-info-bg will-change-transform outline-none select-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50",
         "[--gap:0.75rem] [--height:var(--toast-frontmost-height,var(--toast-height))] [--offset-y:calc(var(--toast-offset-y)*-1+calc(var(--toast-index)*var(--gap)*-1)+var(--toast-swipe-movement-y))] [--peek:0.75rem] [--scale:calc(max(0,1-(var(--toast-index)*0.1)))] [--shrink:calc(1-var(--scale))]",
         "h-(--height) [transform:translateX(var(--toast-swipe-movement-x))_translateY(calc(var(--toast-swipe-movement-y)-(var(--toast-index)*var(--peek))-(var(--shrink)*var(--height))))_scale(var(--scale))] [transition:transform_500ms_cubic-bezier(0.22,1,0.36,1),opacity_500ms,height_150ms]",
         "after:absolute after:top-full after:left-0 after:h-[calc(var(--gap)+1px)] after:w-full after:content-['']",
@@ -137,25 +137,25 @@ function ToastIcon({ type }: { type: string | undefined }) {
 
   if (type === "success") {
     icon = (
-      <RiCheckboxCircleLine aria-hidden="true" />
+      <RiCheckboxCircleLine className="text-success-fg" aria-hidden="true" />
     )
   }
 
   if (type === "info") {
     icon = (
-      <RiInformationLine aria-hidden="true" />
+      <RiInformationLine className="text-info-fg" aria-hidden="true" />
     )
   }
 
   if (type === "warning") {
     icon = (
-      <RiErrorWarningLine aria-hidden="true" />
+      <RiErrorWarningLine className="text-gold-fg" aria-hidden="true" />
     )
   }
 
   if (type === "error") {
     icon = (
-      <RiCloseCircleLine className="text-destructive" aria-hidden="true" />
+      <RiCloseCircleLine className="text-danger-fg" aria-hidden="true" />
     )
   }
 

@@ -14,6 +14,7 @@ import {
   Menu,
   ScrollText,
   Table2,
+  Wrench,
 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { pauseSimulation, resumeSimulation, simStepNext } from '../../hooks/useSimulationEngine';
@@ -28,6 +29,13 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import {
   Tooltip,
@@ -45,6 +53,7 @@ import {
 import { classroomHub } from '@/features/classroom/classroomHub';
 import type { Participant, ClassSession } from '@/features/classroom/types';
 import { cn } from '@/lib/utils';
+import { ThemeMenu, ThemeToggleGroup } from './ThemeToggle';
 
 interface ToolbarProps {
   onTriggerPing: (sourceNodeId: string, targetIp: string) => void;
@@ -87,6 +96,7 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs, onOpenClassroom
   );
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobilePingOpen, setMobilePingOpen] = useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const unsub = classroomHub.subscribe(() => {
@@ -104,8 +114,18 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs, onOpenClassroom
     }
   }, [nodes, pingSource]);
 
+  const getNodeDisplayIp = (n: (typeof nodes)[number]): string => {
+    const directIp = n.data?.ports?.find((p) => p.ipAddress)?.ipAddress;
+    if (directIp) return directIp;
+    for (const p of n.data?.ports ?? []) {
+      const subIp = p.subInterfaces?.find((s) => s.ipAddress)?.ipAddress;
+      if (subIp) return subIp;
+    }
+    return '';
+  };
+
   const pingableNodes = nodes.filter((n) =>
-    n.data.ports.some((p) => p.ipAddress)
+    n.data?.ports?.some((p) => p.ipAddress || (p.subInterfaces && p.subInterfaces.some((s) => s.ipAddress)))
   );
 
   const handleExportJson = () => {
@@ -120,9 +140,17 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs, onOpenClassroom
     addSimulationLog('SUCCESS', 'Topologi diekspor ke file JSON.');
   };
 
+  // Siswa yang sedang mengikuti kelas tidak boleh memuat topologi jadi dari berkas (jalan pintas jawaban).
+  const importLocked = Boolean(currentParticipant);
+
   const handleImportJson = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (classroomHub.getCurrentParticipant()) {
+      pushToast('warning', 'Memuat topologi dari berkas dinonaktifkan selama Anda mengikuti kelas.');
+      e.target.value = '';
+      return;
+    }
 
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -165,6 +193,7 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs, onOpenClassroom
       }
     };
     reader.readAsText(file);
+    e.target.value = '';
   };
 
   const handleExecutePing = () => {
@@ -180,12 +209,17 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs, onOpenClassroom
 
   return (
     <>
-      <header className="flex h-13 shrink-0 items-center justify-between border-b bg-card px-3 sm:px-4 select-none">
+      <header className="df-inverse flex h-13 shrink-0 items-center justify-between px-3 sm:px-4 select-none">
         {/* Left: Brand & Desktop Controls */}
         <div className="flex items-center gap-2 sm:gap-3">
-          <div className="flex items-center gap-2">
-            <Activity className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
-            <span className="text-base sm:text-lg font-bold tracking-wider text-foreground">
+          <div className="flex items-center gap-2.5">
+            <span
+              aria-hidden="true"
+              className="flex size-8 items-center justify-center rounded-md bg-gold text-on-gold"
+            >
+              <Activity className="size-5" />
+            </span>
+            <span className="text-base sm:text-lg font-bold tracking-tight text-foreground">
               OpenPacket
             </span>
           </div>
@@ -194,7 +228,7 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs, onOpenClassroom
 
           {/* Desktop/Tablet Speed Controls */}
           <div className="hidden md:flex items-center gap-1.5">
-            <span className="text-[11px] text-muted-foreground font-mono uppercase">Speed:</span>
+            <span className="text-[11px] text-muted-foreground font-mono uppercase">Kecepatan:</span>
             <ToggleGroup
               value={[String(simulationSpeed)]}
               onValueChange={(groupValue: string[]) => {
@@ -225,12 +259,12 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs, onOpenClassroom
                       {simulationStatus === 'paused' ? (
                         <>
                           <Play data-icon="inline-start" />
-                          <span className="hidden xl:inline">Resume</span>
+                          <span className="hidden xl:inline">Lanjutkan</span>
                         </>
                       ) : (
                         <>
                           <Pause data-icon="inline-start" />
-                          <span className="hidden xl:inline">Pause</span>
+                          <span className="hidden xl:inline">Jeda</span>
                         </>
                       )}
                     </Button>
@@ -278,17 +312,20 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs, onOpenClassroom
                   if (!value) return '-- Pilih Host --';
                   const selected = pingableNodes.find((n) => n.id === value);
                   if (!selected) return value;
-                  const ip = selected.data.ports.find((p) => p.ipAddress)?.ipAddress;
+                  const ip = getNodeDisplayIp(selected);
                   return ip ? `${selected.data.label} (${ip})` : selected.data.label;
                 }}
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
-              {pingableNodes.map((n) => (
-                <SelectItem key={n.id} value={n.id}>
-                  {n.data.label} ({n.data.ports.find((p) => p.ipAddress)?.ipAddress})
-                </SelectItem>
-              ))}
+              {pingableNodes.map((n) => {
+                const ip = getNodeDisplayIp(n);
+                return (
+                  <SelectItem key={n.id} value={n.id}>
+                    {n.data.label}{ip ? ` (${ip})` : ''}
+                  </SelectItem>
+                );
+              })}
             </SelectContent>
           </Select>
 
@@ -307,7 +344,7 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs, onOpenClassroom
 
           <Button size="sm" onClick={handleExecutePing} disabled={simulationStatus === 'running'}>
             <Send data-icon="inline-start" />
-            Send
+            Kirim
           </Button>
         </div>
 
@@ -338,7 +375,7 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs, onOpenClassroom
                     currentParticipant
                       ? 'border-primary/50 bg-primary/15 text-primary font-bold hover:bg-primary/25'
                       : currentSession && currentSession.status !== 'closed'
-                      ? 'border-emerald-700/50 bg-emerald-950/40 text-emerald-300 hover:bg-emerald-950/60'
+                      ? 'border-viz-green/40 bg-viz-green/10 text-viz-green hover:bg-viz-green/10'
                       : 'text-primary hover:text-primary/90'
                   )}
                 >
@@ -361,93 +398,68 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs, onOpenClassroom
             <TooltipContent>Portal Kelas &amp; Praktikum</TooltipContent>
           </Tooltip>
 
-          {/* Desktop/Tablet Tools (hidden on mobile) */}
+          {/* Desktop/Tablet Tools — dropdown "Alat" */}
           <div className="hidden md:flex items-center gap-1.5">
-            <Tooltip>
-              <TooltipTrigger
+            <DropdownMenu>
+              <DropdownMenuTrigger
                 render={
-                  <Button
-                    variant={activeLabId ? 'secondary' : 'outline'}
-                    size="sm"
-                    onClick={onOpenLabs}
-                    className={activeLabId ? 'text-amber-300' : 'text-amber-300/80'}
-                  >
-                    <GraduationCap data-icon="inline-start" />
-                    <span className="hidden xl:inline">
-                      {activeLabId ? 'Lab Aktif' : 'Lab'}
-                    </span>
+                  <Button variant="outline" size="sm" className="gap-1.5" title="Alat">
+                    <Wrench className="size-3.5" data-icon="inline-start" />
+                    <span className="hidden xl:inline">Alat</span>
                   </Button>
                 }
               />
-              <TooltipContent>Mode Lab Praktikum</TooltipContent>
-            </Tooltip>
-
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button variant="outline" size="sm" onClick={onOpenDocs} className="text-sky-300">
-                    <Activity data-icon="inline-start" />
-                    <span className="hidden xl:inline">Docs</span>
-                  </Button>
-                }
-              />
-              <TooltipContent>Panduan Lengkap &amp; Porting</TooltipContent>
-            </Tooltip>
-
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <label className="inline-flex h-8 cursor-pointer items-center gap-1 rounded-[min(var(--radius-md),12px)] border border-input bg-input/30 px-2 text-[0.8rem] font-medium hover:bg-input/50">
-                    <FolderOpen className="size-3.5 text-muted-foreground" data-icon="inline-start" />
-                    <span className="hidden xl:inline">Load</span>
-                    <input
-                      type="file"
-                      accept=".json"
-                      onChange={handleImportJson}
-                      className="hidden"
-                    />
-                  </label>
-                }
-              />
-              <TooltipContent>Muat Topologi dari file JSON</TooltipContent>
-            </Tooltip>
-
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button variant="outline" size="sm" onClick={handleExportJson}>
-                    <Save data-icon="inline-start" />
-                    <span className="hidden xl:inline">Save</span>
-                  </Button>
-                }
-              />
-              <TooltipContent>Simpan Topologi ke file JSON</TooltipContent>
-            </Tooltip>
-
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={() =>
-                      requestConfirm({
-                        title: 'Reset Topologi',
-                        message:
-                          'Seluruh perangkat, kabel, tabel, dan log simulasi akan dihapus dari kanvas. Tindakan ini tidak bisa dibatalkan.',
-                        confirmLabel: 'Reset',
-                        onConfirm: resetTopology,
-                      })
-                    }
-                    className="text-destructive h-8 px-2"
-                  >
-                    <RotateCcw data-icon="inline-start" />
-                    <span className="hidden xl:inline">Reset</span>
-                  </Button>
-                }
-              />
-              <TooltipContent>Reset Topologi</TooltipContent>
-            </Tooltip>
+              <DropdownMenuContent side="bottom" align="end" sideOffset={6} className="min-w-[200px]">
+                <DropdownMenuItem
+                  onClick={onOpenLabs}
+                  className={activeLabId ? 'text-viz-gold font-semibold' : ''}
+                >
+                  <GraduationCap className="size-4 mr-2 text-viz-gold" />
+                  {activeLabId ? 'Lab Aktif' : 'Mode Lab Praktikum'}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={onOpenDocs}>
+                  <Activity className="size-4 mr-2 text-viz-blue" />
+                  Pusat Bantuan OpenPacket
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={importLocked}
+                >
+                  <FolderOpen className="size-4 mr-2 text-muted-foreground" />
+                  Muat Topologi (.json){importLocked ? ' — dikunci saat kelas' : ''}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExportJson}>
+                  <Save className="size-4 mr-2 text-muted-foreground" />
+                  Simpan Topologi (.json)
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  variant="destructive"
+                  onClick={() =>
+                    requestConfirm({
+                      title: 'Reset Topologi',
+                      message:
+                        'Seluruh perangkat, kabel, tabel, dan log simulasi akan dihapus dari kanvas. Tindakan ini tidak bisa dibatalkan.',
+                      confirmLabel: 'Reset',
+                      onConfirm: resetTopology,
+                    })
+                  }
+                >
+                  <RotateCcw className="size-4 mr-2" />
+                  Reset Topologi
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <ThemeMenu />
+            {/* Hidden file input for Muat Topologi */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json"
+              onChange={handleImportJson}
+              className="hidden"
+            />
           </div>
 
           {/* Quick Toggle Log & Tabel Bawah */}
@@ -458,7 +470,7 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs, onOpenClassroom
             className="h-8 gap-1.5 text-xs px-2 sm:px-2.5 font-medium shrink-0"
             title="Buka/Tutup Panel Log Simulasi & Tabel Bawah"
           >
-            <ScrollText className="h-3.5 w-3.5 text-sky-400" />
+            <ScrollText className="h-3.5 w-3.5 text-gold" />
             <span className="hidden sm:inline">Log &amp; Tabel</span>
             <span className="text-[10px] font-mono rounded bg-muted/80 px-1 py-0.5 leading-none">
               {simulationLogs.length}
@@ -535,6 +547,14 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs, onOpenClassroom
                     </div>
                   </div>
 
+                  {/* Tema Tampilan */}
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-[11px] font-semibold text-muted-foreground uppercase">
+                      Tema Tampilan
+                    </span>
+                    <ThemeToggleGroup />
+                  </div>
+
                   <Separator />
 
                   {/* Fitur & Navigasi */}
@@ -547,7 +567,7 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs, onOpenClassroom
                         onOpenLabs();
                       }}
                     >
-                      <GraduationCap className="h-4 w-4 text-amber-400" />
+                      <GraduationCap className="h-4 w-4 text-viz-gold" />
                       <span>Mode Lab Praktikum</span>
                     </Button>
 
@@ -559,8 +579,8 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs, onOpenClassroom
                         onOpenDocs();
                       }}
                     >
-                      <Activity className="h-4 w-4 text-sky-400" />
-                      <span>Panduan Lengkap &amp; Porting</span>
+                      <Activity className="h-4 w-4 text-viz-blue" />
+                      <span>Pusat Bantuan OpenPacket</span>
                     </Button>
                   </div>
 
@@ -580,7 +600,7 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs, onOpenClassroom
                       }}
                     >
                       <div className="flex items-center gap-2">
-                        <ScrollText className="h-4 w-4 text-sky-400" />
+                        <ScrollText className="h-4 w-4 text-viz-blue" />
                         <span>Log Simulasi</span>
                       </div>
                       <Badge variant="secondary" className="text-[10px] h-5 px-1.5 font-mono">
@@ -597,7 +617,7 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs, onOpenClassroom
                       }}
                     >
                       <div className="flex items-center gap-2">
-                        <Table2 className="h-4 w-4 text-emerald-400" />
+                        <Table2 className="h-4 w-4 text-viz-green" />
                         <span>Tabel ARP / CAM / Routing</span>
                       </div>
                       <span className="text-[10px] text-muted-foreground">Real-time</span>
@@ -608,12 +628,19 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs, onOpenClassroom
 
                   {/* Berkas Topologi */}
                   <div className="flex flex-col gap-2">
-                    <label className="flex h-9 cursor-pointer items-center justify-start gap-2 rounded-[min(var(--radius-md),12px)] border border-input bg-card px-3 text-xs font-medium hover:bg-muted">
+                    <label
+                      aria-disabled={importLocked}
+                      className={cn(
+                        'flex h-9 cursor-pointer items-center justify-start gap-2 rounded-[min(var(--radius-md),12px)] border border-input bg-card px-3 text-xs font-medium hover:bg-muted',
+                        importLocked && 'pointer-events-none opacity-50'
+                      )}
+                    >
                       <FolderOpen className="h-4 w-4 text-muted-foreground" />
-                      <span>Muat File Topologi (.json)</span>
+                      <span>Muat File Topologi (.json){importLocked ? ' — dikunci saat kelas' : ''}</span>
                       <input
                         type="file"
                         accept=".json"
+                        disabled={importLocked}
                         onChange={(e) => {
                           setMobileMenuOpen(false);
                           handleImportJson(e);
@@ -661,7 +688,7 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs, onOpenClassroom
 
       {/* Collapsible Mobile Ping Bar */}
       {mobilePingOpen && (
-        <div className="xl:hidden flex flex-wrap items-center gap-2 border-b bg-muted/80 backdrop-blur px-3 py-2 text-xs">
+        <div className="xl:hidden flex flex-wrap items-center gap-2 border-b bg-muted px-3 py-2 text-xs">
           <span className="font-semibold text-foreground">Ping:</span>
           <Select value={pingSource || null} onValueChange={(value) => setPingSource(value ?? '')}>
             <SelectTrigger className="w-36 h-8 text-xs">
@@ -670,17 +697,20 @@ export function Toolbar({ onTriggerPing, onOpenDocs, onOpenLabs, onOpenClassroom
                   if (!value) return 'Host Sumber';
                   const selected = pingableNodes.find((n) => n.id === value);
                   if (!selected) return value;
-                  const ip = selected.data.ports.find((p) => p.ipAddress)?.ipAddress;
+                  const ip = getNodeDisplayIp(selected);
                   return ip ? `${selected.data.label} (${ip})` : selected.data.label;
                 }}
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
-              {pingableNodes.map((n) => (
-                <SelectItem key={n.id} value={n.id}>
-                  {n.data.label} ({n.data.ports.find((p) => p.ipAddress)?.ipAddress})
-                </SelectItem>
-              ))}
+              {pingableNodes.map((n) => {
+                const ip = getNodeDisplayIp(n);
+                return (
+                  <SelectItem key={n.id} value={n.id}>
+                    {n.data.label}{ip ? ` (${ip})` : ''}
+                  </SelectItem>
+                );
+              })}
             </SelectContent>
           </Select>
 

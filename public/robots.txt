@@ -1,0 +1,16 @@
+# OpenPacket - Simulator Jaringan Edukasi
+# https://openpacket.zuhri.my.id
+
+User-agent: *
+Allow: /
+
+# Aset statis boleh di-crawl (CSS/JS dibutuhkan untuk render SPA)
+Allow: /assets/
+Allow: /*.js
+Allow: /*.css
+Allow: /*.svg
+
+# Jangan crawl endpoint relay mode kelas (API internal, bukan konten)
+Disallow: /api/
+
+Sitemap: https://openpacket.zuhri.my.id/sitemap.xml

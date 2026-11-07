@@ -69,7 +69,7 @@ export function TextNoteNode({ id, data, selected }: NodeProps) {
       {selected && !editing && (
         <div className="absolute -top-7 left-0 flex items-center gap-1 rounded bg-popover border border-border px-1.5 py-1 shadow-md">
           <span className="flex items-center gap-1 text-[10px] text-foreground/80 pr-0.5">
-            <Type className="h-3 w-3 text-blue-400" />
+            <Type className="h-3 w-3 text-viz-blue" />
             {fontSize}px
           </span>
           <button
@@ -90,7 +90,7 @@ export function TextNoteNode({ id, data, selected }: NodeProps) {
           <button
             onClick={(e) => { e.stopPropagation(); setDraft(text); setEditing(true); }}
             title="Edit teks"
-            className="rounded px-1 text-[10px] text-blue-300 hover:bg-accent hover:text-foreground"
+            className="rounded px-1 text-[10px] text-viz-blue hover:bg-accent hover:text-foreground"
           >
             Edit
           </button>
@@ -98,7 +98,7 @@ export function TextNoteNode({ id, data, selected }: NodeProps) {
             onClick={(e) => { e.stopPropagation(); deleteNode(id); }}
             title="Hapus teks"
             aria-label="Hapus teks"
-            className="ml-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-950/80 text-red-300 hover:bg-red-600 hover:text-white"
+            className="ml-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-viz-red/10 text-viz-red hover:bg-viz-red hover:text-on-viz"
           >
             <X className="h-3 w-3" />
           </button>

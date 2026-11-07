@@ -52,7 +52,7 @@ describe('useAppStore — integritas status port saat penghapusan perangkat', ()
     // kabel A-B, lalu tambah C yang tidak terkabel
     useAppStore.getState().connectPorts(a.id, 'fa0', b.id, 'fa0');
     useAppStore.getState().addDevice('laptop', { x: 400, y: 0 });
-    const c = useAppStore.getState().nodes[2];
+    const c = useAppStore.getState().nodes.find((n) => n.id !== a.id && n.id !== b.id)!;
 
     useAppStore.getState().deleteNode(c.id);
 
@@ -200,5 +200,24 @@ describe('useAppStore — anotasi kanvas (square & teks, v1.4.0)', () => {
     const updated = useAppStore.getState().nodes[0].data;
     expect(updated.text).toBe('LAN A');
     expect(updated.fontSize).toBe(22);
+  });
+
+  it('menyimpan dan mengenali sub-interface Router-on-a-Stick pada port router', () => {
+    useAppStore.getState().addDevice('router', { x: 0, y: 0 });
+    const routerNode = useAppStore.getState().nodes[0];
+    const portId = routerNode.data.ports[0].id;
+
+    useAppStore.getState().updatePortConfig(routerNode.id, portId, {
+      subInterfaces: [
+        { vlanId: 10, ipAddress: '192.168.10.1', subnetMask: '255.255.255.0' },
+        { vlanId: 20, ipAddress: '192.168.20.1', subnetMask: '255.255.255.0' },
+      ],
+    });
+
+    const updatedDev = useAppStore.getState().nodes[0].data;
+    const targetPort = updatedDev.ports.find((p) => p.id === portId);
+    expect(targetPort?.subInterfaces).toBeDefined();
+    expect(targetPort?.subInterfaces?.length).toBe(2);
+    expect(targetPort?.subInterfaces?.[0].ipAddress).toBe('192.168.10.1');
   });
 });

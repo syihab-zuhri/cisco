@@ -6,20 +6,16 @@ import {
 } from '@xyflow/react';
 import { X } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
+import { PacketAnimation } from './PacketAnimation';
+import { packetColor as protocolColor, SELECTED_LINK_COLOR } from './packetColors';
 
 /**
  * Asosiasi nirkabel (klien WiFi <-> radio Access Point): garis putus-putus
  * dengan badge SSID. Animasi paket tetap berjalan di sepanjang asosiasi.
  */
 
-const PROTOCOL_COLORS: Record<string, string> = {
-  ARP: '#10B981',
-  ICMP: '#06B6D4',
-  DHCP: '#F59E0B',
-  RIP: '#A78BFA',
-};
-const packetColor = (protocol: string | undefined): string =>
-  PROTOCOL_COLORS[protocol ?? ''] ?? '#8B5CF6';
+const WIFI_COLOR = 'var(--viz-violet)';
+const packetColor = (protocol: string | undefined): string => protocolColor(protocol, WIFI_COLOR);
 
 export function WirelessLinkEdge({
   id,
@@ -44,7 +40,7 @@ export function WirelessLinkEdge({
     targetPosition,
   });
 
-  const { activePackets, disconnectEdge } = useAppStore();
+  const { activePackets, disconnectEdge, simulationStatus } = useAppStore();
 
   const ssid = (data?.ssid as string | undefined) ?? 'WiFi';
 
@@ -59,7 +55,11 @@ export function WirelessLinkEdge({
   // Badge tampil HANYA jika asosiasi diklik (terpilih) atau ada paket aktif — tanpa hover
   const shouldShowBadge = Boolean(activePacket || selected);
   const isEmphasized = Boolean(activePacket || selected);
-  const color = activePacket ? packetColor(activePacket.currentProtocol) : '#8B5CF6';
+  const color = activePacket
+    ? packetColor(activePacket.currentProtocol)
+    : selected
+    ? SELECTED_LINK_COLOR
+    : WIFI_COLOR;
 
   return (
     <>
@@ -75,9 +75,9 @@ export function WirelessLinkEdge({
       <path
         d={edgePath}
         fill="none"
-        stroke={activePacket ? color : selected ? '#A78BFA' : '#8B5CF6'}
+        stroke={color}
         strokeWidth={isEmphasized ? 8 : 6}
-        strokeOpacity={isEmphasized ? 0.5 : 0.15}
+        strokeOpacity={isEmphasized ? 0.35 : 0.15}
         strokeDasharray="2 8"
         strokeLinecap="round"
         className="pointer-events-none transition-all duration-200"
@@ -87,47 +87,19 @@ export function WirelessLinkEdge({
         id={`wifi-path-${id}`}
         path={edgePath}
         style={{
-          stroke: activePacket ? color : selected ? '#A78BFA' : '#8B5CF6',
+          stroke: color,
           strokeWidth: isEmphasized ? 3 : 2.5,
           strokeDasharray: '7 6',
         }}
       />
 
       {/* Paket berjalan di sepanjang asosiasi */}
-      {activePacket && (
-        <g className="pointer-events-none">
-          <circle r="7" fill={color}>
-            <animateMotion
-              path={edgePath}
-              dur="0.8s"
-              repeatCount="indefinite"
-              keyPoints={isForwardDirection ? '0;1' : '1;0'}
-              keyTimes="0;1"
-            />
-          </circle>
-          <g>
-            <animateMotion
-              path={edgePath}
-              dur="0.8s"
-              repeatCount="indefinite"
-              keyPoints={isForwardDirection ? '0;1' : '1;0'}
-              keyTimes="0;1"
-            />
-            <rect
-              x="-11"
-              y="-8"
-              width="22"
-              height="16"
-              rx="3"
-              fill="#0F172A"
-              stroke={color}
-              strokeWidth="2"
-            />
-            <line x1="-9" y1="-6" x2="0" y2="1" stroke={color} strokeWidth="1.5" />
-            <line x1="9" y1="-6" x2="0" y2="1" stroke={color} strokeWidth="1.5" />
-          </g>
-        </g>
-      )}
+      {activePacket && <PacketAnimation
+        key={`${activePacket.packetId}:${activePacket.sourceNodeId}:${activePacket.targetNodeId}:${activePacket.sourcePortId}:${activePacket.targetPortId}`}
+        path={edgePath}
+        color={color}
+        forward={Boolean(isForwardDirection)}
+      />}
 
       <EdgeLabelRenderer>
         <div
@@ -137,19 +109,17 @@ export function WirelessLinkEdge({
             opacity: shouldShowBadge ? 1 : 0,
             pointerEvents: shouldShowBadge ? 'all' : 'none',
             transformOrigin: 'center center',
+            borderColor: color,
           }}
-          className={`nodrag nopan flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-mono text-foreground border-2 shadow-xl backdrop-blur-md transition-all duration-200 cursor-pointer ${
-            activePacket
-              ? 'bg-violet-950/95 border-violet-400 scale-110 shadow-violet-500/50'
-              : 'bg-popover/95 border-violet-500/80'
+          className={`nodrag nopan flex items-center gap-1.5 rounded-full bg-card px-2.5 py-1 text-[11px] font-mono text-foreground border-2 shadow-xl transition-all duration-200 cursor-pointer ${
+            activePacket ? 'scale-110' : ''
           }`}
         >
           <span
-            className={`flex h-2 w-2 rounded-full ${
-              activePacket ? 'bg-violet-300 animate-ping' : 'bg-violet-400 animate-pulse'
-            }`}
+            className={`flex h-2 w-2 rounded-full ${activePacket ? (simulationStatus === 'paused' ? '' : 'animate-ping') : 'animate-pulse'}`}
+            style={{ backgroundColor: color }}
           />
-          <span className="font-bold text-violet-300 font-sans tracking-wide">
+          <span className="font-bold font-sans tracking-wide" style={{ color: activePacket ? color : WIFI_COLOR }}>
             {activePacket ? activePacket.type : `WiFi: ${ssid}`}
           </span>
           {/* Tombol putus asosiasi — hanya saat dipilih */}
@@ -161,7 +131,7 @@ export function WirelessLinkEdge({
               }}
               title="Putus asosiasi WiFi ini"
               aria-label="Putus asosiasi WiFi"
-              className="ml-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-950/80 text-red-300 hover:bg-red-600 hover:text-white"
+              className="ml-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-viz-red/10 text-viz-red hover:bg-viz-red hover:text-on-viz"
             >
               <X className="h-3 w-3" />
             </button>

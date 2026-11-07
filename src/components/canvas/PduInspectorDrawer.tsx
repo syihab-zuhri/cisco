@@ -31,11 +31,11 @@ export function PduInspectorDrawer() {
   const pdu = inspectorEvent?.pdu;
 
   return (
-    <div className="absolute right-2 top-2 bottom-2 z-20 flex w-[calc(100vw-1rem)] sm:w-80 max-w-[320px] flex-col rounded-lg border border-violet-800/60 bg-popover/95 shadow-2xl backdrop-blur-sm">
+    <div className="absolute right-2 top-2 bottom-2 z-20 flex w-[calc(100vw-1rem)] sm:w-80 max-w-[320px] flex-col rounded-lg border border-viz-violet/40 bg-popover shadow-2xl">
       {/* Header */}
       <div className="flex h-9 items-center justify-between border-b border-border px-3">
         <div className="flex items-center gap-2">
-          <ScanLine className="h-3.5 w-3.5 text-violet-400" />
+          <ScanLine className="h-3.5 w-3.5 text-viz-violet" />
           <span className="text-[11px] font-bold uppercase tracking-wider text-foreground">
             PDU Inspector
           </span>
@@ -55,7 +55,7 @@ export function PduInspectorDrawer() {
             className={cn(
               'h-6 w-6',
               inspectorAutoFollow
-                ? 'text-violet-300 bg-violet-950/60'
+                ? 'text-viz-violet bg-viz-violet/10'
                 : 'text-muted-foreground'
             )}
           >
@@ -82,19 +82,19 @@ export function PduInspectorDrawer() {
           </div>
         ) : !pdu ? (
           <div className="text-muted-foreground italic text-center py-4">
-            Event ini bukan paket (log internal). Pilih event ARP_REQ/ARP_REP/ICMP_REQ/ICMP_REP.
+            Event ini bukan paket (log internal). Pilih event paket di linimasa simulasi.
           </div>
         ) : (
           <>
             {pdu.note && (
-              <div className="rounded bg-violet-950/50 border border-violet-800/60 p-2 text-violet-200">
+              <div className="rounded bg-viz-violet/10 border border-viz-violet/40 p-2 text-viz-violet">
                 {pdu.note}
               </div>
             )}
 
             {/* L2 — Ethernet Frame */}
-            <div className="rounded border border-emerald-800/60 bg-background/40 p-2.5">
-              <div className="text-[11px] font-bold uppercase text-emerald-400 mb-1.5">
+            <div className="rounded border border-viz-green/40 bg-background/40 p-2.5">
+              <div className="text-[11px] font-bold uppercase text-viz-green mb-1.5">
                 L2 · Ethernet Frame
               </div>
               <HeaderRow label="Src MAC" value={pdu.frame.srcMac} />
@@ -107,12 +107,16 @@ export function PduInspectorDrawer() {
                 }
               />
               <HeaderRow label="Ethertype" value={`0x${pdu.frame.ethertype === 'ARP' ? '0806' : '0800'} (${pdu.frame.ethertype})`} />
+              <HeaderRow
+                label="802.1Q VLAN"
+                value={pdu.frame.vlanId ? `VLAN ${pdu.frame.vlanId}` : 'Untagged / Native (VLAN 1)'}
+              />
             </div>
 
             {/* L3 — IPv4 Packet */}
             {pdu.packet && (
-              <div className="rounded border border-violet-800/60 bg-background/40 p-2.5">
-                <div className="text-[11px] font-bold uppercase text-violet-400 mb-1.5">
+              <div className="rounded border border-viz-violet/40 bg-background/40 p-2.5">
+                <div className="text-[11px] font-bold uppercase text-viz-violet mb-1.5">
                   L3 · IPv4 Packet
                 </div>
                 <HeaderRow label="Src IP" value={pdu.packet.srcIp} />
@@ -134,8 +138,8 @@ export function PduInspectorDrawer() {
 
             {/* L4 — ARP / ICMP */}
             {pdu.segment && isArp(pdu.segment) ? (
-              <div className="rounded border border-cyan-800/60 bg-background/40 p-2.5">
-                <div className="text-[11px] font-bold uppercase text-cyan-400 mb-1.5">
+              <div className="rounded border border-viz-teal/40 bg-background/40 p-2.5">
+                <div className="text-[11px] font-bold uppercase text-viz-teal mb-1.5">
                   L4 payload · ARP (RFC 826)
                 </div>
                 <HeaderRow
@@ -149,8 +153,8 @@ export function PduInspectorDrawer() {
                 />
               </div>
             ) : pdu.segment ? (
-              <div className="rounded border border-cyan-800/60 bg-background/40 p-2.5">
-                <div className="text-[11px] font-bold uppercase text-cyan-400 mb-1.5">
+              <div className="rounded border border-viz-teal/40 bg-background/40 p-2.5">
+                <div className="text-[11px] font-bold uppercase text-viz-teal mb-1.5">
                   L4 payload · ICMP (RFC 792)
                 </div>
                 <HeaderRow
@@ -166,8 +170,8 @@ export function PduInspectorDrawer() {
 
             {/* DHCP (UDP 67/68) */}
             {pdu.dhcp && (
-              <div className="rounded border border-amber-800/60 bg-background/40 p-2.5">
-                <div className="text-[11px] font-bold uppercase text-amber-400 mb-1.5">
+              <div className="rounded border border-viz-gold/40 bg-background/40 p-2.5">
+                <div className="text-[11px] font-bold uppercase text-viz-gold mb-1.5">
                   L4 payload · DHCP (UDP 67/68)
                 </div>
                 <HeaderRow
@@ -178,6 +182,14 @@ export function PduInspectorDrawer() {
                     ] ?? String(pdu.dhcp.messageType)
                   }
                 />
+                <HeaderRow
+                  label="Source Port"
+                  value={pdu.dhcp.messageType === 1 || pdu.dhcp.messageType === 3 ? 'UDP 68 (BootPC)' : 'UDP 67 (BootPS)'}
+                />
+                <HeaderRow
+                  label="Dest Port"
+                  value={pdu.dhcp.messageType === 1 || pdu.dhcp.messageType === 3 ? 'UDP 67 (BootPS)' : 'UDP 68 (BootPC)'}
+                />
                 <HeaderRow label="Client MAC" value={pdu.dhcp.clientId} />
                 {pdu.dhcp.yiaddr && <HeaderRow label="yiaddr (IP)" value={pdu.dhcp.yiaddr} />}
                 {pdu.dhcp.serverId && <HeaderRow label="Server ID" value={pdu.dhcp.serverId} />}
@@ -186,8 +198,8 @@ export function PduInspectorDrawer() {
 
             {/* RIP (UDP 520) */}
             {pdu.packet?.protocol === 'RIP' && (
-              <div className="rounded border border-indigo-800/60 bg-background/40 p-2.5">
-                <div className="text-[11px] font-bold uppercase text-indigo-400 mb-1.5">
+              <div className="rounded border border-viz-blue/40 bg-background/40 p-2.5">
+                <div className="text-[11px] font-bold uppercase text-viz-blue mb-1.5">
                   L4 payload · RIPv2 (UDP 520)
                 </div>
                 <HeaderRow label="Routing Protocol" value="RIPv2 (RFC 2453)" />

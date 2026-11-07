@@ -1,6 +1,18 @@
 import { type Node, type Edge } from '@xyflow/react';
 import { type DeviceData } from '../types/network';
 
+/** MAC adapter WiFi turunan deterministik dari MAC Ethernet (format valid). */
+function derivedWifiMac(mac: string): string {
+  let h = 0x811c9dc5;
+  const seed = `${mac}#wifi`;
+  for (let i = 0; i < seed.length; i++) {
+    h ^= seed.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  const hex = (n: number) => n.toString(16).toUpperCase().padStart(2, '0');
+  return `00:50:79:${hex((h >>> 16) & 0xff)}:${hex((h >>> 8) & 0xff)}:${hex(h & 0xff)}`;
+}
+
 /**
  * Mode Lab Praktikum (blueprint P1, PLANNING.md §5.2): skenario latihan
  * pre-built dengan topologi terkunci dan kriteria verifikasi otomatis.
@@ -116,7 +128,7 @@ const pc = (
         macAddress: mac,
         ...(linkedEdge ? { connectedEdgeId: linkedEdge, connectedToNodeId: linkedNode, connectedToPortId: 'fa0/0' } : {}),
       },
-      { id: 'wla0', name: 'Wireless Adapter', status: 'down', kind: 'wireless', macAddress: `${mac}:W`, ssid: '' },
+      { id: 'wla0', name: 'Wireless Adapter', status: 'down', kind: 'wireless', macAddress: derivedWifiMac(mac), ssid: '' },
     ],
     arpTable: {},
   },
@@ -140,7 +152,7 @@ const labGatewaySalah: LabScenario = {
     'PC-Staff (192.168.1.10) mengeluh tidak bisa menjangkau server di subnet lain (192.168.2.20). Konfigurasi kabel dan IP sudah benar — tapi ada satu kesalahan konfigurasi yang harus Anda temukan dan perbaiki.',
   difficulty: 'Dasar',
   nodes: [
-    pc('pc-1', 'PC-Staff', '192.168.1.10', '192.168.1.99', '00:50:79:L1:01:01', 120, 320, 'edge-l1-pc1', 'r-1'),
+    pc('pc-1', 'PC-Staff', '192.168.1.10', '192.168.1.99', '00:50:79:9C:4A:B9', 120, 320, 'edge-l1-pc1', 'r-1'),
     {
       id: 'r-1',
       type: 'deviceNode',
@@ -150,15 +162,15 @@ const labGatewaySalah: LabScenario = {
         label: 'Router-1',
         type: 'router',
         ports: [
-          { ...routerInterface('fa0/0', 'FastEthernet 0/0 (LAN A)', '192.168.1.1', '00:50:79:L1:RT:01'), connectedEdgeId: 'edge-l1-pc1', connectedToNodeId: 'pc-1', connectedToPortId: 'fa0' },
-          { ...routerInterface('fa0/1', 'FastEthernet 0/1 (LAN B)', '192.168.2.1', '00:50:79:L1:RT:02'), connectedEdgeId: 'edge-l1-pc2', connectedToNodeId: 'pc-2', connectedToPortId: 'fa0' },
-          { id: 'fa0/2', name: 'FastEthernet 0/2', status: 'down', kind: 'ethernet', macAddress: '00:50:79:L1:RT:03' },
+          { ...routerInterface('fa0/0', 'FastEthernet 0/0 (LAN A)', '192.168.1.1', '00:50:79:6E:6C:B2'), connectedEdgeId: 'edge-l1-pc1', connectedToNodeId: 'pc-1', connectedToPortId: 'fa0' },
+          { ...routerInterface('fa0/1', 'FastEthernet 0/1 (LAN B)', '192.168.2.1', '00:50:79:6E:6B:1F'), connectedEdgeId: 'edge-l1-pc2', connectedToNodeId: 'pc-2', connectedToPortId: 'fa0' },
+          { id: 'fa0/2', name: 'FastEthernet 0/2', status: 'down', kind: 'ethernet', macAddress: '00:50:79:6E:69:8C' },
         ],
         routes: [],
         arpTable: {},
       },
     },
-    pc('pc-2', 'Server-2', '192.168.2.20', '192.168.2.1', '00:50:79:L1:02:01', 660, 320, 'edge-l1-pc2', 'r-1'),
+    pc('pc-2', 'Server-2', '192.168.2.20', '192.168.2.1', '00:50:79:DC:1D:B6', 660, 320, 'edge-l1-pc2', 'r-1'),
   ],
   edges: [
     { id: 'edge-l1-pc1', source: 'pc-1', target: 'r-1', sourceHandle: 'fa0', targetHandle: 'fa0/0', type: 'networkCable', data: { sourcePortName: 'fa0', targetPortName: 'fa0/0 (LAN A)' } },
@@ -183,7 +195,7 @@ const labNatInternet: LabScenario = {
     'Router sudah punya default route ke Cloud, tapi host lokal belum bisa menjangkau 8.8.8.8. Aktifkan NAT pada interface WAN, buktikan dengan ping, dan amati tabel translasinya.',
   difficulty: 'Menengah',
   nodes: [
-    pc('pc-1', 'PC-Rumah', '192.168.10.20', '192.168.10.1', '00:50:79:L2:01:01', 120, 300, 'edge-l2-pc', 'r-1'),
+    pc('pc-1', 'PC-Rumah', '192.168.10.20', '192.168.10.1', '00:50:79:93:96:A4', 120, 300, 'edge-l2-pc', 'r-1'),
     {
       id: 'r-1',
       type: 'deviceNode',
@@ -193,11 +205,11 @@ const labNatInternet: LabScenario = {
         label: 'Router-Rumah',
         type: 'router',
         ports: [
-          { ...routerInterface('fa0/0', 'FastEthernet 0/0 (LAN)', '192.168.10.1', '00:50:79:L2:RT:01'), connectedEdgeId: 'edge-l2-pc', connectedToNodeId: 'pc-1', connectedToPortId: 'fa0' },
-          { id: 'fa0/1', name: 'FastEthernet 0/1', status: 'down', kind: 'ethernet', macAddress: '00:50:79:L2:RT:02' },
+          { ...routerInterface('fa0/0', 'FastEthernet 0/0 (LAN)', '192.168.10.1', '00:50:79:89:3E:C3'), connectedEdgeId: 'edge-l2-pc', connectedToNodeId: 'pc-1', connectedToPortId: 'fa0' },
+          { id: 'fa0/1', name: 'FastEthernet 0/1', status: 'down', kind: 'ethernet', macAddress: '00:50:79:89:40:56' },
           {
             id: 'fa0/2', name: 'FastEthernet 0/2 (WAN)', status: 'up', kind: 'ethernet',
-            ipAddress: '203.0.113.1', subnetMask: '255.255.255.252', macAddress: '00:50:79:L2:RT:03',
+            ipAddress: '203.0.113.1', subnetMask: '255.255.255.252', macAddress: '00:50:79:89:41:E9',
             connectedEdgeId: 'edge-l2-cloud', connectedToNodeId: 'cloud-1', connectedToPortId: 'wan0',
           },
         ],
@@ -214,8 +226,8 @@ const labNatInternet: LabScenario = {
         label: 'Cloud',
         type: 'cloud',
         ports: [
-          { id: 'wan0', name: 'WAN 0', status: 'up', kind: 'ethernet', ipAddress: '203.0.113.2', subnetMask: '255.255.255.252', macAddress: '00:50:79:L2:CL:01', connectedEdgeId: 'edge-l2-cloud', connectedToNodeId: 'r-1', connectedToPortId: 'fa0/2' },
-          { id: 'wan1', name: 'WAN 1', status: 'down', kind: 'ethernet', macAddress: '00:50:79:L2:CL:02' },
+          { id: 'wan0', name: 'WAN 0', status: 'up', kind: 'ethernet', ipAddress: '203.0.113.2', subnetMask: '255.255.255.252', macAddress: '00:50:79:5A:AE:40', connectedEdgeId: 'edge-l2-cloud', connectedToNodeId: 'r-1', connectedToPortId: 'fa0/2' },
+          { id: 'wan1', name: 'WAN 1', status: 'down', kind: 'ethernet', macAddress: '00:50:79:5A:B2:F9' },
         ],
         arpTable: {},
       },
@@ -253,9 +265,9 @@ const labVlan: LabScenario = {
         label: 'Router-1',
         type: 'router',
         ports: [
-          { id: 'fa0/0', name: 'FastEthernet 0/0 (Trunk)', status: 'up', kind: 'ethernet', portMode: 'trunk', macAddress: '00:50:79:L3:RT:01', connectedEdgeId: 'edge-l3-r-sw', connectedToNodeId: 'sw-1', connectedToPortId: 'fa0/1' },
-          { id: 'fa0/1', name: 'FastEthernet 0/1', status: 'down', kind: 'ethernet', macAddress: '00:50:79:L3:RT:02' },
-          { id: 'fa0/2', name: 'FastEthernet 0/2', status: 'down', kind: 'ethernet', macAddress: '00:50:79:L3:RT:03' },
+          { id: 'fa0/0', name: 'FastEthernet 0/0 (Trunk)', status: 'up', kind: 'ethernet', portMode: 'trunk', macAddress: '00:50:79:48:25:BC', connectedEdgeId: 'edge-l3-r-sw', connectedToNodeId: 'sw-1', connectedToPortId: 'fa0/1' },
+          { id: 'fa0/1', name: 'FastEthernet 0/1', status: 'down', kind: 'ethernet', macAddress: '00:50:79:48:2A:75' },
+          { id: 'fa0/2', name: 'FastEthernet 0/2', status: 'down', kind: 'ethernet', macAddress: '00:50:79:48:28:E2' },
         ],
         routes: [],
         arpTable: {},
@@ -270,14 +282,14 @@ const labVlan: LabScenario = {
         label: 'Switch-1',
         type: 'switch',
         ports: [
-          { id: 'fa0/1', name: 'FastEthernet 0/1', status: 'up', kind: 'ethernet', portMode: 'trunk', macAddress: '00:50:79:L3:SW:01', connectedEdgeId: 'edge-l3-r-sw', connectedToNodeId: 'r-1', connectedToPortId: 'fa0/0' },
-          { id: 'fa0/2', name: 'FastEthernet 0/2', status: 'up', kind: 'ethernet', portMode: 'access', vlanId: 10, macAddress: '00:50:79:L3:SW:02', connectedEdgeId: 'edge-l3-pc1', connectedToNodeId: 'pc-1', connectedToPortId: 'fa0' },
-          { id: 'fa0/3', name: 'FastEthernet 0/3', status: 'up', kind: 'ethernet', portMode: 'access', vlanId: 20, macAddress: '00:50:79:L3:SW:03', connectedEdgeId: 'edge-l3-pc2', connectedToNodeId: 'pc-2', connectedToPortId: 'fa0' },
-          { id: 'fa0/4', name: 'FastEthernet 0/4', status: 'down', kind: 'ethernet', macAddress: '00:50:79:L3:SW:04' },
-          { id: 'fa0/5', name: 'FastEthernet 0/5', status: 'down', kind: 'ethernet', macAddress: '00:50:79:L3:SW:05' },
-          { id: 'fa0/6', name: 'FastEthernet 0/6', status: 'down', kind: 'ethernet', macAddress: '00:50:79:L3:SW:06' },
-          { id: 'fa0/7', name: 'FastEthernet 0/7', status: 'down', kind: 'ethernet', macAddress: '00:50:79:L3:SW:07' },
-          { id: 'fa0/8', name: 'FastEthernet 0/8', status: 'down', kind: 'ethernet', macAddress: '00:50:79:L3:SW:08' },
+          { id: 'fa0/1', name: 'FastEthernet 0/1', status: 'up', kind: 'ethernet', portMode: 'trunk', macAddress: '00:50:79:C3:EC:C0', connectedEdgeId: 'edge-l3-r-sw', connectedToNodeId: 'r-1', connectedToPortId: 'fa0/0' },
+          { id: 'fa0/2', name: 'FastEthernet 0/2', status: 'up', kind: 'ethernet', portMode: 'access', vlanId: 10, macAddress: '00:50:79:C3:F1:79', connectedEdgeId: 'edge-l3-pc1', connectedToNodeId: 'pc-1', connectedToPortId: 'fa0' },
+          { id: 'fa0/3', name: 'FastEthernet 0/3', status: 'up', kind: 'ethernet', portMode: 'access', vlanId: 20, macAddress: '00:50:79:C3:EF:E6', connectedEdgeId: 'edge-l3-pc2', connectedToNodeId: 'pc-2', connectedToPortId: 'fa0' },
+          { id: 'fa0/4', name: 'FastEthernet 0/4', status: 'down', kind: 'ethernet', macAddress: '00:50:79:C3:F4:9F' },
+          { id: 'fa0/5', name: 'FastEthernet 0/5', status: 'down', kind: 'ethernet', macAddress: '00:50:79:C3:F3:0C' },
+          { id: 'fa0/6', name: 'FastEthernet 0/6', status: 'down', kind: 'ethernet', macAddress: '00:50:79:C3:F7:C5' },
+          { id: 'fa0/7', name: 'FastEthernet 0/7', status: 'down', kind: 'ethernet', macAddress: '00:50:79:C3:F6:32' },
+          { id: 'fa0/8', name: 'FastEthernet 0/8', status: 'down', kind: 'ethernet', macAddress: '00:50:79:C3:FA:EB' },
         ],
         macTable: {},
       },
@@ -292,8 +304,8 @@ const labVlan: LabScenario = {
         type: 'pc',
         defaultGateway: '192.168.10.1',
         ports: [
-          { id: 'fa0', name: 'FastEthernet 0', status: 'up', kind: 'ethernet', vlanId: 10, ipAddress: '192.168.10.10', subnetMask: '255.255.255.0', macAddress: '00:50:79:L3:P1:01', connectedEdgeId: 'edge-l3-pc1', connectedToNodeId: 'sw-1', connectedToPortId: 'fa0/2' },
-          { id: 'wla0', name: 'Wireless Adapter', status: 'down', kind: 'wireless', macAddress: '00:50:79:L3:P1:02', ssid: '' },
+          { id: 'fa0', name: 'FastEthernet 0', status: 'up', kind: 'ethernet', vlanId: 10, ipAddress: '192.168.10.10', subnetMask: '255.255.255.0', macAddress: '00:50:79:EC:38:47', connectedEdgeId: 'edge-l3-pc1', connectedToNodeId: 'sw-1', connectedToPortId: 'fa0/2' },
+          { id: 'wla0', name: 'Wireless Adapter', status: 'down', kind: 'wireless', macAddress: '00:50:79:EC:39:DA', ssid: '' },
         ],
         arpTable: {},
       },
@@ -308,8 +320,8 @@ const labVlan: LabScenario = {
         type: 'pc',
         defaultGateway: '192.168.20.1',
         ports: [
-          { id: 'fa0', name: 'FastEthernet 0', status: 'up', kind: 'ethernet', vlanId: 20, ipAddress: '192.168.20.10', subnetMask: '255.255.255.0', macAddress: '00:50:79:L3:P2:01', connectedEdgeId: 'edge-l3-pc2', connectedToNodeId: 'sw-1', connectedToPortId: 'fa0/3' },
-          { id: 'wla0', name: 'Wireless Adapter', status: 'down', kind: 'wireless', macAddress: '00:50:79:L3:P2:02', ssid: '' },
+          { id: 'fa0', name: 'FastEthernet 0', status: 'up', kind: 'ethernet', vlanId: 20, ipAddress: '192.168.20.10', subnetMask: '255.255.255.0', macAddress: '00:50:79:8C:07:10', connectedEdgeId: 'edge-l3-pc2', connectedToNodeId: 'sw-1', connectedToPortId: 'fa0/3' },
+          { id: 'wla0', name: 'Wireless Adapter', status: 'down', kind: 'wireless', macAddress: '00:50:79:8C:0B:C9', ssid: '' },
         ],
         arpTable: {},
       },

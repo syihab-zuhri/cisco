@@ -1,5 +1,6 @@
-import type { Exercise, ExerciseTarget, Submission } from './types';
+import type { Exercise, ExerciseCheck, ExerciseEvaluation, ExerciseTarget, StarterTopology, Submission, Participant } from './types';
 import type { DeviceType } from '../../types/network';
+import { isValidIp, isValidSubnetMask } from '../../utils/ipUtils';
 import { isTopologyJson, convertTopologyToExercise } from './topologyExerciseConverter';
 
 const STORAGE_KEY_EXERCISES = 'openpacket_classroom_exercises';
@@ -13,7 +14,7 @@ export interface ParseExerciseResult {
 export interface ParseSubmissionResult {
   success: boolean;
   submission?: Submission;
-  topology?: { nodes: any[]; edges: any[] };
+  topology?: StarterTopology;
   error?: string;
 }
 
@@ -51,19 +52,30 @@ export function validateExerciseTarget(target: unknown, index: number): { target
       if (!devId || typeof devId !== 'string') {
         return { error: `Target "${title}": field "deviceId" wajib diisi string (mis. "PC-1").` };
       }
-      if (!addr || typeof addr !== 'string') {
-        return { error: `Target "${title}": field "address" wajib diisi IP valid (mis. "192.168.1.10").` };
+      if (!addr || typeof addr !== 'string' || !isValidIp(addr.trim())) {
+        return { error: `Target "${title}": field "address" wajib diisi IPv4 valid (mis. "192.168.1.10").` };
+      }
+      const rawMask = typeof t.subnetMask === 'string' ? t.subnetMask : typeof t.expectedMask === 'string' ? t.expectedMask : undefined;
+      if (rawMask !== undefined && !isValidSubnetMask(rawMask.trim())) {
+        return { error: `Target "${title}": "subnetMask" bukan subnet mask yang valid (mis. "255.255.255.0").` };
+      }
+      const rawGateway = typeof t.gateway === 'string' ? t.gateway : typeof t.defaultGateway === 'string' ? t.defaultGateway : undefined;
+      if (rawGateway !== undefined && rawGateway.trim() && !isValidIp(rawGateway.trim())) {
+        return { error: `Target "${title}": "gateway" bukan IPv4 yang valid.` };
+      }
+      if (t.prefix !== undefined && (!Number.isInteger(t.prefix) || (t.prefix as number) < 0 || (t.prefix as number) > 32)) {
+        return { error: `Target "${title}": "prefix" harus bilangan bulat 0-32.` };
       }
       return {
         target: {
           id,
           title,
           type: 'device_config',
-          deviceId: devId,
-          address: addr,
-          subnetMask: typeof t.subnetMask === 'string' ? t.subnetMask : (typeof t.expectedMask === 'string' ? t.expectedMask : undefined),
+          deviceId: devId.trim(),
+          address: addr.trim(),
+          subnetMask: rawMask?.trim(),
           prefix: typeof t.prefix === 'number' ? t.prefix : undefined,
-          gateway: typeof t.gateway === 'string' ? t.gateway : (typeof t.defaultGateway === 'string' ? t.defaultGateway : undefined),
+          gateway: rawGateway?.trim() || undefined,
         },
       };
     }
@@ -110,9 +122,9 @@ export function validateExerciseTarget(target: unknown, index: number): { target
       const count = Number(t.count);
       const validDeviceTypes: DeviceType[] = ['router', 'switch', 'pc', 'laptop', 'server', 'accessPoint', 'hub', 'cloud'];
       const rawType = t.deviceType === 'access_point' ? 'accessPoint' : (t.deviceType as DeviceType);
-      if (!rawType || !validDeviceTypes.includes(rawType) || isNaN(count) || count <= 0) {
+      if (!rawType || !validDeviceTypes.includes(rawType) || !Number.isInteger(count) || count <= 0 || count > 500) {
         return {
-          error: `Target "${title}": field "deviceType" (${validDeviceTypes.join('/')}) dan "count" (> 0) wajib diisi.`,
+          error: `Target "${title}": field "deviceType" (${validDeviceTypes.join('/')}) dan "count" (bilangan bulat 1-500) wajib diisi.`,
         };
       }
       return {
@@ -127,11 +139,14 @@ export function validateExerciseTarget(target: unknown, index: number): { target
     }
 
     case 'vlan_config': {
-      const vlanId = Number(t.vlanId);
-      if (!t.deviceId || !t.portId || isNaN(vlanId)) {
+      const vlanId = typeof t.vlanId === 'number' || (typeof t.vlanId === 'string' && t.vlanId.trim() !== '') ? Number(t.vlanId) : NaN;
+      if (!t.deviceId || !t.portId) {
         return {
           error: `Target "${title}": field "deviceId", "portId", dan "vlanId" (angka) wajib diisi.`,
         };
+      }
+      if (!Number.isInteger(vlanId) || vlanId < 1 || vlanId > 4094) {
+        return { error: `Target "${title}": "vlanId" harus bilangan bulat 1-4094.` };
       }
       return {
         target: {
@@ -187,6 +202,20 @@ export function validateExercise(item: unknown, itemIndex: number = 0): { exerci
     }
   }
 
+  let starterTopology: StarterTopology | undefined;
+  if (ex.starterTopology !== undefined && ex.starterTopology !== null) {
+    const st = ex.starterTopology as Record<string, unknown>;
+    if (
+      typeof st !== 'object' ||
+      !Array.isArray(st.nodes) ||
+      !Array.isArray(st.edges) ||
+      st.nodes.some((n) => !n || typeof n !== 'object' || typeof (n as { id?: unknown }).id !== 'string')
+    ) {
+      return { error: `Soal "${ex.title}": "starterTopology" harus memuat array "nodes" (tiap node punya "id") dan "edges".` };
+    }
+    starterTopology = st as unknown as StarterTopology;
+  }
+
   return {
     exercise: {
       id,
@@ -195,10 +224,7 @@ export function validateExercise(item: unknown, itemIndex: number = 0): { exerci
       difficulty,
       targets: validTargets,
       starterTemplateId: typeof ex.starterTemplateId === 'string' ? ex.starterTemplateId : undefined,
-      starterTopology:
-        ex.starterTopology && typeof ex.starterTopology === 'object'
-          ? (ex.starterTopology as { nodes: any[]; edges: any[] })
-          : undefined,
+      starterTopology,
     },
   };
 }
@@ -334,7 +360,7 @@ export function exportLabPackageFile(exercise: Exercise, defaultFilename?: strin
  */
 export function exportSubmissionPackageFile(
   submission: Submission,
-  topology: { nodes: any[]; edges: any[] },
+  topology: StarterTopology,
   defaultFilename?: string
 ): void {
   const payload = {
@@ -362,6 +388,107 @@ export function exportSubmissionPackageFile(
   URL.revokeObjectURL(url);
 }
 
+/** Export is a copy of work, never an alternate self-check endpoint. */
+export function createWorkPackage(participant: Participant, exerciseId: string, exerciseIds: string[], topology: StarterTopology) {
+  return {
+    format: 'openpacket_work', version: '1.0', submittedAt: Date.now(),
+    participantId: participant.id, studentNickname: participant.nickname,
+    exerciseId, exerciseIds, topology,
+  };
+}
+
+export function exportWorkPackageFile(participant: Participant, exerciseId: string, exerciseIds: string[], topology: StarterTopology) {
+  const payload = createWorkPackage(participant, exerciseId, exerciseIds, topology);
+  const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `jawaban-${participant.nickname.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 20) || 'siswa'}-${Date.now()}.opsub`;
+  document.body.appendChild(link); link.click(); link.remove();
+  // Let the browser consume the Blob before releasing the object URL.
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function validateEvaluation(raw: unknown): ExerciseEvaluation | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const e = raw as Record<string, unknown>;
+  if (!Array.isArray(e.checks)) return null;
+  const checks: ExerciseCheck[] = [];
+  for (const c of e.checks) {
+    if (!c || typeof c !== 'object') return null;
+    const chk = c as Record<string, unknown>;
+    if (typeof chk.targetId !== 'string' || typeof chk.title !== 'string' || typeof chk.passed !== 'boolean') return null;
+    checks.push({
+      targetId: chk.targetId,
+      title: chk.title,
+      passed: chk.passed,
+      reason: typeof chk.reason === 'string' ? chk.reason : '',
+    });
+  }
+  const score = typeof e.score === 'number' && Number.isFinite(e.score) ? Math.max(0, Math.min(100, Math.round(e.score))) : 0;
+  const status: ExerciseEvaluation['status'] =
+    e.status === 'passed' || e.status === 'partial' || e.status === 'failed'
+      ? e.status
+      : score === 100
+      ? 'passed'
+      : score > 0
+      ? 'partial'
+      : 'failed';
+  return {
+    status,
+    score,
+    checks,
+    feedback: typeof e.feedback === 'string' ? e.feedback : '',
+    evaluatedAt: typeof e.evaluatedAt === 'string' ? e.evaluatedAt : '',
+  };
+}
+
+/**
+ * Validasi dan normalisasi satu lembar jawaban (.opsub). Berkas yang rusak atau
+ * dibuat manual tidak boleh sampai merusak tampilan guru, jadi semua field yang
+ * dibaca UI dipastikan ada dan bertipe benar.
+ */
+export function validateSubmission(raw: unknown): { submission?: Submission; error?: string } {
+  if (!raw || typeof raw !== 'object') return { error: 'Lembar jawaban bukan objek JSON yang valid.' };
+  const s = raw as Record<string, unknown>;
+
+  const nickname = typeof s.nickname === 'string' ? s.nickname.trim().slice(0, 40) : '';
+  if (!nickname) return { error: 'Lembar jawaban tidak memuat nama siswa ("nickname").' };
+
+  const evaluation = validateEvaluation(s.evaluation);
+  if (!evaluation) {
+    return { error: `Lembar jawaban "${nickname}" tidak memuat hasil evaluasi yang valid ("evaluation.checks").` };
+  }
+
+  const evaluations: Record<string, ExerciseEvaluation> = {};
+  if (s.evaluations && typeof s.evaluations === 'object') {
+    for (const [exId, ev] of Object.entries(s.evaluations as Record<string, unknown>)) {
+      const valid = validateEvaluation(ev);
+      if (valid) evaluations[exId] = valid;
+    }
+  }
+  const exerciseScores: Record<string, number> = {};
+  if (s.exerciseScores && typeof s.exerciseScores === 'object') {
+    for (const [exId, v] of Object.entries(s.exerciseScores as Record<string, unknown>)) {
+      if (typeof v === 'number' && Number.isFinite(v)) exerciseScores[exId] = Math.max(0, Math.min(100, Math.round(v)));
+    }
+  }
+
+  const score = typeof s.score === 'number' && Number.isFinite(s.score) ? Math.max(0, Math.min(100, Math.round(s.score))) : evaluation.score;
+  return {
+    submission: {
+      participantId: typeof s.participantId === 'string' ? s.participantId : '',
+      nickname,
+      exerciseId: typeof s.exerciseId === 'string' ? s.exerciseId : '',
+      score,
+      status: score === 100 ? 'passed' : score > 0 ? 'partial' : 'failed',
+      evaluation,
+      ...(Object.keys(evaluations).length > 0 ? { evaluations } : {}),
+      ...(Object.keys(exerciseScores).length > 0 ? { exerciseScores } : {}),
+      submittedAt: typeof s.submittedAt === 'number' && Number.isFinite(s.submittedAt) ? s.submittedAt : Date.now(),
+    },
+  };
+}
+
 /**
  * Parse file berkas lembar jawaban siswa (.opsub)
  */
@@ -372,20 +499,41 @@ export function parseSubmissionJson(rawJson: string): ParseSubmissionResult {
       return { success: false, error: 'File lembar jawaban bukan objek JSON valid.' };
     }
 
+    if (data.format === 'openpacket_work') {
+      const nickname = typeof data.studentNickname === 'string' ? data.studentNickname.trim().slice(0, 40) : '';
+      const topology = data.topology as StarterTopology | undefined;
+      const ids = Array.isArray(data.exerciseIds) ? [...new Set(data.exerciseIds.filter((id): id is string => typeof id === 'string' && id.length > 0))] : [];
+      if (!nickname || !ids.length || !topology || !Array.isArray(topology.nodes) || !Array.isArray(topology.edges)) {
+        return { success: false, error: 'Berkas pekerjaan harus memuat nama, daftar soal, dan topologi.' };
+      }
+      return { success: true, topology, submission: {
+        participantId: typeof data.participantId === 'string' ? data.participantId : '',
+        nickname, exerciseId: typeof data.exerciseId === 'string' ? data.exerciseId : ids[0],
+        score: 0, status: 'failed', ungraded: true,
+        exerciseScores: Object.fromEntries(ids.map((id) => [id, 0])),
+        evaluation: { score: 0, status: 'failed', checks: [], feedback: 'Belum dinilai oleh guru.', evaluatedAt: '' },
+        submittedAt: typeof data.submittedAt === 'number' ? data.submittedAt : Date.now(),
+      } };
+    }
+
     if (data.format === 'openpacket_submission' && data.submission) {
+      const checked = validateSubmission(data.submission);
+      if (checked.error) return { success: false, error: checked.error };
       return {
         success: true,
-        submission: data.submission as Submission,
-        topology: data.topology as { nodes: any[]; edges: any[] } | undefined,
+        submission: checked.submission,
+        topology: data.topology as StarterTopology | undefined,
       };
     }
 
     // Toleransi jika user mengunggah raw submission object
     if (data.participantId && data.nickname && typeof data.score === 'number' && data.evaluation) {
+      const checked = validateSubmission(data);
+      if (checked.error) return { success: false, error: checked.error };
       return {
         success: true,
-        submission: data as unknown as Submission,
-        topology: data.topology as { nodes: any[]; edges: any[] } | undefined,
+        submission: checked.submission,
+        topology: data.topology as StarterTopology | undefined,
       };
     }
 
@@ -453,6 +601,10 @@ export function loadExercises(): Exercise[] {
 
 export function saveExercises(list: Exercise[]): void {
   try {
+    if (!list || list.length === 0) {
+      clearExercisesStorage();
+      return;
+    }
     getStorage().setItem(STORAGE_KEY_EXERCISES, JSON.stringify(list));
   } catch (err) {
     console.warn('[ExerciseParser] Gagal menyimpan storage soal:', err);
@@ -460,5 +612,28 @@ export function saveExercises(list: Exercise[]): void {
 }
 
 export function clearExercisesStorage(): void {
-  getStorage().removeItem(STORAGE_KEY_EXERCISES);
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.removeItem(STORAGE_KEY_EXERCISES);
+    }
+  } catch {
+    // Fallback if blocked
+  }
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(STORAGE_KEY_EXERCISES);
+    }
+  } catch {
+    // Fallback if blocked
+  }
+  try {
+    getStorage().removeItem(STORAGE_KEY_EXERCISES);
+  } catch {
+    // Fallback if blocked
+  }
+  try {
+    memoryStore.removeItem(STORAGE_KEY_EXERCISES);
+  } catch {
+    // Fallback if blocked
+  }
 }

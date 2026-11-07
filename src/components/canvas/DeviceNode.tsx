@@ -30,32 +30,33 @@ export function DeviceNode({ id, data, selected }: NodeProps) {
   const getDeviceIcon = () => {
     switch (deviceData.type) {
       case 'pc':
-        return <Monitor className="h-6 w-6 text-sky-400" />;
+        return <Monitor className="h-6 w-6 text-viz-blue" />;
       case 'laptop':
-        return <Laptop className="h-6 w-6 text-cyan-400" />;
+        return <Laptop className="h-6 w-6 text-viz-teal" />;
       case 'server':
-        return <Server className="h-6 w-6 text-violet-400" />;
+        return <Server className="h-6 w-6 text-viz-violet" />;
       case 'switch':
-        return <Network className="h-6 w-6 text-emerald-400" />;
+        return <Network className="h-6 w-6 text-viz-green" />;
       case 'hub':
-        return <Cable className="h-6 w-6 text-orange-400" />;
+        return <Cable className="h-6 w-6 text-viz-orange" />;
       case 'accessPoint':
-        return <Wifi className="h-6 w-6 text-fuchsia-400" />;
+        return <Wifi className="h-6 w-6 text-viz-plum" />;
       case 'cloud':
-        return <Cloud className="h-6 w-6 text-sky-300" />;
+        return <Cloud className="h-6 w-6 text-viz-blue" />;
       case 'router':
-        return <Router className="h-6 w-6 text-amber-400" />;
+        return <Router className="h-6 w-6 text-viz-gold" />;
     }
   };
 
-  const hasConfiguredIp = deviceData.ports.some((p) => p.ipAddress);
+  const configuredIp =
+    deviceData.ports.find((p) => p.ipAddress)?.ipAddress ||
+    deviceData.ports.flatMap((p) => p.subInterfaces ?? []).find((s) => s.ipAddress)?.ipAddress;
+  const hasConfiguredIp = Boolean(configuredIp);
 
   return (
     <div
-      className={`group relative flex flex-col items-center rounded-xl border-2 bg-card p-3.5 shadow-xl transition-colors min-w-[150px] cursor-grab active:cursor-grabbing select-none ${
-        isSelected
-          ? 'border-primary shadow-primary/30 ring-2 ring-primary/20'
-          : 'border-border hover:border-muted-foreground/50'
+      className={`group relative flex flex-col items-center rounded-lg border border-border bg-card p-3.5 transition-colors min-w-[150px] cursor-grab active:cursor-grabbing select-none ${
+        isSelected ? 'df-node-selected' : 'shadow-raised hover:border-line-strong'
       }`}
     >
       {/* Action floating buttons on hover / selected — otomatis muncul saat node disentuh/selected di mobile */}
@@ -84,7 +85,7 @@ export function DeviceNode({ id, data, selected }: NodeProps) {
           }}
           title="Terminal CLI Cisco"
           aria-label={`Buka terminal CLI ${deviceData.label}`}
-          className="rounded p-1.5 sm:p-1 text-emerald-400 bg-emerald-500/10 sm:bg-transparent hover:bg-emerald-500/20 sm:hover:bg-muted hover:text-emerald-300 touch-manipulation cursor-pointer"
+          className="rounded p-1.5 sm:p-1 text-viz-green bg-viz-green/10 sm:bg-transparent hover:bg-viz-green/20 sm:hover:bg-muted touch-manipulation cursor-pointer"
         >
           <Terminal className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
         </button>
@@ -100,7 +101,7 @@ export function DeviceNode({ id, data, selected }: NodeProps) {
           }}
           title="Hapus Perangkat"
           aria-label={`Hapus ${deviceData.label}`}
-          className="rounded p-1.5 sm:p-1 text-muted-foreground hover:bg-red-950/60 hover:text-red-400 touch-manipulation cursor-pointer"
+          className="rounded p-1.5 sm:p-1 text-muted-foreground hover:bg-viz-red/10 hover:text-viz-red touch-manipulation cursor-pointer"
         >
           <Trash2 className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
         </button>
@@ -108,7 +109,7 @@ export function DeviceNode({ id, data, selected }: NodeProps) {
 
       {/* Device Header - Drag target */}
       <div className="flex items-center gap-2.5 pointer-events-none">
-        <div className="rounded-lg bg-muted/80 p-2 border border-border/70 shadow-inner">
+        <div className="rounded-md bg-muted p-2 border border-border">
           {getDeviceIcon()}
         </div>
         <div>
@@ -121,8 +122,8 @@ export function DeviceNode({ id, data, selected }: NodeProps) {
 
       {/* IP / Info Tag */}
       {hasConfiguredIp && (
-        <div className="mt-2 text-[11px] font-mono text-cyan-300 bg-cyan-950/60 px-2 py-0.5 rounded-full border border-cyan-800/60 font-semibold shadow-xs pointer-events-none">
-          {deviceData.ports.find((p) => p.ipAddress)?.ipAddress}
+        <div className="mt-2 text-[11px] font-mono text-viz-teal bg-viz-teal/10 px-2 py-0.5 rounded-full border border-viz-teal/40 font-semibold shadow-xs pointer-events-none">
+          {configuredIp}
         </div>
       )}
 
@@ -132,10 +133,10 @@ export function DeviceNode({ id, data, selected }: NodeProps) {
           const isUp = port.status === 'up';
           const isWireless = port.kind === 'wireless';
           const handleColor = isWireless
-            ? '!bg-violet-400 shadow-violet-500/50 ring-2 ring-violet-500/40'
+            ? '!bg-viz-violet ring-2 ring-viz-violet/30'
             : isUp
-            ? '!bg-emerald-400 shadow-emerald-500/50 ring-2 ring-emerald-500/30'
-            : '!bg-amber-500 hover:!bg-amber-400 ring-1 ring-amber-500/20';
+            ? '!bg-viz-green ring-2 ring-viz-green/30'
+            : '!bg-gold-hover ring-1 ring-gold-hover/30';
           return (
             <div key={port.id} className="relative flex flex-col items-center">
               {/* React Flow Handles: Source and Target */}
@@ -143,7 +144,7 @@ export function DeviceNode({ id, data, selected }: NodeProps) {
                 type="source"
                 position={Position.Bottom}
                 id={port.id}
-                className={`!h-3.5 !w-3.5 !rounded-full !border-2 !border-background transition-all shadow-md cursor-crosshair ${handleColor} ${
+                className={`!h-3.5 !w-3.5 !rounded-full !border-2 !border-card transition-all shadow-md cursor-crosshair ${handleColor} ${
                   isWireless && !isUp ? 'opacity-50' : ''
                 }`}
                 title={`${port.name}${port.ssid ? ` (SSID: ${port.ssid})` : ''} (${isUp ? 'Link UP' : 'Link DOWN'})`}

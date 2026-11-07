@@ -227,8 +227,8 @@ export function ExerciseEditorModal({
         {/* Scrollable Form Body */}
         <div className="flex flex-1 flex-col gap-5 overflow-y-auto p-4 sm:p-6">
           {errorMsg && (
-            <div className="flex items-start gap-2.5 rounded-lg border border-rose-800/60 bg-rose-950/30 p-3 text-xs text-rose-300">
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-400" />
+            <div className="flex items-start gap-2.5 rounded-lg border border-viz-red/40 bg-viz-red/10 p-3 text-xs text-viz-red">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-viz-red" />
               <span className="leading-relaxed">{errorMsg}</span>
             </div>
           )}
@@ -339,7 +339,7 @@ export function ExerciseEditorModal({
                   onClick={() => handleAddTarget('device_config')}
                   className="h-7 gap-1 text-[11px]"
                 >
-                  <Network className="h-3 w-3 text-sky-400" />
+                  <Network className="h-3 w-3 text-viz-blue" />
                   + IP
                 </Button>
                 <Button
@@ -348,7 +348,7 @@ export function ExerciseEditorModal({
                   onClick={() => handleAddTarget('link_exists')}
                   className="h-7 gap-1 text-[11px]"
                 >
-                  <Cable className="h-3 w-3 text-emerald-400" />
+                  <Cable className="h-3 w-3 text-viz-green" />
                   + Kabel
                 </Button>
                 <Button
@@ -357,7 +357,7 @@ export function ExerciseEditorModal({
                   onClick={() => handleAddTarget('reachability')}
                   className="h-7 gap-1 text-[11px]"
                 >
-                  <Activity className="h-3 w-3 text-amber-400" />
+                  <Activity className="h-3 w-3 text-viz-gold" />
                   + Ping
                 </Button>
                 <Button
@@ -366,7 +366,7 @@ export function ExerciseEditorModal({
                   onClick={() => handleAddTarget('required_device_count')}
                   className="h-7 gap-1 text-[11px]"
                 >
-                  <Cpu className="h-3 w-3 text-emerald-400" />
+                  <Cpu className="h-3 w-3 text-viz-green" />
                   + Perangkat
                 </Button>
                 <Button
@@ -375,12 +375,18 @@ export function ExerciseEditorModal({
                   onClick={() => handleAddTarget('vlan_config')}
                   className="h-7 gap-1 text-[11px]"
                 >
-                  <Layers className="h-3 w-3 text-indigo-400" />
+                  <Layers className="h-3 w-3 text-viz-blue" />
                   + VLAN
                 </Button>
               </div>
             </div>
 
+            {targets.length > 0 && !targets.some((target) => target.type === 'reachability') && (
+              <p className="rounded-md border border-warning-border bg-warning-bg p-3 text-xs leading-relaxed text-warning-fg">
+                Rubrik ini belum menguji konektivitas. Nilai 100 hanya berarti target yang tercantum terpenuhi.
+                Tambahkan kriteria <b>+ Ping</b> beserta perangkat sumber dan tujuan jika tugas mensyaratkan jaringan saling terhubung.
+              </p>
+            )}
             {targets.length === 0 ? (
               <div className="rounded-lg border border-dashed p-6 text-center text-xs text-muted-foreground">
                 Belum ada target penilaian. Tambahkan minimal satu kriteria di atas agar simulator dapat mengevaluasi lembar kerja siswa.
@@ -408,7 +414,7 @@ export function ExerciseEditorModal({
                         size="sm"
                         variant="ghost"
                         onClick={() => handleRemoveTarget(idx)}
-                        className="h-7 w-7 p-0 text-muted-foreground hover:text-rose-400"
+                        className="h-7 w-7 p-0 text-muted-foreground hover:text-viz-red"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>

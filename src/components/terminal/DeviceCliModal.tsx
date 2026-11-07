@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Terminal as TermIcon } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
+import { saveWorkspaceDraft } from '../../features/workspace/draft';
 import { CliSession } from '../../engine/cli/cliEngine';
 import { requestPing } from '../../hooks/useSimulationEngine';
 import {
@@ -10,6 +11,22 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+
+interface CliDeviceCache {
+  session: CliSession;
+  history: string[];
+  cmdHistory: string[];
+}
+
+const cliCacheByDeviceId = new Map<string, CliDeviceCache>();
+
+export function clearCliCache(deviceId?: string) {
+  if (deviceId) {
+    cliCacheByDeviceId.delete(deviceId);
+  } else {
+    cliCacheByDeviceId.clear();
+  }
+}
 
 export function DeviceCliModal() {
   const activeCliModalNodeId = useAppStore((s) => s.activeCliModalNodeId);
@@ -23,34 +40,45 @@ export function DeviceCliModal() {
   // Jika perangkat dihapus saat terminal terbuka, tutup modal dengan aman
   useEffect(() => {
     if (activeCliModalNodeId && !node) {
+      clearCliCache(activeCliModalNodeId);
       setActiveCliModalNodeId(null);
     }
   }, [activeCliModalNodeId, node, setActiveCliModalNodeId]);
 
-  const [history, setHistory] = useState<string[]>([
-    'Cisco IOS Software, C2900 Software (C2900-UNIVERSALK9-M), Version 15.1(4)M4',
-    'OpenPacket Simulated IOS Terminal v1.3.0',
-    'Ketik "help" atau "?" untuk bantuan perintah.',
-    '',
-  ]);
+  const [history, setHistory] = useState<string[]>([]);
   const [session, setSession] = useState<CliSession | null>(null);
   const [inputVal, setInputVal] = useState<string>('');
   const [isBusy, setIsBusy] = useState<boolean>(false);
-  // Riwayat perintah untuk navigasi ArrowUp/ArrowDown
   const [cmdHistory, setCmdHistory] = useState<string[]>([]);
   const [histIdx, setHistIdx] = useState<number | null>(null);
 
-  // Sesi CLI baru setiap kali modal dibuka untuk perangkat tertentu
+  // Sesi CLI persisten per perangkat
   useEffect(() => {
     if (!activeCliModalNodeId) {
       setSession(null);
       return;
     }
     const deviceId = activeCliModalNodeId;
+    const cached = cliCacheByDeviceId.get(deviceId);
+    if (cached) {
+      setSession(cached.session);
+      setHistory(cached.history);
+      setCmdHistory(cached.cmdHistory);
+      return;
+    }
+
     const cliSession = new CliSession({
       getDevice: () => {
         const current = useAppStore.getState().nodes.find((n) => n.id === deviceId);
-        return current!.data;
+        if (!current) {
+          return {
+            id: deviceId,
+            label: 'Unknown',
+            type: 'router',
+            ports: [],
+          };
+        }
+        return current.data;
       },
       setHostname: (name) => {
         useAppStore.getState().updateDeviceConfig(deviceId, { label: name });
@@ -65,15 +93,88 @@ export function DeviceCliModal() {
         });
         return { success: result.success, outputLines: result.outputLines };
       },
+      addStaticRoute: (route) => {
+        useAppStore.getState().addStaticRoute(deviceId, route);
+      },
+      removeStaticRoute: (index) => {
+        useAppStore.getState().removeStaticRoute(deviceId, index);
+      },
+      setDefaultGateway: (gw) => {
+        useAppStore.getState().updateDeviceConfig(deviceId, { defaultGateway: gw });
+      },
+      saveConfig: () => {
+        const label = useAppStore.getState().nodes.find((n) => n.id === deviceId)?.data.label ?? deviceId;
+        if (!saveWorkspaceDraft()) throw new Error('Draft tidak dapat disimpan. Ekspor topologi ke berkas.');
+        useAppStore.getState().pushToast('success', `Draft ${label} tersimpan di tab ini dan dipulihkan setelah refresh. Ekspor berkas untuk menyimpan di luar tab.`);
+      },
+      setSubInterfaceConfig: (parentPortId, vlanId, updates, oldVlanId) => {
+        const dev = useAppStore.getState().nodes.find((n) => n.id === deviceId)?.data;
+        if (!dev) return;
+        const port = dev.ports.find((p) => p.id === parentPortId);
+        if (!port) return;
+        const subInterfaces = [...(port.subInterfaces ?? [])];
+        const searchVlan = oldVlanId ?? vlanId;
+        const idx = subInterfaces.findIndex((s) => s.vlanId === searchVlan);
+        if (idx >= 0) {
+          subInterfaces[idx] = {
+            ...subInterfaces[idx],
+            vlanId,
+            ...('ipAddress' in updates ? { ipAddress: updates.ipAddress ?? '' } : {}),
+            ...('subnetMask' in updates ? { subnetMask: updates.subnetMask ?? '' } : {}),
+          };
+        } else {
+          subInterfaces.push({
+            vlanId,
+            ipAddress: updates.ipAddress ?? '',
+            subnetMask: updates.subnetMask ?? '255.255.255.0',
+          });
+        }
+        useAppStore.getState().updatePortConfig(deviceId, parentPortId, { subInterfaces });
+      },
+      removeSubInterface: (parentPortId, vlanId) => {
+        const dev = useAppStore.getState().nodes.find((n) => n.id === deviceId)?.data;
+        if (!dev) return;
+        const port = dev.ports.find((p) => p.id === parentPortId);
+        if (!port) return;
+        const subInterfaces = (port.subInterfaces ?? []).filter((s) => s.vlanId !== vlanId);
+        useAppStore.getState().updatePortConfig(deviceId, parentPortId, { subInterfaces });
+      },
+      clearMacTable: () => {
+        useAppStore.getState().clearMacTable(deviceId);
+      },
+      clearArpTable: () => {
+        useAppStore.getState().clearArpTable(deviceId);
+      },
     });
-    setSession(cliSession);
-    setHistory([
+
+    const initialHistory = [
       'Cisco IOS Software, C2900 Software (C2900-UNIVERSALK9-M), Version 15.1(4)M4',
-      'OpenPacket Simulated IOS Terminal v1.3.0',
+      'OpenPacket Simulated IOS Terminal v2.3.0',
       'Ketik "help" atau "?" untuk bantuan perintah.',
       '',
-    ]);
+    ];
+
+    cliCacheByDeviceId.set(deviceId, {
+      session: cliSession,
+      history: initialHistory,
+      cmdHistory: [],
+    });
+
+    setSession(cliSession);
+    setHistory(initialHistory);
+    setCmdHistory([]);
   }, [activeCliModalNodeId]);
+
+  // Simpan riwayat interaksi terbaru ke cache
+  useEffect(() => {
+    if (activeCliModalNodeId && session) {
+      const entry = cliCacheByDeviceId.get(activeCliModalNodeId);
+      if (entry) {
+        entry.history = history;
+        entry.cmdHistory = cmdHistory;
+      }
+    }
+  }, [activeCliModalNodeId, session, history, cmdHistory]);
 
   useEffect(() => {
     terminalBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -85,11 +186,22 @@ export function DeviceCliModal() {
   const handleCommand = async (cmd: string) => {
     if (isBusy) return;
     const prompt = session.prompt();
-    setHistory((prev) => [...prev, `${prompt} ${cmd}`]);
+    const newHistory = [...history, `${prompt} ${cmd}`];
+    setHistory(newHistory);
     setInputVal('');
     setHistIdx(null);
+    let newCmdHistory = cmdHistory;
     if (cmd.trim()) {
-      setCmdHistory((prev) => [...prev.slice(-49), cmd]);
+      newCmdHistory = [...cmdHistory.slice(-49), cmd];
+      setCmdHistory(newCmdHistory);
+    }
+
+    if (activeCliModalNodeId) {
+      const entry = cliCacheByDeviceId.get(activeCliModalNodeId);
+      if (entry) {
+        entry.history = newHistory;
+        entry.cmdHistory = newCmdHistory;
+      }
     }
 
     if (!cmd.trim()) return;
@@ -98,8 +210,25 @@ export function DeviceCliModal() {
     try {
       const lines = await session.handle(cmd);
       if (lines.length > 0) {
-        setHistory((prev) => [...prev, ...lines]);
+        setHistory((prev) => {
+          const updated = [...prev, ...lines];
+          if (activeCliModalNodeId) {
+            const entry = cliCacheByDeviceId.get(activeCliModalNodeId);
+            if (entry) entry.history = updated;
+          }
+          return updated;
+        });
       }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setHistory((prev) => {
+        const updated = [...prev, `% Unhandled CLI exception: ${message}`];
+        if (activeCliModalNodeId) {
+          const entry = cliCacheByDeviceId.get(activeCliModalNodeId);
+          if (entry) entry.history = updated;
+        }
+        return updated;
+      });
     } finally {
       setIsBusy(false);
     }
@@ -139,12 +268,12 @@ export function DeviceCliModal() {
     >
       <DialogContent
         showCloseButton
-        className="flex h-[85vh] sm:h-[520px] w-[95vw] max-w-[640px] flex-col gap-0 overflow-hidden border p-0 font-mono sm:max-w-[640px]"
+        className="df-inverse flex h-[85vh] sm:h-[520px] w-[95vw] max-w-[640px] flex-col gap-0 overflow-hidden border p-0 font-mono sm:max-w-[640px]"
         style={{ backgroundColor: 'var(--term-bg)' }}
       >
         <DialogHeader className="flex-row items-center justify-between border-b bg-muted/60 px-4 py-0">
           <DialogTitle className="flex items-center gap-2 py-2.5 text-xs font-semibold">
-            <TermIcon className="h-4 w-4 text-emerald-400" />
+            <TermIcon className="h-4 w-4 text-gold" />
             Cisco IOS Terminal — {device.label}
           </DialogTitle>
           <DialogDescription className="sr-only">

@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { GraduationCap, Play, CheckCircle2, Circle, Lightbulb, LogOut, PartyPopper } from 'lucide-react';
-import confetti from 'canvas-confetti';
 import { useAppStore } from '../../store/useAppStore';
 import { LAB_SCENARIOS, type LabScenario } from '../../data/labs';
 import {
@@ -27,7 +26,9 @@ export function LabModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
   useEffect(() => {
     if (allDone) {
       if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-      confetti({ particleCount: 160, spread: 75, origin: { y: 0.6 } });
+      void import('canvas-confetti')
+        .then(({ default: confetti }) => confetti({ particleCount: 160, spread: 75, origin: { y: 0.6 } }))
+        .catch(() => undefined);
     }
   }, [allDone]);
 
@@ -36,10 +37,10 @@ export function LabModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
       <DialogContent className="flex max-h-[86vh] w-[95vw] max-w-[680px] flex-col gap-0 p-0 sm:max-w-[680px]">
         <DialogHeader className="border-b px-4 sm:px-5 py-3">
           <DialogTitle className="flex items-center gap-2.5 text-sm font-bold">
-            <GraduationCap className="h-5 w-5 text-amber-400" />
+            <GraduationCap className="h-5 w-5 text-viz-gold" />
             Mode Lab Praktikum
             {activeLab && (
-              <Badge variant="outline" className="border-amber-800/60 bg-amber-950/70 text-[11px] font-normal text-amber-300">
+              <Badge variant="outline" className="border-viz-gold/40 bg-viz-gold/10 text-[11px] font-normal text-viz-gold">
                 berjalan: {activeLab.title}
               </Badge>
             )}
@@ -69,15 +70,15 @@ export function LabModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
                       variant="outline"
                       className={
                         lab.difficulty === 'Dasar'
-                          ? 'border-emerald-800 bg-emerald-950/70 text-emerald-300'
-                          : 'border-amber-800 bg-amber-950/70 text-amber-300'
+                          ? 'border-viz-green/40 bg-viz-green/10 text-viz-green'
+                          : 'border-viz-gold/40 bg-viz-gold/10 text-viz-gold'
                       }
                     >
                       {lab.difficulty}
                     </Badge>
                   </div>
                   <p className="text-xs leading-relaxed text-muted-foreground">{lab.story}</p>
-                  <p className="mt-2 text-[11px] text-sky-300">
+                  <p className="mt-2 text-[11px] text-viz-blue">
                     {lab.objectives.length} objektif · klik untuk detail
                   </p>
                 </button>
@@ -120,7 +121,7 @@ export function LabModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
           {activeLab && (
             <div className="flex flex-col gap-3">
               {allDone && (
-                <div className="flex items-center gap-2 rounded-lg border border-emerald-700 bg-emerald-950/60 p-3 text-emerald-200">
+                <div className="flex items-center gap-2 rounded-lg border border-viz-green/40 bg-viz-green/10 p-3 text-viz-green">
                   <PartyPopper className="h-5 w-5 shrink-0" />
                   <span className="text-xs font-bold">
                     Semua objektif tercapai — lab selesai! Lanjut ke lab lain atau keluar untuk kanvas bebas.
@@ -138,11 +139,11 @@ export function LabModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
                   return (
                     <div key={o.id} className="flex items-center gap-2 text-xs">
                       {done ? (
-                        <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+                        <CheckCircle2 className="h-4 w-4 shrink-0 text-viz-green" />
                       ) : (
                         <Circle className="h-4 w-4 shrink-0 text-muted-foreground/50" />
                       )}
-                      <span className={done ? 'text-emerald-200 line-through' : 'text-foreground/90'}>
+                      <span className={done ? 'text-viz-green line-through' : 'text-foreground/90'}>
                         {o.description}
                       </span>
                     </div>
@@ -151,7 +152,7 @@ export function LabModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
               </div>
 
               <details className="rounded-lg border bg-background/60 p-3">
-                <summary className="flex cursor-pointer items-center gap-1.5 text-xs font-semibold text-amber-300">
+                <summary className="flex cursor-pointer items-center gap-1.5 text-xs font-semibold text-viz-gold">
                   <Lightbulb className="h-3.5 w-3.5" />
                   Petunjuk (klik untuk buka)
                 </summary>

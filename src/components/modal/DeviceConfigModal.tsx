@@ -13,7 +13,7 @@ import {
   Terminal,
 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
-import { isValidIp, isValidSubnetMask, networkAddress, ipToNumber, prefixLength, isSameSubnet } from '../../utils/ipUtils';
+import { isValidIp, isValidSubnetMask, isValidMac, normalizeMac, networkAddress, ipToNumber, prefixLength, isSameSubnet } from '../../utils/ipUtils';
 import { type DeviceData } from '../../types/network';
 import { requestDhcp, requestRip } from '../../hooks/useSimulationEngine';
 import {
@@ -37,6 +37,7 @@ import {
 } from '@/components/ui/select';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Separator } from '@/components/ui/separator';
+import { Switch } from '@/components/ui/switch';
 
 export function DeviceConfigModal() {
   const activeConfigModalNodeId = useAppStore((s) => s.activeConfigModalNodeId);
@@ -66,7 +67,9 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
 
   const [ipAddress, setIpAddress] = useState<string>(selectedPort?.ipAddress || '');
   const [subnetMask, setSubnetMask] = useState<string>(selectedPort?.subnetMask || '255.255.255.0');
+  const [portStatus, setPortStatus] = useState<'up' | 'down'>(selectedPort?.status ?? 'down');
   const [ssid, setSsid] = useState<string>(selectedPort?.ssid || '');
+  const [macAddress, setMacAddress] = useState<string>(selectedPort?.macAddress || '');
   const [defaultGateway, setDefaultGateway] = useState<string>(device.defaultGateway || '');
   const [label, setLabel] = useState<string>(device.label);
   const [errorMsg, setErrorMsg] = useState<string>('');
@@ -102,7 +105,9 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
     const p = device.ports.find((pr) => pr.id === portId);
     setIpAddress(p?.ipAddress || '');
     setSubnetMask(p?.subnetMask || '255.255.255.0');
+    setPortStatus(p?.status ?? 'down');
     setSsid(p?.ssid || '');
+    setMacAddress(p?.macAddress || '');
     setDhcpClient(p?.dhcpEnabled ?? false);
     setNatEnabled(p?.natEnabled ?? false);
     setPortVlan(p?.vlanId ?? 1);
@@ -167,6 +172,23 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
       }
     }
 
+    if (macAddress.trim() && !isValidMac(macAddress.trim())) {
+      setErrorMsg('Format MAC Address tidak valid! Contoh: 00:50:79:66:68:01');
+      return;
+    }
+
+    if (device.type === 'router' && natEnabled && !ipAddress.trim()) {
+      setErrorMsg('Interface dengan NAT aktif wajib memiliki IPv4 Address (IP Publik/WAN)!');
+      return;
+    }
+
+    if (device.type === 'switch' && portMode === 'access') {
+      if (!portVlan || portVlan < 1 || portVlan > 4094 || !Number.isInteger(portVlan)) {
+        setErrorMsg('VLAN ID harus berupa bilangan bulat antara 1 dan 4094!');
+        return;
+      }
+    }
+
     if (defaultGateway.trim()) {
       if (!isValidIp(defaultGateway.trim())) {
         setErrorMsg('Format Default Gateway tidak valid!');
@@ -192,6 +214,30 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
       // BUG-3: startIp wajib berada di dalam network pool (hindari alokasi lintas subnet)
       if (networkAddress(poolStartIp.trim(), poolMask.trim()) !== networkAddress(poolNetwork.trim(), poolMask.trim())) {
         setErrorMsg('Pool DHCP: Start IP berada di luar network pool!');
+        return;
+      }
+      const pNet = networkAddress(poolNetwork.trim(), poolMask.trim());
+      const pNetNum = ipToNumber(pNet);
+      const pMaskNum = ipToNumber(poolMask.trim());
+      const pBcastNum = (pNetNum | (~pMaskNum >>> 0)) >>> 0;
+      const pStartNum = ipToNumber(poolStartIp.trim());
+      if (pStartNum <= pNetNum || pStartNum >= pBcastNum) {
+        setErrorMsg('Pool DHCP: Start IP tidak boleh berupa network atau broadcast address!');
+        return;
+      }
+      const routerIps = new Set<string>();
+      if (ipAddress.trim()) routerIps.add(ipAddress.trim());
+      for (const p of device.ports) {
+        if (p.id !== selectedPortId && p.ipAddress) routerIps.add(p.ipAddress);
+        for (const s of p.subInterfaces ?? []) {
+          if (s.ipAddress) routerIps.add(s.ipAddress);
+        }
+      }
+      for (const s of subIfs) {
+        if (s.ipAddress) routerIps.add(s.ipAddress);
+      }
+      if (routerIps.has(poolStartIp.trim())) {
+        setErrorMsg(`Pool DHCP: Start IP (${poolStartIp.trim()}) bertabrakan dengan IP antarmuka router sendiri!`);
         return;
       }
     }
@@ -221,9 +267,14 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
     });
 
     if (selectedPort) {
+      const formattedMac = macAddress.trim() ? normalizeMac(macAddress.trim()) : undefined;
       if (isWirelessPort) {
         // Simpan SSID lalu sinkronkan asosiasi WiFi
-        updatePortConfig(device.id, selectedPort.id, { ssid: ssid.trim() });
+        updatePortConfig(device.id, selectedPort.id, {
+          ssid: ssid.trim(),
+          status: portStatus,
+          ...(formattedMac ? { macAddress: formattedMac } : {}),
+        });
         if (device.type === 'accessPoint') {
           revalidateWirelessClients();
           addSimulationLog('INFO', `${label}: SSID radio diubah menjadi "${ssid.trim()}".`);
@@ -234,7 +285,11 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
         // Router: NAT per port + pool DHCP per interface + sub-interface VLAN
         updatePortConfig(device.id, selectedPort.id, {
           natEnabled,
+          status: portStatus,
           subInterfaces: subIfs.length > 0 ? subIfs : undefined,
+          ipAddress: ipAddress.trim() || undefined,
+          subnetMask: subnetMask.trim() || undefined,
+          ...(formattedMac ? { macAddress: formattedMac } : {}),
         });
         const pools = { ...(device.dhcpPools ?? {}) };
         pools[selectedPort.id] = {
@@ -245,20 +300,18 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
           maxClients: Math.max(1, poolMaxClients),
         };
         updateDeviceConfig(device.id, { dhcpPools: pools });
-        updatePortConfig(device.id, selectedPort.id, {
-          ipAddress: ipAddress.trim() || undefined,
-          subnetMask: subnetMask.trim() || undefined,
-        });
         addSimulationLog(
           'INFO',
           `${label}: ${selectedPort.id} — NAT ${natEnabled ? 'AKTIF' : 'nonaktif'}, DHCP server ${poolEnabled ? 'AKTIF' : 'nonaktif'}.`
         );
       } else {
         updatePortConfig(device.id, selectedPort.id, {
+          status: portStatus,
           dhcpEnabled: dhcpClient,
           ipAddress: dhcpClient ? undefined : ipAddress.trim() || undefined,
           subnetMask: dhcpClient ? undefined : subnetMask.trim() || undefined,
           ...(device.type === 'switch' ? { vlanId: portVlan, portMode } : {}),
+          ...(formattedMac ? { macAddress: formattedMac } : {}),
         });
         if (dhcpClient) {
           addSimulationLog('INFO', `Meminta IP via DHCP pada ${selectedPort.name}...`);
@@ -281,23 +334,10 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
     <Dialog open onOpenChange={(open) => { if (!open) setActiveConfigModalNodeId(null); }}>
       <DialogContent className="flex max-h-[90vh] w-[95vw] max-w-[540px] flex-col gap-0 p-0 sm:max-w-[540px]">
         <DialogHeader className="border-b px-4 sm:px-5 py-3">
-          <div className="flex items-center justify-between gap-2">
-            <DialogTitle className="flex items-center gap-2 text-sm font-semibold">
-              <ShieldCheck className="h-5 w-5 text-sky-400 shrink-0" />
-              <span>Konfigurasi ({device.type.toUpperCase()})</span>
-            </DialogTitle>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={handleOpenCli}
-              className="h-7 gap-1.5 text-xs text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/10 hover:text-emerald-300 shrink-0"
-              title="Buka Terminal CLI Cisco"
-            >
-              <Terminal className="h-3.5 w-3.5" />
-              <span>Terminal CLI</span>
-            </Button>
-          </div>
+          <DialogTitle className="flex items-center gap-2 text-sm font-semibold">
+            <ShieldCheck className="h-5 w-5 text-viz-blue shrink-0" />
+            <span>Konfigurasi ({device.type.toUpperCase()})</span>
+          </DialogTitle>
           <DialogDescription className="sr-only">
             Ubah konfigurasi perangkat {label}
           </DialogDescription>
@@ -348,25 +388,43 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
             <div className="flex flex-col gap-3 rounded-lg border bg-muted/30 p-3.5">
               <div className="flex items-center justify-between text-xs">
                 <span className="text-muted-foreground">Port Name:</span>
-                <span className="font-mono font-semibold text-emerald-400">{selectedPort.name}</span>
+                <span className="font-mono font-semibold text-viz-green">{selectedPort.name}</span>
+              </div>
+              <div className="flex flex-col gap-1 text-xs">
+                <Label htmlFor="cfg-mac" className="text-xs text-muted-foreground">
+                  MAC Address
+                </Label>
+                <Input
+                  id="cfg-mac"
+                  type="text"
+                  value={macAddress}
+                  onChange={(e) => setMacAddress(e.target.value)}
+                  className="font-mono text-xs h-7"
+                  placeholder="00:50:79:AA:BB:CC"
+                />
               </div>
               <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">MAC Address:</span>
-                <span className="font-mono text-foreground">{selectedPort.macAddress}</span>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-muted-foreground">Status Port (Admin):</span>
+                  <span className={`font-mono text-[11px] font-semibold uppercase ${portStatus === 'up' ? 'text-viz-green' : 'text-viz-gold'}`}>
+                    {portStatus === 'up' ? 'UP' : 'ADMIN DOWN'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-muted-foreground">{portStatus === 'up' ? 'Aktif' : 'Mati'}</span>
+                  <Switch
+                    id="cfg-port-status"
+                    checked={portStatus === 'up'}
+                    onCheckedChange={(checked) => setPortStatus(checked ? 'up' : 'down')}
+                  />
+                </div>
               </div>
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">Link Status:</span>
-                <span className={`font-mono font-semibold uppercase ${selectedPort.status === 'up' ? 'text-emerald-400' : 'text-amber-500'}`}>
-                  {selectedPort.status}
-                </span>
-              </div>
-
               {isWirelessPort ? (
                 /* Konfigurasi port nirkabel: SSID */
                 <>
                   <Separator />
                   <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="cfg-ssid" className="flex items-center gap-1.5 text-xs text-violet-300">
+                    <Label htmlFor="cfg-ssid" className="flex items-center gap-1.5 text-xs text-viz-violet">
                       <Wifi className="h-3.5 w-3.5" />
                       {device.type === 'accessPoint' ? 'SSID yang Di-broadcast' : 'SSID Access Point Tujuan'}
                     </Label>
@@ -376,7 +434,7 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
                       placeholder={device.type === 'accessPoint' ? 'e.g. KantorWiFi' : 'e.g. KantorWiFi (harus sama dengan AP)'}
                       value={ssid}
                       onChange={(e) => setSsid(e.target.value)}
-                      className="border-violet-800/60 font-mono text-xs focus-visible:border-violet-500"
+                      className="border-viz-violet/40 font-mono text-xs focus-visible:border-viz-violet"
                     />
                     <p className="text-[11px] leading-relaxed text-muted-foreground">
                       {device.type === 'accessPoint'
@@ -394,7 +452,7 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
                     {['pc', 'laptop', 'server'].includes(device.type) && (
                       <label className="flex cursor-pointer items-center gap-2 pt-1 text-xs text-foreground">
                         <Checkbox checked={dhcpClient} onCheckedChange={(checked) => setDhcpClient(checked === true)} />
-                        <Server className="h-3.5 w-3.5 text-sky-400" />
+                        <Server className="h-3.5 w-3.5 text-viz-blue" />
                         Obtain IP via DHCP (otomatis dari router)
                       </label>
                     )}
@@ -433,13 +491,13 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
                       <div className="flex flex-col gap-2 rounded-md border bg-background/60 p-2.5">
                         <label className="flex cursor-pointer items-center gap-2 text-xs text-foreground">
                           <Checkbox checked={natEnabled} onCheckedChange={(checked) => setNatEnabled(checked === true)} />
-                          <Globe className="h-3.5 w-3.5 text-sky-400" />
+                          <Globe className="h-3.5 w-3.5 text-viz-blue" />
                           NAT/PAT keluar pada interface ini (WAN)
                         </label>
 
                         <label className="flex cursor-pointer items-center gap-2 text-xs text-foreground">
                           <Checkbox checked={poolEnabled} onCheckedChange={(checked) => setPoolEnabled(checked === true)} />
-                          <Server className="h-3.5 w-3.5 text-emerald-400" />
+                          <Server className="h-3.5 w-3.5 text-viz-green" />
                           DHCP Server pada interface ini
                         </label>
 
@@ -492,7 +550,7 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
           {/* VLAN untuk port switch */}
           {selectedPort && device.type === 'switch' && (
             <div className="rounded-lg border bg-muted/30 p-3.5">
-              <Label className="flex items-center gap-1.5 text-xs font-medium text-emerald-300">
+              <Label className="flex items-center gap-1.5 text-xs font-medium text-viz-green">
                 <Network className="h-3.5 w-3.5" />
                 VLAN 802.1Q — {selectedPort.name}
               </Label>
@@ -534,7 +592,7 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
           {/* Sub-interface router (router-on-a-stick) */}
           {selectedPort && device.type === 'router' && (
             <div className="rounded-lg border bg-muted/30 p-3.5">
-              <Label className="flex items-center gap-1.5 text-xs font-medium text-sky-300">
+              <Label className="flex items-center gap-1.5 text-xs font-medium text-viz-blue">
                 <Network className="h-3.5 w-3.5" />
                 Sub-interface VLAN (router-on-a-stick) — {selectedPort.name}
               </Label>
@@ -593,11 +651,23 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
               <Button
                 variant="secondary"
                 size="xs"
-                className="mt-2 text-sky-300"
+                className="mt-2 text-viz-blue"
                 onClick={() => {
                   const vlan = Number(subVlan);
-                  if (!vlan || vlan < 1 || vlan > 4094 || !isValidIp(subIp) || !isValidSubnetMask(subMask)) {
-                    setErrorMsg('Sub-interface: VLAN/IP/mask tidak valid!');
+                  if (!vlan || vlan < 1 || vlan > 4094 || !Number.isInteger(vlan) || !isValidIp(subIp) || !isValidSubnetMask(subMask)) {
+                    setErrorMsg('Sub-interface: VLAN (1-4094)/IP/mask tidak valid!');
+                    return;
+                  }
+                  if (subIfs.some((s) => s.vlanId === vlan)) {
+                    setErrorMsg(`Sub-interface VLAN ${vlan} sudah ada pada antarmuka ini!`);
+                    return;
+                  }
+                  if (ipAddress.trim() && subIp.trim() === ipAddress.trim()) {
+                    setErrorMsg(`Sub-interface VLAN ${vlan}: IP bertabrakan dengan IP antarmuka fisik (${ipAddress.trim()})!`);
+                    return;
+                  }
+                  if (subIfs.some((s) => s.ipAddress === subIp.trim())) {
+                    setErrorMsg(`Sub-interface VLAN ${vlan}: IP bertabrakan dengan sub-interface lain!`);
                     return;
                   }
                   const net = networkAddress(subIp.trim(), subMask.trim());
@@ -642,7 +712,7 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
           {/* Static Route editor (router) */}
           {device.type === 'router' && (
             <div className="rounded-lg border bg-muted/30 p-3.5">
-              <Label className="flex items-center gap-1.5 text-xs font-medium text-sky-300">
+              <Label className="flex items-center gap-1.5 text-xs font-medium text-viz-blue">
                 <Route className="h-3.5 w-3.5" />
                 Static Route (termasuk default route 0.0.0.0/0 untuk internet)
               </Label>
@@ -696,7 +766,7 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
                   className="font-mono text-[11px]"
                 />
               </div>
-              <Button variant="secondary" size="xs" className="mt-2 text-sky-300" onClick={handleAddRoute}>
+              <Button variant="secondary" size="xs" className="mt-2 text-viz-blue" onClick={handleAddRoute}>
                 <Plus data-icon="inline-start" />
                 Tambah Route
               </Button>
@@ -705,14 +775,14 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
               <div className="mt-3 border-t pt-2.5">
                 <label className="flex cursor-pointer items-center gap-2 text-xs text-foreground">
                   <Checkbox checked={ripEnabled} onCheckedChange={(checked) => setRipEnabled(checked === true)} />
-                  <Route className="h-3.5 w-3.5 text-violet-400" />
+                  <Route className="h-3.5 w-3.5 text-viz-violet" />
                   Aktifkan RIPv2 pada router ini
                 </label>
                 {ripEnabled && (
                   <Button
                     variant="secondary"
                     size="xs"
-                    className="mt-2 text-violet-300"
+                    className="mt-2 text-viz-violet"
                     onClick={() => {
                       addSimulationLog('INFO', 'Menjalankan konvergensi RIPv2...');
                       void requestRip().catch((err: unknown) => {
@@ -736,7 +806,7 @@ function DeviceConfigModalContent({ node }: { node: Node<DeviceData> }) {
             variant="outline"
             size="sm"
             onClick={handleOpenCli}
-            className="gap-1.5 text-xs text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/10 hover:text-emerald-300"
+            className="gap-1.5 text-xs text-viz-green border-viz-green/40 hover:bg-viz-green/10"
           >
             <Terminal className="h-3.5 w-3.5" />
             <span>Terminal CLI</span>

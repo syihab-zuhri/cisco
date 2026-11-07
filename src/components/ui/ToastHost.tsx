@@ -26,6 +26,7 @@ export function ToastHost() {
         title: TOAST_TITLES[t.type],
         description: t.message,
         type: t.type,
+        timeout: t.durationMs,
       });
     }
   }, [toasts]);

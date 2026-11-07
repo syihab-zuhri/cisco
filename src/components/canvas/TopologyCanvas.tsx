@@ -5,6 +5,7 @@ import {
   Controls,
   MiniMap,
   type Connection,
+  type Edge,
   BackgroundVariant,
   ConnectionMode,
   useReactFlow,
@@ -56,6 +57,40 @@ export function TopologyCanvas() {
     setActiveConfigModalNodeId,
     activePackets,
   } = useAppStore();
+
+  const isValidConnection = (connection: Connection | Edge): boolean => {
+    if (!connection.source || !connection.target || !connection.sourceHandle || !connection.targetHandle) {
+      return false;
+    }
+    if (connection.source === connection.target) return false;
+    if (useAppStore.getState().activeLabId) return false;
+
+    const state = useAppStore.getState();
+    const sNode = state.nodes.find((n) => n.id === connection.source);
+    const tNode = state.nodes.find((n) => n.id === connection.target);
+    if (!sNode || !tNode) return false;
+
+    const sPort = sNode.data.ports.find((p) => p.id === connection.sourceHandle);
+    const tPort = tNode.data.ports.find((p) => p.id === connection.targetHandle);
+    if (!sPort || !tPort) return false;
+
+    if (sPort.kind === 'wireless' || tPort.kind === 'wireless') {
+      if (sPort.kind !== 'wireless' || tPort.kind !== 'wireless') return false;
+      const sIsAp = sNode.data.type === 'accessPoint';
+      const tIsAp = tNode.data.type === 'accessPoint';
+      return sIsAp !== tIsAp;
+    }
+
+    if (sPort.connectedEdgeId || tPort.connectedEdgeId) return false;
+    return !state.edges.some(
+      (e) =>
+        e.type !== 'wirelessLink' &&
+        ((e.source === connection.source && e.sourceHandle === connection.sourceHandle) ||
+          (e.target === connection.source && e.targetHandle === connection.sourceHandle) ||
+          (e.source === connection.target && e.sourceHandle === connection.targetHandle) ||
+          (e.target === connection.target && e.targetHandle === connection.targetHandle))
+    );
+  };
 
   const handleConnect = (params: Connection) => {
     if (!params.source || !params.target || !params.sourceHandle || !params.targetHandle) {
@@ -111,7 +146,7 @@ export function TopologyCanvas() {
       if (!associated) {
         state.pushToast(
           'error',
-          'Asosiasi WiFi gagal — SSID klien dan radio AP harus cocok. Detail di Log Event.'
+          'Asosiasi WiFi gagal — SSID klien dan radio AP harus cocok. Detail di tab Simulasi.'
         );
       }
       return;
@@ -126,7 +161,7 @@ export function TopologyCanvas() {
     if (!connected) {
       state.pushToast(
         'error',
-        'Koneksi kabel gagal — port mungkin sudah terpakai (1 kabel per port). Detail di Log Event.'
+        'Koneksi kabel gagal — port mungkin sudah terpakai (1 kabel per port). Detail di tab Simulasi.'
       );
     }
   };
@@ -145,6 +180,7 @@ export function TopologyCanvas() {
         nodesConnectable={true}
         elementsSelectable={true}
         connectionMode={ConnectionMode.Loose}
+        isValidConnection={isValidConnection}
         onNodeClick={(_, node) => setSelectedNodeId(node.id)}
         onNodeDoubleClick={(_, node) => {
           if (node.type === 'deviceNode') setActiveConfigModalNodeId(node.id);
@@ -158,7 +194,7 @@ export function TopologyCanvas() {
         }}
       >
         <Background
-          color="var(--color-border)"
+          color="var(--line)"
           gap={20}
           size={1.5}
           variant={BackgroundVariant.Dots}
@@ -167,18 +203,17 @@ export function TopologyCanvas() {
         <FitViewOnTopologyLoad />
         <Controls />
         <MiniMap
-          maskColor="rgb(11 15 25 / 0.72)"
           nodeColor={(n) => {
-            if (n.data?.nodeKind === 'square') return '#64748B';
-            if (n.data?.nodeKind === 'text') return '#93C5FD';
-            if (n.data?.type === 'pc') return '#38BDF8';
-            if (n.data?.type === 'laptop') return '#22D3EE';
-            if (n.data?.type === 'server') return '#A78BFA';
-            if (n.data?.type === 'switch') return '#10B981';
-            if (n.data?.type === 'hub') return '#FB923C';
-            if (n.data?.type === 'accessPoint') return '#E879F9';
-            if (n.data?.type === 'cloud') return '#60A5FA';
-            return '#F59E0B';
+            if (n.data?.nodeKind === 'square') return 'var(--line-control)';
+            if (n.data?.nodeKind === 'text') return 'var(--viz-blue)';
+            if (n.data?.type === 'pc') return 'var(--viz-blue)';
+            if (n.data?.type === 'laptop') return 'var(--viz-teal)';
+            if (n.data?.type === 'server') return 'var(--viz-violet)';
+            if (n.data?.type === 'switch') return 'var(--viz-green)';
+            if (n.data?.type === 'hub') return 'var(--viz-orange)';
+            if (n.data?.type === 'accessPoint') return 'var(--viz-plum)';
+            if (n.data?.type === 'cloud') return 'var(--viz-blue)';
+            return 'var(--gold-hover)';
           }}
           className="!hidden sm:!block !border-border !bg-popover"
         />
@@ -186,10 +221,10 @@ export function TopologyCanvas() {
 
       {/* Packet In-Flight Indicators / Notification banner */}
       {activePackets.length > 0 && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 rounded-full border border-emerald-500/50 bg-popover/90 px-4 py-1.5 shadow-lg backdrop-blur-sm">
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 rounded-full border border-viz-green/50 bg-card px-4 py-1.5 shadow-lg">
           <span className="relative flex h-3 w-3">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
-            <span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-500"></span>
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-viz-green opacity-75"></span>
+            <span className="relative inline-flex h-3 w-3 rounded-full bg-viz-green"></span>
           </span>
           <span className="text-xs font-medium text-foreground">
             {activePackets[0]?.summary || 'Paket sedang dikirim...'}

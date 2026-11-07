@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { ReactFlowProvider } from '@xyflow/react';
 import { Toolbar } from '@/components/toolbar/Toolbar';
 import { DevicePalette } from '@/components/palette/DevicePalette';
@@ -6,15 +6,26 @@ import { TopologyCanvas } from '@/components/canvas/TopologyCanvas';
 import { PduInspectorDrawer } from '@/components/canvas/PduInspectorDrawer';
 import { ClassroomStudentHUD } from '@/components/canvas/ClassroomStudentHUD';
 import { EventLogPanel } from '@/components/log/EventLogPanel';
-import { DeviceConfigModal } from '@/components/modal/DeviceConfigModal';
-import { DeviceCliModal } from '@/components/terminal/DeviceCliModal';
-import { DocumentationModal } from '@/components/modal/DocumentationModal';
-import { LabModal } from '@/components/modal/LabModal';
-import { ClassroomModal } from '@/components/modal/ClassroomModal';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { ToastHost } from '@/components/ui/ToastHost';
+import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { useSimulationEngine } from '@/hooks/useSimulationEngine';
 
+const DeviceConfigModal = lazy(() =>
+  import('@/components/modal/DeviceConfigModal').then((m) => ({ default: m.DeviceConfigModal }))
+);
+const DeviceCliModal = lazy(() =>
+  import('@/components/terminal/DeviceCliModal').then((m) => ({ default: m.DeviceCliModal }))
+);
+const DocumentationModal = lazy(() =>
+  import('@/components/modal/DocumentationModal').then((m) => ({ default: m.DocumentationModal }))
+);
+const LabModal = lazy(() =>
+  import('@/components/modal/LabModal').then((m) => ({ default: m.LabModal }))
+);
+const ClassroomModal = lazy(() =>
+  import('@/components/modal/ClassroomModal').then((m) => ({ default: m.ClassroomModal }))
+);
 export default function App() {
   const { triggerPing } = useSimulationEngine();
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(() => {
@@ -49,24 +60,34 @@ export default function App() {
             <div className="relative flex-1">
               <TopologyCanvas />
               <PduInspectorDrawer />
-              <ClassroomStudentHUD />
+              <ErrorBoundary label="HUD kelas" variant="panel">
+                <ClassroomStudentHUD />
+              </ErrorBoundary>
             </div>
             <EventLogPanel />
           </main>
         </div>
 
         {/* Dual Mode Modals */}
-        <DeviceConfigModal />
-        <DeviceCliModal />
-        <LabModal isOpen={isLabOpen} onClose={() => setIsLabOpen(false)} />
-        <ClassroomModal
-          isOpen={isClassroomOpen}
-          onClose={() => setIsClassroomOpen(false)}
-        />
-        <DocumentationModal
-          isOpen={isDocsOpen}
-          onClose={() => setIsDocsOpen(false)}
-        />
+        <Suspense fallback={null}>
+          <DeviceConfigModal />
+          <DeviceCliModal />
+          {isLabOpen && <LabModal isOpen={isLabOpen} onClose={() => setIsLabOpen(false)} />}
+          {isClassroomOpen && (
+            <ErrorBoundary label="Portal Kelas" variant="panel" onReset={() => setIsClassroomOpen(false)}>
+              <ClassroomModal
+                isOpen={isClassroomOpen}
+                onClose={() => setIsClassroomOpen(false)}
+              />
+            </ErrorBoundary>
+          )}
+          {isDocsOpen && (
+            <DocumentationModal
+              isOpen={isDocsOpen}
+              onClose={() => setIsDocsOpen(false)}
+            />
+          )}
+        </Suspense>
         <ConfirmDialog />
         <ToastHost />
       </div>

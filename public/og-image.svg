@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1B2A4A" />
+      <stop offset="100%" stop-color="#23365D" />
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#2E4676" />
+      <stop offset="100%" stop-color="#D4A024" />
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#bg)" />
+
+  <!-- Aksen garis atas -->
+  <rect x="0" y="0" width="1200" height="8" fill="url(#accent)" />
+
+  <!-- Ikon jaringan sederhana: tiga node terhubung -->
+  <g stroke="#D7D3D2" stroke-width="6" fill="none" opacity="0.6">
+    <line x1="140" y1="330" x2="330" y2="240" />
+    <line x1="330" y1="240" x2="330" y2="420" />
+    <line x1="330" y1="240" x2="520" y2="330" />
+    <line x1="140" y1="330" x2="520" y2="330" stroke-dasharray="14 10" />
+  </g>
+  <g fill="#D4A024">
+    <circle cx="140" cy="330" r="26" />
+    <circle cx="330" cy="240" r="26" />
+    <circle cx="330" cy="420" r="26" />
+    <circle cx="520" cy="330" r="26" />
+  </g>
+  <g fill="#1B2A4A" font-size="22" font-family="monospace" text-anchor="middle" font-weight="bold">
+    <text x="140" y="338">PC</text>
+    <text x="330" y="248">SW</text>
+    <text x="330" y="428">PC</text>
+    <text x="520" y="338">RT</text>
+  </g>
+
+  <!-- Teks judul -->
+  <text x="640" y="250" fill="#FFFFFF" font-family="system-ui, sans-serif"
+        font-size="82" font-weight="700">OpenPacket</text>
+
+  <!-- Garis bawah judul -->
+  <rect x="640" y="282" width="230" height="7" rx="3" fill="#D4A024" />
+
+  <!-- Subjudul -->
+  <text x="640" y="352" fill="#F2F0EB" font-family="system-ui, sans-serif"
+        font-size="40">Simulator Jaringan Edukasi</text>
+
+  <!-- Deskripsi singkat -->
+  <text x="640" y="420" fill="#D7D3D2" font-family="system-ui, sans-serif"
+        font-size="28">Belajar Cisco: ARP, ICMP ping, subnetting,</text>
+  <text x="640" y="462" fill="#D7D3D2" font-family="system-ui, sans-serif"
+        font-size="28">VLAN, NAT, dan routing — langsung di browser.</text>
+
+  <!-- Badge fitur -->
+  <g font-family="system-ui, sans-serif" font-size="24" fill="#1B2A4A">
+    <rect x="640" y="506" width="150" height="44" rx="22" fill="#D4A024" />
+    <text x="715" y="536" text-anchor="middle">Gratis</text>
+
+    <rect x="808" y="506" width="130" height="44" rx="22" fill="#F2F0EB" />
+    <text x="873" y="536" text-anchor="middle">Offline</text>
+
+    <rect x="956" y="506" width="160" height="44" rx="22" fill="#F2F0EB" />
+    <text x="1036" y="536" text-anchor="middle">Tanpa Instal</text>
+  </g>
+</svg>

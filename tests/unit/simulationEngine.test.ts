@@ -302,7 +302,7 @@ describe('HeadlessSimulationEngine (kasus tepi & static route)', () => {
         { id: 'fa0/0', name: 'FastEthernet 0/0', status: 'up', ipAddress: '172.16.0.2', subnetMask: '255.255.255.0', macAddress: '00:50:79:R2:01' },
         { id: 'fa0/1', name: 'FastEthernet 0/1', status: 'up', ipAddress: '10.0.0.1', subnetMask: '255.255.255.0', macAddress: '00:50:79:R2:02' },
       ],
-      routes: [],
+      routes: [{ network: '192.168.1.0', subnetMask: '255.255.255.0', nextHop: '172.16.0.1', interfaceId: 'fa0/0' }],
       arpTable: {},
     };
     const links = [
@@ -321,6 +321,53 @@ describe('HeadlessSimulationEngine (kasus tepi & static route)', () => {
     expect(result.success).toBe(true);
     expect(result.ttl).toBe(126); // 128 - 2 router
     expect(result.rttMs).toBe(2);
+  });
+
+  it('ping gagal jika router remote tidak memiliki rute balik (bidirectional routing verification)', async () => {
+    const pc1 = makePc('pc-1', '192.168.1.10', '00:50:79:AA:BB:01', '192.168.1.1');
+    const pc2: DeviceData = {
+      ...makePc('pc-2', '10.0.0.20', '00:50:79:AA:BB:02', '10.0.0.1'),
+    };
+    const sw1 = makeSwitch('sw-1', '00:50:79:SW:01');
+    const sw3 = makeSwitch('sw-3', '00:50:79:SW:03');
+    const sw4 = makeSwitch('sw-4', '00:50:79:SW:04');
+    const r1: DeviceData = {
+      id: 'r-1',
+      label: 'R1',
+      type: 'router',
+      ports: [
+        { id: 'fa0/0', name: 'FastEthernet 0/0', status: 'up', ipAddress: '192.168.1.1', subnetMask: '255.255.255.0', macAddress: '00:50:79:R1:01' },
+        { id: 'fa0/1', name: 'FastEthernet 0/1', status: 'up', ipAddress: '172.16.0.1', subnetMask: '255.255.255.0', macAddress: '00:50:79:R1:02' },
+      ],
+      routes: [{ network: '10.0.0.0', subnetMask: '255.255.255.0', nextHop: '172.16.0.2', interfaceId: 'fa0/1' }],
+      arpTable: {},
+    };
+    const r2NoReturn: DeviceData = {
+      id: 'r-2',
+      label: 'R2',
+      type: 'router',
+      ports: [
+        { id: 'fa0/0', name: 'FastEthernet 0/0', status: 'up', ipAddress: '172.16.0.2', subnetMask: '255.255.255.0', macAddress: '00:50:79:R2:01' },
+        { id: 'fa0/1', name: 'FastEthernet 0/1', status: 'up', ipAddress: '10.0.0.1', subnetMask: '255.255.255.0', macAddress: '00:50:79:R2:02' },
+      ],
+      routes: [], // r2 sengaja tidak diberi rute ke 192.168.1.0/24
+      arpTable: {},
+    };
+    const links = [
+      { sourceNodeId: 'pc-1', sourcePortId: 'fa0', targetNodeId: 'sw-1', targetPortId: 'fa0/1' },
+      { sourceNodeId: 'sw-1', sourcePortId: 'fa0/2', targetNodeId: 'r-1', targetPortId: 'fa0/0' },
+      { sourceNodeId: 'r-1', sourcePortId: 'fa0/1', targetNodeId: 'sw-3', targetPortId: 'fa0/1' },
+      { sourceNodeId: 'sw-3', sourcePortId: 'fa0/2', targetNodeId: 'r-2', targetPortId: 'fa0/0' },
+      { sourceNodeId: 'r-2', sourcePortId: 'fa0/1', targetNodeId: 'sw-4', targetPortId: 'fa0/1' },
+      { sourceNodeId: 'sw-4', sourcePortId: 'fa0/2', targetNodeId: 'pc-2', targetPortId: 'fa0' },
+    ];
+    const engine = new HeadlessSimulationEngine();
+    engine.setTopology([pc1, pc2, sw1, sw3, sw4, r1, r2NoReturn], links);
+
+    const result = await engine.executePing('pc-1', '10.0.0.20');
+    expect(result.success).toBe(false);
+    expect(result.received).toBe(0);
+    expect(result.outputLines.some((l) => l.includes('Destination Host Unreachable'))).toBe(true);
   });
 
   it('deteksi routing loop antar dua router yang saling menunjuk', async () => {
@@ -654,10 +701,10 @@ describe('planPing — aliran event, PDU & determinisme (v1.2.0)', () => {
     // Frame ICMP hop keluar router: MAC sumber = port router fa0/1 (ditulis ulang per hop)
     const routerHop = icmpHops.find((e) => e.hop?.sourceNodeId === router.id)!;
     expect(routerHop.pdu?.frame.srcMac).toBe('00:50:79:RT:00:02'); // fa0/1 router
-    // Hop terakhir adalah sw2 → PC-2: MAC sumber = port switch, IP end-to-end tetap
+    // Hop terakhir adalah sw2 → PC-2: switch L2 tidak mengubah MAC sumber (tetap MAC router fa0/1)
     const lastHop = icmpHops[icmpHops.length - 1];
     expect(lastHop.hop?.sourceNodeId).toBe('sw-2');
-    expect(lastHop.pdu?.frame.srcMac).toBe('00:50:79:SW:02:02');
+    expect(lastHop.pdu?.frame.srcMac).toBe('00:50:79:RT:00:02');
     expect(lastHop.pdu?.packet?.dstIp).toBe('192.168.2.20'); // IP end-to-end tetap
   });
 
@@ -1000,5 +1047,43 @@ describe('VLAN 802.1Q, router-on-a-stick & RIPv2 (v1.2.0 fase 3)', () => {
     expect(after.success).toBe(true);
     expect(after.ttl).toBe(126);
     expect(after.rttMs).toBe(2);
+  });
+
+  it('L3 Routing: multi-interface router sources ping from egress interface based on routing table', async () => {
+    const r1: DeviceData = {
+      id: 'r-1',
+      label: 'R1',
+      type: 'router',
+      ports: [
+        { id: 'fa0/0', name: 'LAN', status: 'up', ipAddress: '192.168.1.1', subnetMask: '255.255.255.0', macAddress: '00:50:79:R1:01' },
+        { id: 'fa0/1', name: 'WAN', status: 'up', ipAddress: '10.0.0.1', subnetMask: '255.255.255.252', macAddress: '00:50:79:R1:02' },
+      ],
+      routes: [
+        { network: '172.16.0.0', subnetMask: '255.255.255.0', nextHop: '10.0.0.2', interfaceId: 'fa0/1', source: 'static' },
+      ],
+      arpTable: {},
+    };
+    const r2: DeviceData = {
+      id: 'r-2',
+      label: 'R2',
+      type: 'router',
+      ports: [
+        { id: 'fa0/0', name: 'WAN', status: 'up', ipAddress: '10.0.0.2', subnetMask: '255.255.255.252', macAddress: '00:50:79:R2:01' },
+        { id: 'fa0/1', name: 'LAN2', status: 'up', ipAddress: '172.16.0.1', subnetMask: '255.255.255.0', macAddress: '00:50:79:R2:02' },
+      ],
+      routes: [],
+      arpTable: {},
+    };
+    const links = [
+      { sourceNodeId: 'r-1', sourcePortId: 'fa0/1', targetNodeId: 'r-2', targetPortId: 'fa0/0' },
+    ];
+    const engine = new HeadlessSimulationEngine();
+    engine.setTopology([r1, r2], links);
+
+    const plan = engine.planPing('r-1', '172.16.0.1');
+    expect(plan.summary.success).toBe(true);
+    // Harus bersumber dari 10.0.0.1 (interface egress WAN), bukan 192.168.1.1 (LAN fa0/0)
+    const startLog = plan.events.find((e) => e.message.includes('Memulai PING'));
+    expect(startLog?.message).toContain('10.0.0.1');
   });
 });

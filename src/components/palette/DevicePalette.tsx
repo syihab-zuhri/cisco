@@ -54,26 +54,35 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
   const reactFlow = useReactFlow();
   const [activeTab, setActiveTab] = useState<'devices' | 'templates'>('devices');
   const [isStudentInClass, setIsStudentInClass] = useState<boolean>(() => {
-    return (
-      classroomHub.getCurrentParticipant() !== null ||
-      classroomHub.getLockedRole() === 'student'
-    );
+    return classroomHub.isStudentActive();
   });
 
   useEffect(() => {
     const checkStatus = () => {
-      const inClass =
-        classroomHub.getCurrentParticipant() !== null ||
-        classroomHub.getLockedRole() === 'student';
+      const inClass = classroomHub.isStudentActive();
       setIsStudentInClass(inClass);
-      if (inClass && activeTab === 'templates') {
-        setActiveTab('devices');
+      if (inClass) {
+        setActiveTab((curr) => (curr === 'templates' ? 'devices' : curr));
       }
     };
     const unsub = classroomHub.subscribe(checkStatus);
     checkStatus();
-    return unsub;
-  }, [activeTab]);
+
+    const onStorage = (e: StorageEvent) => {
+      if (
+        e.key === 'openpacket_locked_role' ||
+        e.key === 'openpacket_current_participant'
+      ) {
+        checkStatus();
+      }
+    };
+    window.addEventListener('storage', onStorage);
+
+    return () => {
+      unsub();
+      window.removeEventListener('storage', onStorage);
+    };
+  }, []);
 
   // Titik tengah viewport kanvas + offset kaskade 28px per node yang menumpuk,
   // sehingga perangkat/anotasi sebelumnya tetap terlihat sebagian.
@@ -100,7 +109,7 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
 
   const handleAddSquare = () => {
     addSquare(spawnPosition());
-    addSimulationLog('INFO', 'Square anotasi ditambahkan — klik untuk ganti warna & resize.');
+    addSimulationLog('INFO', 'Square anotasi ditambahkan — klik untuk ganti warna & ubah ukuran.');
   };
 
   const handleAddText = () => {
@@ -109,10 +118,23 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
   };
 
   const handleApplyTemplate = (template: TopologyTemplate) => {
-    const nodes = JSON.parse(JSON.stringify(template.nodes));
-    const edges = JSON.parse(JSON.stringify(template.edges));
-    loadTopology({ nodes, edges });
-    addSimulationLog('SUCCESS', `Template "${template.name}" berhasil diterapkan ke kanvas!`);
+    const applyTemplate = () => {
+      const nodes = JSON.parse(JSON.stringify(template.nodes));
+      const edges = JSON.parse(JSON.stringify(template.edges));
+      loadTopology({ nodes, edges });
+      addSimulationLog('SUCCESS', `Template "${template.name}" berhasil diterapkan ke kanvas!`);
+    };
+    const current = useAppStore.getState();
+    if (current.nodes.length > 0 || current.edges.length > 0) {
+      current.requestConfirm({
+        title: 'Ganti Kanvas dengan Template?',
+        message: `Template "${template.name}" akan mengganti seluruh perangkat, kabel, dan anotasi di kanvas. Simpan topologi terlebih dahulu jika pekerjaan ini masih diperlukan.`,
+        confirmLabel: 'Muat Template',
+        onConfirm: applyTemplate,
+      });
+    } else {
+      applyTemplate();
+    }
   };
 
   if (!isOpen) {
@@ -150,7 +172,7 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
           variant="secondary"
           size="sm"
           onClick={onToggle}
-          className="md:hidden absolute top-3 left-3 z-20 h-8 gap-1.5 rounded-full border border-border/70 bg-card/90 px-3 text-xs font-semibold shadow-md backdrop-blur-sm"
+          className="md:hidden absolute top-3 left-3 z-20 h-8 gap-1.5 rounded-full border border-border/70 bg-card px-3 text-xs font-semibold shadow-md"
           aria-label="Buka Palet Alat"
         >
           <Layers className="h-3.5 w-3.5 text-primary" />
@@ -164,7 +186,7 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
     <>
       {/* Mobile Backdrop saat terbuka */}
       <div
-        className="md:hidden fixed inset-0 z-40 bg-black/50 backdrop-blur-xs transition-opacity"
+        className="md:hidden fixed inset-0 z-40 bg-scrim transition-opacity"
         onClick={onToggle}
         aria-hidden="true"
       />
@@ -209,9 +231,9 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
             className="h-full flex-1 gap-1.5 text-xs font-semibold tracking-wide disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isStudentInClass ? (
-              <Lock className="size-3.5 text-amber-400" />
+              <Lock className="size-3.5 text-viz-gold" />
             ) : (
-              <Sparkles className="size-3.5 text-amber-400" />
+              <Sparkles className="size-3.5 text-viz-gold" />
             )}
             <span>Template</span>
           </TabsTrigger>
@@ -232,7 +254,7 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
                 <PaletteButton
                   disabled={labLocked}
                   onClick={() => handleAdd('pc')}
-                  icon={<Monitor className="h-4 w-4 text-sky-400" />}
+                  icon={<Monitor className="h-4 w-4 text-viz-blue" />}
                   title="PC Host"
                   subtitle="End Device (1 Port)"
                 />
@@ -240,7 +262,7 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
                 <PaletteButton
                   disabled={labLocked}
                   onClick={() => handleAdd('laptop')}
-                  icon={<Laptop className="h-4 w-4 text-cyan-400" />}
+                  icon={<Laptop className="h-4 w-4 text-viz-teal" />}
                   title="Laptop"
                   subtitle="End Device (1 Port)"
                 />
@@ -248,7 +270,7 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
                 <PaletteButton
                   disabled={labLocked}
                   onClick={() => handleAdd('server')}
-                  icon={<Server className="h-4 w-4 text-violet-400" />}
+                  icon={<Server className="h-4 w-4 text-viz-violet" />}
                   title="Server"
                   subtitle="End Device (1 Port)"
                 />
@@ -256,7 +278,7 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
                 <PaletteButton
                   disabled={labLocked}
                   onClick={() => handleAdd('switch')}
-                  icon={<Network className="h-4 w-4 text-emerald-400" />}
+                  icon={<Network className="h-4 w-4 text-viz-green" />}
                   title="Switch L2"
                   subtitle="8 FE Ports (CAM Learning)"
                 />
@@ -264,7 +286,7 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
                 <PaletteButton
                   disabled={labLocked}
                   onClick={() => handleAdd('hub')}
-                  icon={<Cable className="h-4 w-4 text-orange-400" />}
+                  icon={<Cable className="h-4 w-4 text-viz-orange" />}
                   title="Hub"
                   subtitle="8 FE Ports (Repeater Murni)"
                 />
@@ -272,7 +294,7 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
                 <PaletteButton
                   disabled={labLocked}
                   onClick={() => handleAdd('accessPoint')}
-                  icon={<Wifi className="h-4 w-4 text-fuchsia-400" />}
+                  icon={<Wifi className="h-4 w-4 text-viz-plum" />}
                   title="Access Point"
                   subtitle="Radio WiFi + Uplink"
                 />
@@ -280,7 +302,7 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
                 <PaletteButton
                   disabled={labLocked}
                   onClick={() => handleAdd('router')}
-                  icon={<Router className="h-4 w-4 text-amber-400" />}
+                  icon={<Router className="h-4 w-4 text-viz-gold" />}
                   title="Router L3"
                   subtitle="3 FE Ports (Routed)"
                 />
@@ -288,7 +310,7 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
                 <PaletteButton
                   disabled={labLocked}
                   onClick={() => handleAdd('cloud')}
-                  icon={<Cloud className="h-4 w-4 text-sky-300" />}
+                  icon={<Cloud className="h-4 w-4 text-viz-blue" />}
                   title="Cloud Internet"
                   subtitle="IP Publik Tersimulasi (8.8.8.8)"
                 />
@@ -296,20 +318,20 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
 
               {/* Anotasi kanvas: square & teks custom */}
               <div className="mt-6 border-t pt-3">
-                <h3 className="text-[11px] font-semibold uppercase tracking-wider text-violet-400">
+                <h3 className="text-[11px] font-semibold uppercase tracking-wider text-viz-violet">
                   Anotasi (di belakang perangkat)
                 </h3>
                 <div className="mt-2 flex flex-col gap-2">
                   <PaletteButton
                     disabled={labLocked}
                     onClick={handleAddSquare}
-                    icon={<Square className="h-4 w-4 text-violet-400" />}
+                    icon={<Square className="h-4 w-4 text-viz-violet" />}
                     title="Square"
                   />
                   <PaletteButton
                     disabled={labLocked}
                     onClick={handleAddText}
-                    icon={<Type className="h-4 w-4 text-sky-400" />}
+                    icon={<Type className="h-4 w-4 text-viz-blue" />}
                     title="Teks"
                   />
                 </div>
@@ -331,7 +353,7 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
         <TabsContent value="templates" className="min-h-0 flex-1 overflow-hidden">
           {isStudentInClass ? (
             <div className="flex h-full flex-col items-center justify-center p-6 text-center">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-500/10 text-amber-400 mb-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-viz-gold/10 text-viz-gold mb-3">
                 <Lock className="h-6 w-6" />
               </div>
               <h3 className="text-xs font-bold text-foreground">Template Dinonaktifkan</h3>
@@ -343,7 +365,7 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
             <ScrollArea className="h-full">
               <div className="flex flex-col p-3">
                 <div className="mb-3">
-                  <h2 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-amber-400">
+                  <h2 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-viz-gold">
                     <LayoutTemplate className="h-3.5 w-3.5" />
                     Template Topologi
                   </h2>

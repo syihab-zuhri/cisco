@@ -1,35 +1,235 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/geist";
-@import "@fontsource-variable/montserrat";
+@import "@fontsource-variable/plus-jakarta-sans/wght.css";
+@import "@fontsource/jetbrains-mono/latin-400.css";
+@import "@fontsource/jetbrains-mono/latin-500.css";
+@import "@fontsource/jetbrains-mono/latin-700.css";
 
+/* Tiga mode: terang, gelap, atau ikut sistem (lihat src/lib/theme.ts). Mode
+   gelap aktif lewat kelas `.dark` pada <html>. */
 @custom-variant dark (&:is(.dark *));
 
-@layer base {
-  :root {
-    /* Variabel domain jaringan (dipakai kanvas & terminal) */
-    --pkt-arp: #10b981;
-    --pkt-icmp: #06b6d4;
-    --pkt-ip: #8b5cf6;
-    --term-bg: #050505;
-    --term-text: #00ff66;
-    --term-prompt: #38bdf8;
-  }
-  * {
-    @apply border-border outline-ring/50;
-  }
-  body {
-    @apply bg-background text-foreground;
-  }
-  html {
-    @apply font-sans;
-  }
+/* ==========================================================================
+   TOKEN TEMA — krem (kanvas) · navy (tinta/aksi) · emas (aksen)
+   Diturunkan dari sistem desain DiagramForge. Komponen hanya boleh memakai
+   token semantik di bawah (lewat utilitas Tailwind atau var(--...)), bukan
+   nilai hex mentah. `:root` = tema terang; `.dark` menimpa token yang berbeda
+   (turunan DiagramForge: kanvas navy gelap, tinta krem, aksen emas tetap).
+   ========================================================================== */
+:root {
+  color-scheme: light;
+
+  /* Permukaan */
+  --canvas: #f2f0eb; /* krem — latar halaman & kanvas */
+  --surface: #ffffff; /* kartu, panel, dialog */
+  --surface-muted: #e5e2dc; /* hover, chip, area bawah */
+  --inverse: #1b2a4a; /* navy — top bar, terminal */
+  --inverse-raised: #23365d;
+  --scrim: rgb(27 42 74 / 0.6);
+  --mask: rgb(229 226 220 / 0.7);
+
+  /* Teks */
+  --fg-primary: #1b2a4a; /* 12.49 : 1 di atas krem */
+  --fg-secondary: #2e4676; /*  8.18 : 1 di atas krem */
+  --fg-inverse: #ffffff;
+  --fg-inverse-muted: #d7d3d2;
+  --fg-gold: #8a5d00; /* teks emas gelap, 5.06 : 1 di atas krem */
+  --fg-on-gold: #1b2a4a;
+
+  /* Aksi — `gold` bukan `accent` karena `accent` shadcn = warna hover */
+  --gold: #d4a024;
+  --gold-hover: #b98a1c;
+  --danger: #b91c1c;
+  --danger-hover: #991b1b;
+
+  /* Garis */
+  --line: #d7d3d2; /* dekoratif */
+  --line-control: #66748f; /* batas kontrol form, 4.71 : 1 di atas putih */
+  --line-strong: #23365d;
+  --line-focus: #d4a024;
+  --line-focus-inner: #1b2a4a;
+
+  /* Umpan balik */
+  --success-fg: #166534;
+  --success-bg: #e6f4ea;
+  --success-border: #166534;
+  --danger-fg: #b91c1c;
+  --danger-bg: #fdecec;
+  --danger-border: #b91c1c;
+  --warning-fg: #1b2a4a;
+  --warning-bg: #fbefc8;
+  --warning-border: #8a5d00;
+  --info-fg: #1b2a4a;
+  --info-bg: #e5e2dc;
+  --info-border: #2e4676;
+
+  /* Warna kategori (jenis perangkat, protokol, status). DiagramForge hanya
+     punya navy/emas/merah/hijau, sedangkan simulator butuh empat protokol dan
+     beberapa kategori yang tetap bisa dibedakan. Semua ≥ 4.5 : 1 di atas
+     putih maupun krem, juga sebagai teks di atas tint 10 % dirinya sendiri. */
+  --viz-blue: #1f5fa8;
+  --viz-teal: #0b6477;
+  --viz-green: #166534;
+  --viz-gold: #835800;
+  --viz-orange: #a63d08;
+  --viz-red: #b91c1c;
+  --viz-violet: #6035b0;
+  --viz-plum: #9d2a8b;
+  --on-viz: #ffffff; /* teks di atas fill viz solid */
+
+  /* Domain jaringan (kanvas, log, terminal) */
+  --pkt-arp: var(--viz-green);
+  --pkt-icmp: var(--viz-teal);
+  --pkt-dhcp: var(--viz-gold);
+  --pkt-rip: var(--viz-violet);
+  --pkt-ip: var(--viz-violet);
+  --term-bg: var(--inverse);
+  --term-text: #f2f0eb; /* krem tetap, terminal selalu di atas navy */
+  --term-prompt: var(--gold);
+
+  /* Elevasi */
+  --elevation-raised: 0 2px 4px 0 rgb(27 42 74 / 0.08);
+  --elevation-overlay: 0 10px 25px 0 rgb(27 42 74 / 0.16);
+
+  /* Peta ke variabel shadcn */
+  --background: var(--canvas);
+  --foreground: var(--fg-primary);
+  --card: var(--surface);
+  --card-foreground: var(--fg-primary);
+  --popover: var(--surface);
+  --popover-foreground: var(--fg-primary);
+  --primary: var(--inverse);
+  --primary-foreground: var(--fg-inverse);
+  --secondary: var(--surface-muted);
+  --secondary-foreground: var(--fg-primary);
+  --muted: var(--surface-muted);
+  --muted-foreground: var(--fg-secondary);
+  --accent: var(--surface-muted);
+  --accent-foreground: var(--fg-primary);
+  --destructive: var(--danger);
+  --border: var(--line);
+  --input: var(--line-control);
+  --ring: var(--fg-primary);
+  --chart-1: var(--viz-blue);
+  --chart-2: var(--viz-teal);
+  --chart-3: var(--viz-green);
+  --chart-4: var(--viz-gold);
+  --chart-5: var(--viz-violet);
+  --radius: 0.625rem;
+  --sidebar: var(--surface);
+  --sidebar-foreground: var(--fg-primary);
+  --sidebar-primary: var(--inverse);
+  --sidebar-primary-foreground: var(--fg-inverse);
+  --sidebar-accent: var(--surface-muted);
+  --sidebar-accent-foreground: var(--fg-primary);
+  --sidebar-border: var(--line);
+  --sidebar-ring: var(--fg-primary);
+}
+
+/* Area navy (top bar, terminal): variabel shadcn dibalik sehingga semua
+   Button/Input/Select di dalamnya otomatis terbaca di atas latar navy.
+   Popup yang di-portal ke <body> sengaja tetap memakai tema terang. */
+.df-inverse {
+  --background: var(--inverse);
+  --foreground: var(--fg-inverse);
+  --card: var(--inverse-raised);
+  --card-foreground: var(--fg-inverse);
+  --popover: var(--inverse-raised);
+  --popover-foreground: var(--fg-inverse);
+  --primary: var(--gold);
+  --primary-foreground: var(--fg-on-gold);
+  --secondary: var(--inverse-raised);
+  --secondary-foreground: var(--fg-inverse);
+  --muted: var(--inverse-raised);
+  --muted-foreground: var(--fg-inverse-muted);
+  --accent: var(--inverse-raised);
+  --accent-foreground: var(--fg-inverse);
+  --destructive: #fca5a5;
+  --border: rgb(255 255 255 / 0.18);
+  --input: rgb(255 255 255 / 0.32);
+  --ring: var(--gold);
+
+  background-color: var(--inverse);
+  color: var(--fg-inverse);
+}
+
+/* Warna kategori versi terang: dipakai di atas latar gelap (mode gelap dan area
+   navy). ≥ 4.7 : 1 di atas navy, juga sebagai teks di atas tint 15 % dirinya.
+   --pkt-* dideklarasikan ulang di sini karena var() di-resolve per elemen. */
+.dark,
+.df-inverse {
+  --viz-blue: #93c5fd;
+  --viz-teal: #67e8f9;
+  --viz-green: #86efac;
+  --viz-gold: #e8b93f;
+  --viz-orange: #fdba74;
+  --viz-red: #fca5a5;
+  --viz-violet: #c4b5fd;
+  --viz-plum: #f0abfc;
+  --on-viz: #0e1626;
+  --pkt-arp: var(--viz-green);
+  --pkt-icmp: var(--viz-teal);
+  --pkt-dhcp: var(--viz-gold);
+  --pkt-rip: var(--viz-violet);
+  --pkt-ip: var(--viz-violet);
+}
+
+.dark {
+  color-scheme: dark;
+
+  /* Permukaan */
+  --canvas: #0e1626;
+  --surface: #16223b;
+  --surface-muted: #1f2e4f;
+  --scrim: rgb(5 10 20 / 0.7);
+  --mask: rgb(14 22 38 / 0.7);
+
+  /* Teks */
+  --fg-primary: #f2f0eb; /* 13.9 : 1 di atas surface */
+  --fg-secondary: #b9c2d6; /*  8.9 : 1 di atas surface */
+  --fg-gold: #e8b93f;
+
+  /* Aksi */
+  --danger: #f87171;
+  --danger-hover: #fca5a5;
+
+  /* Garis */
+  --line: #2c3c5e;
+  --line-control: #7686a6; /* 4.3 : 1 di atas surface */
+  --line-strong: #a9b6d0;
+  --line-focus-inner: #0e1626;
+
+  /* Umpan balik */
+  --success-fg: #86efac;
+  --success-bg: #11301f;
+  --success-border: #4ade80;
+  --danger-fg: #fca5a5;
+  --danger-bg: #3a1618;
+  --danger-border: #f87171;
+  --warning-fg: #f5d77a;
+  --warning-bg: #3b2c08;
+  --warning-border: #d4a024;
+  --info-fg: #f2f0eb;
+  --info-bg: #1f2e4f;
+  --info-border: #7686a6;
+
+  /* Elevasi */
+  --elevation-raised: 0 2px 4px 0 rgb(0 0 0 / 0.35);
+  --elevation-overlay: 0 10px 25px 0 rgb(0 0 0 / 0.5);
+
+  /* Primer shadcn: navy di atas navy tak terlihat, jadi krem di atas navy gelap */
+  --primary: var(--fg-primary);
+  --primary-foreground: var(--inverse);
+  --sidebar-primary: var(--fg-primary);
+  --sidebar-primary-foreground: var(--inverse);
 }
 
 @theme inline {
   --font-heading: var(--font-sans);
-  --font-sans: 'Montserrat Variable', sans-serif;
+  --font-sans: "Plus Jakarta Sans Variable", Inter, ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -61,66 +261,157 @@
   --color-card: var(--card);
   --color-foreground: var(--foreground);
   --color-background: var(--background);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+
+  /* Token DiagramForge sebagai utilitas: bg-canvas, bg-inverse, text-gold-fg, ... */
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-inverse: var(--inverse);
+  --color-inverse-raised: var(--inverse-raised);
+  --color-inverse-foreground: var(--fg-inverse);
+  --color-inverse-muted: var(--fg-inverse-muted);
+  --color-scrim: var(--scrim);
+  --color-mask: var(--mask);
+  --color-gold: var(--gold);
+  --color-gold-hover: var(--gold-hover);
+  --color-gold-fg: var(--fg-gold);
+  --color-on-gold: var(--fg-on-gold);
+  --color-line: var(--line);
+  --color-line-control: var(--line-control);
+  --color-line-strong: var(--line-strong);
+  --color-line-focus: var(--line-focus);
+  --color-success-fg: var(--success-fg);
+  --color-success-bg: var(--success-bg);
+  --color-success-border: var(--success-border);
+  --color-danger-fg: var(--danger-fg);
+  --color-danger-bg: var(--danger-bg);
+  --color-danger-border: var(--danger-border);
+  --color-warning-fg: var(--warning-fg);
+  --color-warning-bg: var(--warning-bg);
+  --color-warning-border: var(--warning-border);
+  --color-info-fg: var(--info-fg);
+  --color-info-bg: var(--info-bg);
+  --color-info-border: var(--info-border);
+  --color-viz-blue: var(--viz-blue);
+  --color-viz-teal: var(--viz-teal);
+  --color-viz-green: var(--viz-green);
+  --color-viz-gold: var(--viz-gold);
+  --color-viz-orange: var(--viz-orange);
+  --color-viz-red: var(--viz-red);
+  --color-viz-violet: var(--viz-violet);
+  --color-viz-plum: var(--viz-plum);
+  --color-on-viz: var(--on-viz);
+
+  /* Tiga radius DiagramForge (4 / 6 / 10 px); semua ukuran besar dipadatkan
+     ke 10 px supaya satu hierarki kontainer tidak mencampur sudut. */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 10px;
+  --radius-2xl: 10px;
+  --radius-3xl: 10px;
+  --radius-4xl: 10px;
+
+  /* Bayangan bernuansa navy, tipis; literal agar shadow-<warna>/N tetap bisa
+     di-tint oleh Tailwind. */
+  --shadow-2xs: 0 1px 1px 0 rgb(27 42 74 / 0.04);
+  --shadow-xs: 0 1px 2px 0 rgb(27 42 74 / 0.06);
+  --shadow-sm: 0 1px 3px 0 rgb(27 42 74 / 0.08), 0 1px 2px -1px rgb(27 42 74 / 0.06);
+  --shadow-md: 0 2px 4px 0 rgb(27 42 74 / 0.08);
+  --shadow-lg: 0 6px 16px -2px rgb(27 42 74 / 0.12);
+  --shadow-xl: 0 10px 25px 0 rgb(27 42 74 / 0.16);
+  --shadow-2xl: 0 10px 25px 0 rgb(27 42 74 / 0.16);
+  --shadow-raised: 0 2px 4px 0 rgb(27 42 74 / 0.08);
+  --shadow-overlay: 0 10px 25px 0 rgb(27 42 74 / 0.16);
 }
 
-/* Tema gelap default shadcn (dark-only app) */
-:root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.488 0.243 264.376);
-  --primary-foreground: oklch(0.97 0.014 254.604);
-  --secondary: oklch(0.967 0.001 286.375);
-  --secondary-foreground: oklch(0.21 0.006 285.885);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.809 0.105 251.813);
-  --chart-2: oklch(0.623 0.214 259.815);
-  --chart-3: oklch(0.546 0.245 262.881);
-  --chart-4: oklch(0.488 0.243 264.376);
-  --chart-5: oklch(0.424 0.199 265.638);
-  --radius: 0.875rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.546 0.245 262.881);
-  --sidebar-primary-foreground: oklch(0.97 0.014 254.604);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans;
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-background text-foreground;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  code,
+  kbd,
+  pre,
+  .font-mono {
+    font-variant-ligatures: none;
+  }
+
+  /* Cincin fokus ganda: navy di dalam + emas di luar, agar minimal satu cincin
+     selalu ≥ 3 : 1 terhadap latar mana pun (emas tunggal di krem hanya 2.08 : 1).
+     Komponen shadcn yang memakai `outline-none` tetap memakai cincin `--ring`. */
+  :where(a, button, input, select, textarea, summary, [tabindex], [role="tab"]):focus-visible {
+    outline: 2px solid var(--line-focus);
+    outline-offset: 2px;
+    box-shadow: 0 0 0 2px var(--line-focus-inner);
+  }
+  .df-inverse :where(a, button, input, select, textarea, summary, [tabindex], [role="tab"]):focus-visible {
+    box-shadow: 0 0 0 2px var(--inverse);
+  }
 }
 
-/* React Flow Controls & MiniMap mengikuti tema gelap shadcn
-   (spesifikasi selector dinaikkan untuk mengalahkan style default bawaan) */
+/* Penanda node terpilih di kanvas: cincin ganda yang sama dengan fokus.
+   Tak berlapis (unlayered) agar menang atas utilitas shadow-*. */
+.df-node-selected {
+  box-shadow:
+    0 0 0 2px var(--line-focus-inner),
+    0 0 0 4px var(--line-focus);
+}
+
+/* React Flow membawa CSS tak berlapis, jadi override-nya juga harus tak berlapis. */
+.react-flow {
+  --xy-background-color: var(--canvas);
+  --xy-background-color-default: var(--canvas);
+  --xy-edge-stroke: var(--fg-secondary);
+  --xy-edge-stroke-default: var(--fg-secondary);
+  --xy-edge-stroke-selected: var(--fg-primary);
+  --xy-edge-stroke-selected-default: var(--fg-primary);
+  --xy-connectionline-stroke: var(--gold-hover);
+  --xy-connectionline-stroke-default: var(--gold-hover);
+  --xy-connectionline-stroke-width: 2;
+  --xy-connectionline-stroke-width-default: 2;
+  --xy-minimap-background-color: var(--surface);
+  --xy-minimap-background-color-default: var(--surface);
+  --xy-minimap-mask-background-color: var(--mask);
+  --xy-minimap-mask-background-color-default: var(--mask);
+  --xy-controls-button-background-color: var(--surface);
+  --xy-controls-button-background-color-default: var(--surface);
+  --xy-controls-button-background-color-hover: var(--surface-muted);
+  --xy-controls-button-background-color-hover-default: var(--surface-muted);
+  --xy-controls-button-color: var(--fg-primary);
+  --xy-controls-button-color-default: var(--fg-primary);
+  --xy-controls-button-border-color: var(--line);
+  --xy-controls-button-border-color-default: var(--line);
+  --xy-attribution-background-color: var(--surface);
+  --xy-attribution-background-color-default: var(--surface);
+}
+
+.react-flow .react-flow__attribution a {
+  color: var(--fg-secondary);
+}
+
 .react-flow .react-flow__controls {
-  box-shadow: none;
+  border-radius: var(--radius-md);
+  box-shadow: var(--elevation-raised);
+  overflow: hidden;
 }
 
 .react-flow .react-flow__controls-button {
-  background: var(--card);
-  border-bottom: 1px solid var(--border);
-  color: var(--muted-foreground);
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  color: var(--fg-primary);
 }
 
 .react-flow .react-flow__controls-button:hover {
-  background: var(--accent);
-  color: var(--foreground);
+  background: var(--surface-muted);
 }
 
 .react-flow .react-flow__controls-button svg {
@@ -128,9 +419,10 @@
 }
 
 .react-flow__minimap {
-  background: var(--card);
-  border: 1px solid var(--border);
+  background: var(--surface);
+  border: 1px solid var(--line);
   border-radius: var(--radius-md);
+  box-shadow: var(--elevation-raised);
   overflow: hidden;
 }
 
@@ -145,38 +437,4 @@
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
-}
-
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.424 0.199 265.638);
-  --primary-foreground: oklch(0.97 0.014 254.604);
-  --secondary: oklch(0.274 0.006 286.033);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.809 0.105 251.813);
-  --chart-2: oklch(0.623 0.214 259.815);
-  --chart-3: oklch(0.546 0.245 262.881);
-  --chart-4: oklch(0.488 0.243 264.376);
-  --chart-5: oklch(0.424 0.199 265.638);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.623 0.214 259.815);
-  --sidebar-primary-foreground: oklch(0.97 0.014 254.604);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
 }
