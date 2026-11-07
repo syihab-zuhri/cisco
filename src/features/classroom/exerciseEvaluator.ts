@@ -67,7 +67,9 @@ export async function evaluateExercise(
     status,
     score,
     checks,
-    feedback,
+    feedback: exercise.targets.some((target) => target.type === 'reachability')
+      ? `${feedback} Nilai mencakup uji konektivitas sesuai target ping pada rubrik.`
+      : `${feedback} Konektivitas tidak diuji oleh rubrik ini; nilai menunjukkan pemenuhan target yang tercantum.`,
     evaluatedAt: new Date().toLocaleTimeString(),
   };
 }

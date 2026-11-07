@@ -4,9 +4,14 @@ import type { DeviceData, DeviceType } from '../../types/network';
 export interface StarterTopology {
   nodes: Node<DeviceData>[];
   edges: Edge[];
+  /** Per-question work; absent for legacy submissions using one shared canvas. */
+  exerciseTopologies?: Record<string, StarterTopology>;
 }
 
 export type SessionStatus = 'open' | 'locked' | 'closed';
+
+/** Alasan sesi siswa berakhir: ditutup guru, dikeluarkan guru, atau kode kelasnya kini dipakai kelas lain. */
+export type StudentSessionEndReason = 'closed' | 'kicked' | 'replaced';
 
 export interface ClassSession {
   id: string;
@@ -82,6 +87,8 @@ export interface Submission {
   round?: number;
   /** Jawaban yang diimpor guru dari berkas .opsub (bukan dari relay). */
   imported?: boolean;
+  /** Work-only file, not a score claim. Teacher must grade its snapshot. */
+  ungraded?: boolean;
   submittedAt: number;
 }
 
@@ -127,4 +134,6 @@ export type ClassroomEvent =
   /** Hanya lokal: relay menolak sebuah event (403/404/413/...) sehingga UI dapat memberi tahu pengguna. */
   | { type: 'RELAY_REJECTED'; eventType: string; classCode: string; status: number; message: string }
   | { type: 'ROLE_CHANGED'; role: 'teacher' | 'student' | null }
-  | { type: 'PARTICIPANT_CHANGED'; participant: Participant | null };
+  | { type: 'PARTICIPANT_CHANGED'; participant: Participant | null }
+  /** Hanya lokal: alasan akhir sesi tetap tersedia setelah identitas siswa dibersihkan. */
+  | { type: 'STUDENT_SESSION_ENDED'; classCode: string; participantId: string; reason: StudentSessionEndReason };

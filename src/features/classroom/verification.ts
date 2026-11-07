@@ -1,6 +1,6 @@
 import type { Edge, Node } from '@xyflow/react';
 import type { DeviceData } from '../../types/network';
-import { evaluatePacket } from './submissionBuilder';
+import { evaluatePacket, buildPacketSubmission } from './submissionBuilder';
 import type { Exercise, StarterTopology, Submission } from './types';
 
 /**
@@ -58,7 +58,10 @@ export async function verifySubmission(
   }
 
   try {
-    const packet = await evaluatePacket(exercises, snapshot.nodes as Node<DeviceData>[], snapshot.edges as Edge[]);
+    if (snapshot.exerciseTopologies && wantedIds.some((id) => !snapshot.exerciseTopologies?.[id])) {
+      return { ...base, status: 'unavailable', reason: 'Snapshot salah satu soal tidak tersedia.' };
+    }
+    const packet = await evaluatePacket(exercises, snapshot.nodes as Node<DeviceData>[], snapshot.edges as Edge[], {}, snapshot.exerciseTopologies);
     return {
       ...base,
       status: packet.averageScore === submission.score ? 'match' : 'mismatch',
@@ -67,4 +70,17 @@ export async function verifySubmission(
   } catch (err) {
     return { ...base, status: 'unavailable', reason: `Penilaian ulang gagal: ${err instanceof Error ? err.message : String(err)}` };
   }
+}
+
+/** Import legacy score claims and work-only files through the same actual-snapshot grader. */
+export async function gradeImportedWork(submission: Submission, snapshot: StarterTopology | null, availableExercises: Exercise[]): Promise<Submission> {
+  const ids = submission.exerciseScores && Object.keys(submission.exerciseScores).length ? Object.keys(submission.exerciseScores) : [submission.exerciseId];
+  const byId = new Map(availableExercises.map((ex) => [ex.id, ex]));
+  const exercises = ids.map((id) => byId.get(id)).filter((e): e is Exercise => Boolean(e));
+  if (!snapshot || !ids.length || exercises.length !== ids.length ||
+      (snapshot.exerciseTopologies && ids.some((id) => !snapshot.exerciseTopologies?.[id]))) {
+    return { ...submission, ungraded: true };
+  }
+  const packet = await evaluatePacket(exercises, snapshot.nodes, snapshot.edges, {}, snapshot.exerciseTopologies);
+  return { ...buildPacketSubmission({ id: submission.participantId, nickname: submission.nickname, joinedAt: 0, status: 'submitted' }, exercises, submission.exerciseId, packet), submittedAt: submission.submittedAt, ungraded: false };
 }

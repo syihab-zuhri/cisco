@@ -381,6 +381,12 @@ export function ExerciseEditorModal({
               </div>
             </div>
 
+            {targets.length > 0 && !targets.some((target) => target.type === 'reachability') && (
+              <p className="rounded-md border border-warning-border bg-warning-bg p-3 text-xs leading-relaxed text-warning-fg">
+                Rubrik ini belum menguji konektivitas. Nilai 100 hanya berarti target yang tercantum terpenuhi.
+                Tambahkan kriteria <b>+ Ping</b> beserta perangkat sumber dan tujuan jika tugas mensyaratkan jaringan saling terhubung.
+              </p>
+            )}
             {targets.length === 0 ? (
               <div className="rounded-lg border border-dashed p-6 text-center text-xs text-muted-foreground">
                 Belum ada target penilaian. Tambahkan minimal satu kriteria di atas agar simulator dapat mengevaluasi lembar kerja siswa.

@@ -383,6 +383,83 @@ describe('Relay: submission', () => {
     expect(typeof sub.round).toBe('number');
     expect(r.rooms.get('NET-1111').participants[0].status).toBe('submitted');
   });
+
+  it('menolak (422) jawaban untuk soal yang tidak aktif di kelas ini, termasuk saat kelas belum punya soal', () => {
+    const r = makeRelay();
+    createClass(r);
+    join(r, ANI);
+    const res = submit(r, ANI, 80, 'NET-1111', { exerciseId: 'soal-kelas-lain' });
+    expect(res.status).toBe(422);
+    expect(res.body.error).toContain('tidak ada di kelas ini');
+    expect(r.rooms.get('NET-1111').submissions).toEqual({});
+    expect(submit(r, ANI, 80).status).toBe(200); // soal aktif (ex-a) tetap diterima
+
+    createClass(r, 'NET-2222', { activeExercises: [] });
+    join(r, BUDI, 'NET-2222');
+    expect(submit(r, BUDI, 80, 'NET-2222').status).toBe(422);
+  });
+
+  it('satu kali kirim per ronde: kiriman kedua ditolak 409 dan jawaban pertama tidak tertimpa', () => {
+    const r = makeRelay();
+    createClass(r);
+    join(r, ANI);
+    expect(submit(r, ANI, 40).status).toBe(200);
+    const second = submit(r, ANI, 100);
+    expect(second.status).toBe(409);
+    expect(second.body.error).toContain('sudah dikirim');
+    expect(r.rooms.get('NET-1111').submissions[ANI.id].score).toBe(40);
+  });
+
+  it('ronde baru (EXERCISE_STARTED) membuka kembali kesempatan satu kali kirim; ganti soal tanpa ronde baru tidak', () => {
+    const r = makeRelay();
+    createClass(r);
+    join(r, ANI);
+    expect(submit(r, ANI, 40).status).toBe(200);
+    r.post({ type: 'EXERCISES_UPDATED', classCode: 'NET-1111', exercises: [EX_A, EX_B], hostToken: HOST });
+    expect(submit(r, ANI, 90, 'NET-1111', { exerciseId: 'ex-b' }).status).toBe(409); // ronde sama
+    r.post({ type: 'EXERCISE_STARTED', classCode: 'NET-1111', exercises: [EX_B], hostToken: HOST });
+    expect(submit(r, ANI, 90, 'NET-1111', { exerciseId: 'ex-b' }).status).toBe(200);
+    const room = r.rooms.get('NET-1111');
+    expect(room.submissions[ANI.id].score).toBe(90);
+    expect(room.history.at(-1).submissions[ANI.id].score).toBe(40); // nilai ronde lama diarsipkan
+  });
+});
+
+describe('Relay: kode kelas sama dipakai ulang guru lain', () => {
+  it('tampilan anonim memuat id sesi (bukan token) agar perangkat siswa dapat membedakan kelas', () => {
+    const r = makeRelay();
+    createClass(r, 'KELAS-IPA-5', { id: 'cls-guru-a' });
+    const anon = r.get('KELAS-IPA-5');
+    expect(anon.session).toEqual({ id: 'cls-guru-a', classCode: 'KELAS-IPA-5', title: 'Kelas A', status: 'open' });
+    const unknownStudent = r.get('KELAS-IPA-5', asParticipant(ANI));
+    expect(unknownStudent.me).toEqual({ status: 'unknown' });
+    expect(unknownStudent.session.id).toBe('cls-guru-a');
+    expect(JSON.stringify(anon) + JSON.stringify(unknownStudent)).not.toContain(HOST);
+  });
+
+  it('kelas tertutup boleh dipakai ulang guru lain sebagai kelas baru (id baru, peserta & nilai lama tidak terbawa)', () => {
+    const r = makeRelay();
+    createClass(r, 'KELAS-IPA-5', { id: 'cls-guru-a' });
+    join(r, ANI, 'KELAS-IPA-5');
+    submit(r, ANI, 90, 'KELAS-IPA-5');
+    r.post({ type: 'CLASS_CLOSED', classCode: 'KELAS-IPA-5', hostToken: HOST });
+
+    const res = r.post({
+      type: 'CLASS_CREATED',
+      session: { id: 'cls-guru-b', classCode: 'kelas-ipa-5', title: 'Kelas B', status: 'open', hostToken: 'host-token-guru-b', activeExercises: [EX_B] },
+    });
+    expect(res.status).toBe(200);
+    const room = r.rooms.get('KELAS-IPA-5');
+    expect(room.session.id).toBe('cls-guru-b');
+    expect(room.participants).toEqual([]);
+    expect(room.submissions).toEqual({});
+  });
+
+  it('id sesi dibatasi panjangnya', () => {
+    const r = makeRelay();
+    createClass(r, 'NET-1111', { id: 'x'.repeat(500) });
+    expect(r.rooms.get('NET-1111').session.id).toHaveLength(64);
+  });
 });
 
 describe('Relay: soal, ronde, dan pengaturan', () => {
@@ -642,27 +719,32 @@ describe('Relay: pemulihan kelas (restore) & snapshot', () => {
 
   it('snapshot rusak atau terlalu besar diabaikan (jawaban tetap diterima); batas total per room dijaga', () => {
     const r = makeRelay();
+    const CICI = { id: 'stu-cici', token: 'token-rahasia-cici' };
     createClass(r);
     join(r, ANI);
+    join(r, BUDI);
+    join(r, CICI);
     expect(submitWithSnapshot(r, ANI, { nodes: 'x', edges: [] }).status).toBe(200);
-    expect(submitWithSnapshot(r, ANI, { nodes: [{ id: 'a' }], edges: [] }).status).toBe(200); // node tanpa data
+    expect(submitWithSnapshot(r, BUDI, { nodes: [{ id: 'a' }], edges: [] }).status).toBe(200); // node tanpa data
     expect(r.rooms.get('NET-1111').snapshots[ANI.id]).toBeUndefined();
+    expect(r.rooms.get('NET-1111').snapshots[BUDI.id]).toBeUndefined();
     const huge = { nodes: [{ id: 'x', data: { blob: 'x'.repeat(400 * 1024) } }], edges: [] };
-    expect(submitWithSnapshot(r, ANI, huge).status).toBe(200);
-    expect(r.rooms.get('NET-1111').snapshots[ANI.id]).toBeUndefined();
-    expect(r.rooms.get('NET-1111').submissions[ANI.id].score).toBe(70);
-    expect(Object.keys(r.rooms.get('NET-1111').submissions[ANI.id])).not.toContain('snapshot');
+    expect(submitWithSnapshot(r, CICI, huge).status).toBe(200);
+    expect(r.rooms.get('NET-1111').snapshots[CICI.id]).toBeUndefined();
+    expect(r.rooms.get('NET-1111').submissions[CICI.id].score).toBe(70);
+    expect(Object.keys(r.rooms.get('NET-1111').submissions[CICI.id])).not.toContain('snapshot');
   });
 
-  it('kick membuang snapshot; kirim ulang menggantikan snapshot lama dan menghitung ulang ukuran', () => {
+  it('kick membuang snapshot; kiriman kedua ditolak 409 sehingga snapshot pertama dan ukurannya tetap', () => {
     const r = makeRelay();
     createClass(r);
     join(r, ANI);
     submitWithSnapshot(r, ANI, snapshot);
     const first = r.rooms.get('NET-1111').snapshotBytes;
     expect(first).toBeGreaterThan(0);
-    submitWithSnapshot(r, ANI, snapshot);
-    expect(r.rooms.get('NET-1111').snapshotBytes).toBe(first); // diganti, bukan ditambah
+    expect(submitWithSnapshot(r, ANI, { nodes: [], edges: [] }).status).toBe(409);
+    expect(r.rooms.get('NET-1111').snapshotBytes).toBe(first);
+    expect(snapshotGet(r, 'NET-1111', ANI.id, asHost).body.snapshot?.nodes).toHaveLength(1);
     r.post({ type: 'PARTICIPANT_KICKED', classCode: 'NET-1111', participantId: ANI.id, hostToken: HOST });
     expect(r.rooms.get('NET-1111').snapshotBytes).toBe(0);
     expect(snapshotGet(r, 'NET-1111', ANI.id, asHost).body.success).toBe(false);

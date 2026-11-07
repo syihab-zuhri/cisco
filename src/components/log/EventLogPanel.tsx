@@ -17,6 +17,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { getDeviceRoutes, routeInterfaceName } from '../../utils/routing';
+import { prefixLength } from '../../utils/ipUtils';
 
 type PanelTab = 'log' | 'sim' | 'tables';
 
@@ -124,6 +126,7 @@ export function EventLogPanel() {
 
   const deviceNodes = nodes.filter((n) => n.type === 'deviceNode');
   const selectedDevice = nodes.find((n) => n.id === selectedNodeId)?.data;
+  const routingTable = selectedDevice?.type === 'router' ? getDeviceRoutes(selectedDevice) : [];
 
   // Mouse Dragging
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -515,18 +518,21 @@ export function EventLogPanel() {
                         {selectedDevice.label}
                       </span>
                     </div>
-                    {(selectedDevice.routes ?? []).length === 0 ? (
-                      <div className="italic text-muted-foreground/60 py-1">(kosong — belum ada rute statis)</div>
+                    {routingTable.length === 0 ? (
+                      <div className="italic text-muted-foreground/60 py-1">(kosong — belum ada interface IP aktif atau rute terkonfigurasi)</div>
                     ) : (
                       <div className="space-y-1">
-                        {(selectedDevice.routes ?? []).map((r, idx) => (
+                        {routingTable.map((r, idx) => (
                           <div key={idx} className="flex items-center justify-between gap-1 text-foreground/90 bg-muted/30 px-1.5 py-0.5 rounded">
                             <span className="font-mono text-[11px]">
-                              {r.network}/{r.subnetMask}
+                              {r.source === 'connected' ? 'C' : r.source === 'rip' ? 'R' : 'S'}{' '}
+                              {r.network}/{prefixLength(r.subnetMask)}
                             </span>
                             <div className="flex items-center gap-1 shrink-0">
                               <ArrowRight className="h-2.5 w-2.5 text-muted-foreground/50" />
-                              <span className="font-semibold text-viz-gold font-mono">{r.nextHop}</span>
+                              <span className="font-semibold text-viz-gold font-mono">
+                                {r.source === 'connected' ? `Terhubung langsung · ${routeInterfaceName(selectedDevice, r.interfaceId)}` : r.nextHop}
+                              </span>
                             </div>
                           </div>
                         ))}

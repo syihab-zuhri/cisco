@@ -7,6 +7,7 @@ import type {
   RoundHistory,
   SessionStatus,
   StarterTopology,
+  StudentSessionEndReason,
 } from './types';
 import { clearExercisesStorage } from './exerciseParser';
 
@@ -27,6 +28,8 @@ const RESTORE_COOLDOWN_MS = 10_000;
 /** Setelah guru memulihkan kelas, siswa perlu beberapa detik untuk tersambung kembali: jangan kosongkan tabel guru dulu. */
 const RESTORE_GRACE_MS = 30_000;
 const RESTORE_MIN_AGE_MS = 5_000;
+/** Jawaban yang baru dikirim dianggap masih di perjalanan selama ini; polling tidak boleh menghapusnya. */
+const OWN_SUBMISSION_PENDING_MS = 15_000;
 export const STORAGE_KEY_RELAY_URL = 'openpacket_relay_url';
 
 const MAX_HISTORY_ROUNDS = 10;
@@ -41,6 +44,7 @@ const RELAY_EXCLUDED_EVENTS = new Set<string>([
   'RELAY_RESTORED',
   'ROLE_CHANGED',
   'PARTICIPANT_CHANGED',
+  'STUDENT_SESSION_ENDED',
 ]);
 
 export interface KeyValueStore {
@@ -177,6 +181,8 @@ export interface BroadcastOptions {
   onRelayReject?: (info: RelayRejection) => boolean | void;
   /** Dipanggil bila relay menerima event. */
   onRelayOk?: () => void;
+  /** Dipanggil bila relay tidak dapat dihubungi (galat jaringan); event mungkin belum tercatat. */
+  onRelayError?: () => void;
   /** Field tambahan yang hanya dikirim ke relay (tidak ke event lokal/BroadcastChannel), mis. snapshot topologi. */
   relayExtra?: Record<string, unknown>;
 }
@@ -210,6 +216,8 @@ export class ClassroomHub {
   private lastRestoreAt = 0;
   private lastMismatchAt = 0;
   private restoreGraceUntil = 0;
+  /** Status pengiriman jawaban milik siswa di perangkat ini (hanya memori; relay tetap sumber kebenaran). */
+  private ownSubmission: { submittedAt: number; state: 'pending' | 'confirmed' | 'failed'; since: number } | null = null;
 
   constructor(opts: ClassroomHubOptions = {}) {
     this.opts = opts;
@@ -340,6 +348,7 @@ export class ClassroomHub {
         })
         .catch(() => {
           // Offline / relay tidak ada: tetap berjalan lokal.
+          options.onRelayError?.();
         });
     // Berurutan: satu event baru dikirim setelah event sebelumnya selesai (kegagalan tidak memutus antrean).
     this.relayChain = this.relayChain.then(send, send);
@@ -353,12 +362,12 @@ export class ClassroomHub {
     options: BroadcastOptions
   ): void {
     if (options.onRelayReject?.({ status, message }) === true) return;
-    this.rollbackRejectedEvent(event);
+    this.rollbackRejectedEvent(event, status);
     this.notifyListeners({ type: 'RELAY_REJECTED', eventType: event.type, classCode: code, status, message });
   }
 
   /** Batalkan efek lokal dari event yang ditolak relay agar UI tidak berbohong. */
-  private rollbackRejectedEvent(event: ClassroomEvent): void {
+  private rollbackRejectedEvent(event: ClassroomEvent, status = 0): void {
     if (event.type === 'CLASS_CREATED') {
       const cur = this.getSession();
       if (cur && cur.id === event.session.id) {
@@ -385,6 +394,17 @@ export class ClassroomHub {
         this.setParticipantToken(null);
         this.resetRev();
         this.setCurrentParticipant(null);
+      }
+    } else if (event.type === 'SUBMISSION_RECEIVED') {
+      const sentAt = event.submission.submittedAt;
+      if (this.ownSubmission?.submittedAt === sentAt) this.ownSubmission = null;
+      // 409 = relay sudah memegang jawaban siswa ini pada ronde ini: pertahankan, sinkronisasi membawa versi resmi.
+      if (status === 409) return;
+      const me = this.getCurrentParticipant();
+      const subs = this.getSubmissions();
+      if (me && me.id === event.submission.participantId && subs[me.id]?.submittedAt === sentAt) {
+        delete subs[me.id];
+        this.saveSubmissions(subs);
       }
     }
   }
@@ -438,23 +458,8 @@ export class ClassroomHub {
 
         // Jika yang di-kick adalah diri sendiri: bersihkan sesi dari perangkat ini
         const current = this.getCurrentParticipant();
-        if (current && current.id === event.participantId) {
-          const session = this.getSession();
-          this.saveActiveExercises([]);
-          this.saveActiveExercise(null);
-          clearExercisesStorage();
-          this.setParticipantToken(null);
-          this.setCurrentParticipant(null);
-          if (session) {
-            this.setLockedRole(null);
-            if (this.getLockedRole() === null) {
-              this.saveSession(null);
-              this.saveParticipants([]);
-              this.saveSubmissions({});
-              this.pendingClassCode = null;
-              this.resetRev();
-            }
-          }
+        if (current && current.id === event.participantId && this.getSession()?.classCode === event.classCode) {
+          this.finishStudentSession('kicked');
         }
         break;
       }
@@ -532,6 +537,7 @@ export class ClassroomHub {
 
       case 'CLASS_CLOSED': {
         const session = this.getSession();
+        if (session && event.classCode && session.classCode !== event.classCode) break;
         if (session && (!event.classCode || session.classCode === event.classCode)) {
           session.status = 'closed';
           session.activeExercises = [];
@@ -541,6 +547,7 @@ export class ClassroomHub {
         this.saveActiveExercises([]);
         this.saveActiveExercise(null);
         clearExercisesStorage();
+        this.finishStudentSession('closed');
         break;
       }
 
@@ -562,6 +569,10 @@ export class ClassroomHub {
       }
 
       case 'SYNC_RESPONSE':
+        if (event.session.status === 'closed' && this.getCurrentParticipant() && this.getSession()?.classCode === event.classCode) {
+          this.finishStudentSession('closed');
+          break;
+        }
         this.saveSession(event.session);
         this.saveParticipants(event.participants);
         this.saveSubmissions(event.submissions);
@@ -592,6 +603,29 @@ export class ClassroomHub {
         }
       });
     });
+  }
+
+  /** Akhir sesi dari guru: simpan alasan sebelum identitas siswa dibersihkan. */
+  private finishStudentSession(reason: StudentSessionEndReason): void {
+    const participant = this.getCurrentParticipant();
+    const session = this.getSession();
+    if (!participant || !session || this.getLockedRole() === 'teacher') return;
+    const event: ClassroomEvent = {
+      type: 'STUDENT_SESSION_ENDED', classCode: session.classCode, participantId: participant.id, reason,
+    };
+    this.saveActiveExercises([]);
+    this.saveActiveExercise(null);
+    clearExercisesStorage();
+    this.setParticipantToken(null);
+    this.saveMySnapshot(null);
+    this.setCurrentParticipant(null);
+    this.setLockedRole(null);
+    this.saveSession(null);
+    this.saveParticipants([]);
+    this.saveSubmissions({});
+    this.pendingClassCode = null;
+    this.resetRev();
+    this.notifyListeners(event);
   }
 
   // --- Sinkronisasi dengan relay ---
@@ -690,8 +724,11 @@ export class ClassroomHub {
     const headers = this.syncHeaders(code);
     const authKey = headers['X-Participant-Id'] ?? (headers['X-Host-Token'] ? 'host' : 'anon');
     const key = `${code}|${authKey}`;
+    // Jawaban siswa belum dikonfirmasi relay: minta tampilan penuh. Bila kiriman gagal, rev relay tidak
+    // berubah sehingga respons "unchanged" akan menyembunyikan bahwa jawabannya tidak tercatat.
+    const ownUnsettled = this.ownSubmission !== null && this.ownSubmission.state !== 'confirmed';
     const since =
-      this.lastRevKey === key && this.lastRev !== null ? `&since=${this.lastRev}` : '';
+      this.lastRevKey === key && this.lastRev !== null && !ownUnsettled ? `&since=${this.lastRev}` : '';
 
     try {
       const resp = await doFetch(
@@ -707,10 +744,20 @@ export class ClassroomHub {
         return false;
       }
 
-      // Guru mengeluarkan siswa ini: relay hanya memberi tahu pemilik token tersebut.
       const me = this.getCurrentParticipant();
+      // Kode sama tetapi sesi berbeda: kelas siswa ini sudah hilang dan kodenya dipakai kelas lain
+      // (mis. setelah relay restart). Jangan bergabung ulang atau mengirim jawaban ke kelas orang lain.
+      if (me && this.isOtherClassSession(local, code, data.session)) {
+        this.finishStudentSession('replaced');
+        return true;
+      }
+      // Guru mengeluarkan siswa ini: relay hanya memberi tahu pemilik token tersebut.
       if (me && data.me?.status === 'kicked') {
         this.handleIncomingEvent({ type: 'PARTICIPANT_KICKED', classCode: code, participantId: me.id });
+        return true;
+      }
+      if (me && data.session?.status === 'closed') {
+        this.handleIncomingEvent({ type: 'CLASS_CLOSED', classCode: code });
         return true;
       }
       // Kelas ada tetapi relay tidak mengenal siswa ini (relay baru dipulihkan guru): daftar ulang otomatis.
@@ -792,6 +839,8 @@ export class ClassroomHub {
           for (const [pid, sub] of Object.entries(curSubs)) {
             if ((sub.imported || inGrace) && !(pid in merged)) merged[pid] = sub;
           }
+        } else if (me && curSubs[me.id] && !merged[me.id]) {
+          this.reconcileOwnSubmission(code, curSubs[me.id], merged, me.id);
         }
         if (JSON.stringify(curSubs) !== JSON.stringify(merged)) {
           this.saveSubmissions(merged);
@@ -848,6 +897,49 @@ export class ClassroomHub {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * Relay tidak memegang jawaban yang tersimpan lokal. Masih di perjalanan → pertahankan.
+   * Pernah diterima relay → ronde baru dimulai, lepaskan diam-diam. Belum pernah diterima → beri tahu
+   * siswa bahwa jawabannya tidak sampai, agar ia dapat mengirim lagi (tombol kirim aktif kembali).
+   */
+  private reconcileOwnSubmission(
+    code: string,
+    local: Submission,
+    merged: Record<string, Submission>,
+    myId: string
+  ): void {
+    const own = this.ownSubmission;
+    if (!own || own.submittedAt !== local.submittedAt) return;
+    if (own.state === 'pending' && Date.now() - own.since < OWN_SUBMISSION_PENDING_MS) {
+      merged[myId] = local;
+      return;
+    }
+    this.ownSubmission = null;
+    if (own.state === 'confirmed') return;
+    this.notifyListeners({
+      type: 'RELAY_REJECTED',
+      eventType: 'SUBMISSION_RECEIVED',
+      classCode: code,
+      status: 0,
+      message: 'Jawaban Anda belum diterima server (koneksi sempat terputus). Silakan klik Kirim Jawaban lagi.',
+    });
+  }
+
+  /**
+   * True bila relay melaporkan sesi dengan id berbeda untuk kode kelas yang sama dengan sesi lokal.
+   * Sesi placeholder (`pending-`) dan relay lama yang tidak mengirim id tidak dapat dibandingkan → false.
+   */
+  private isOtherClassSession(
+    local: ClassSession | null,
+    code: string,
+    remote: { id?: unknown } | null | undefined
+  ): boolean {
+    if (!local || local.classCode !== code || typeof local.id !== 'string' || local.id.startsWith('pending-')) {
+      return false;
+    }
+    return typeof remote?.id === 'string' && remote.id !== '' && remote.id !== local.id;
   }
 
   // --- Pemulihan otomatis setelah relay restart ---
@@ -1173,11 +1265,31 @@ export class ClassroomHub {
    * Kirim jawaban. `snapshot` (salinan ringkas topologi) hanya dikirim ke relay supaya guru dapat
    * menilai ulang dan memastikan skor yang diklaim memang hasil topologi itu.
    */
-  public submitWork(classCode: string, submission: Submission, snapshot?: StarterTopology): void {
+  /** Jawaban resmi milik siswa di perangkat ini untuk ronde berjalan (null = belum mengirim). */
+  public getMySubmission(): Submission | null {
+    const me = this.getCurrentParticipant();
+    return me ? this.getSubmissions()[me.id] ?? null : null;
+  }
+
+  /**
+   * Kirim jawaban resmi. Siswa hanya boleh mengirim SATU KALI per ronde: kiriman kedua diabaikan
+   * (false) di sini dan ditolak relay (409). Ronde baru dari guru mengosongkan jawaban sehingga boleh kirim lagi.
+   */
+  public submitWork(classCode: string, submission: Submission, snapshot?: StarterTopology): boolean {
+    const me = this.getCurrentParticipant();
+    const isOwn = Boolean(me && me.id === submission.participantId);
+    if (isOwn && this.getSubmissions()[submission.participantId]) return false;
+
     const subs = this.getSubmissions();
     subs[submission.participantId] = submission;
     this.saveSubmissions(subs);
     if (snapshot) this.saveMySnapshot(snapshot);
+
+    const sentAt = submission.submittedAt;
+    this.ownSubmission = isOwn ? { submittedAt: sentAt, state: 'pending', since: Date.now() } : null;
+    const mark = (state: 'confirmed' | 'failed') => {
+      if (this.ownSubmission?.submittedAt === sentAt) this.ownSubmission.state = state;
+    };
 
     this.broadcast(
       {
@@ -1185,8 +1297,13 @@ export class ClassroomHub {
         classCode: normalizeClassCode(classCode),
         submission,
       },
-      { relayExtra: snapshot ? { snapshot } : undefined }
+      {
+        relayExtra: snapshot ? { snapshot } : undefined,
+        onRelayOk: () => mark('confirmed'),
+        onRelayError: () => mark('failed'),
+      }
     );
+    return true;
   }
 
   private getMySnapshot(): StarterTopology | null {

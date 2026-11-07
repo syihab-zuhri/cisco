@@ -118,10 +118,23 @@ export function DevicePalette({ isOpen, onToggle }: DevicePaletteProps) {
   };
 
   const handleApplyTemplate = (template: TopologyTemplate) => {
-    const nodes = JSON.parse(JSON.stringify(template.nodes));
-    const edges = JSON.parse(JSON.stringify(template.edges));
-    loadTopology({ nodes, edges });
-    addSimulationLog('SUCCESS', `Template "${template.name}" berhasil diterapkan ke kanvas!`);
+    const applyTemplate = () => {
+      const nodes = JSON.parse(JSON.stringify(template.nodes));
+      const edges = JSON.parse(JSON.stringify(template.edges));
+      loadTopology({ nodes, edges });
+      addSimulationLog('SUCCESS', `Template "${template.name}" berhasil diterapkan ke kanvas!`);
+    };
+    const current = useAppStore.getState();
+    if (current.nodes.length > 0 || current.edges.length > 0) {
+      current.requestConfirm({
+        title: 'Ganti Kanvas dengan Template?',
+        message: `Template "${template.name}" akan mengganti seluruh perangkat, kabel, dan anotasi di kanvas. Simpan topologi terlebih dahulu jika pekerjaan ini masih diperlukan.`,
+        confirmLabel: 'Muat Template',
+        onConfirm: applyTemplate,
+      });
+    } else {
+      applyTemplate();
+    }
   };
 
   if (!isOpen) {

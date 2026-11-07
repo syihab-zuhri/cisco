@@ -1,4 +1,4 @@
-import type { Exercise, ExerciseCheck, ExerciseEvaluation, ExerciseTarget, StarterTopology, Submission } from './types';
+import type { Exercise, ExerciseCheck, ExerciseEvaluation, ExerciseTarget, StarterTopology, Submission, Participant } from './types';
 import type { DeviceType } from '../../types/network';
 import { isValidIp, isValidSubnetMask } from '../../utils/ipUtils';
 import { isTopologyJson, convertTopologyToExercise } from './topologyExerciseConverter';
@@ -388,6 +388,26 @@ export function exportSubmissionPackageFile(
   URL.revokeObjectURL(url);
 }
 
+/** Export is a copy of work, never an alternate self-check endpoint. */
+export function createWorkPackage(participant: Participant, exerciseId: string, exerciseIds: string[], topology: StarterTopology) {
+  return {
+    format: 'openpacket_work', version: '1.0', submittedAt: Date.now(),
+    participantId: participant.id, studentNickname: participant.nickname,
+    exerciseId, exerciseIds, topology,
+  };
+}
+
+export function exportWorkPackageFile(participant: Participant, exerciseId: string, exerciseIds: string[], topology: StarterTopology) {
+  const payload = createWorkPackage(participant, exerciseId, exerciseIds, topology);
+  const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `jawaban-${participant.nickname.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 20) || 'siswa'}-${Date.now()}.opsub`;
+  document.body.appendChild(link); link.click(); link.remove();
+  // Let the browser consume the Blob before releasing the object URL.
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 function validateEvaluation(raw: unknown): ExerciseEvaluation | null {
   if (!raw || typeof raw !== 'object') return null;
   const e = raw as Record<string, unknown>;
@@ -477,6 +497,23 @@ export function parseSubmissionJson(rawJson: string): ParseSubmissionResult {
     const data = JSON.parse(rawJson) as Record<string, unknown>;
     if (!data || typeof data !== 'object') {
       return { success: false, error: 'File lembar jawaban bukan objek JSON valid.' };
+    }
+
+    if (data.format === 'openpacket_work') {
+      const nickname = typeof data.studentNickname === 'string' ? data.studentNickname.trim().slice(0, 40) : '';
+      const topology = data.topology as StarterTopology | undefined;
+      const ids = Array.isArray(data.exerciseIds) ? [...new Set(data.exerciseIds.filter((id): id is string => typeof id === 'string' && id.length > 0))] : [];
+      if (!nickname || !ids.length || !topology || !Array.isArray(topology.nodes) || !Array.isArray(topology.edges)) {
+        return { success: false, error: 'Berkas pekerjaan harus memuat nama, daftar soal, dan topologi.' };
+      }
+      return { success: true, topology, submission: {
+        participantId: typeof data.participantId === 'string' ? data.participantId : '',
+        nickname, exerciseId: typeof data.exerciseId === 'string' ? data.exerciseId : ids[0],
+        score: 0, status: 'failed', ungraded: true,
+        exerciseScores: Object.fromEntries(ids.map((id) => [id, 0])),
+        evaluation: { score: 0, status: 'failed', checks: [], feedback: 'Belum dinilai oleh guru.', evaluatedAt: '' },
+        submittedAt: typeof data.submittedAt === 'number' ? data.submittedAt : Date.now(),
+      } };
     }
 
     if (data.format === 'openpacket_submission' && data.submission) {

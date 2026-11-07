@@ -134,6 +134,21 @@ function publicSession(room) {
   return rest;
 }
 
+/**
+ * Info publik kelas untuk tampilan anonim. `id` (identitas sesi, bukan rahasia) ikut dikirim agar
+ * perangkat siswa dapat membedakan kelasnya dari kelas lain yang kini memakai kode yang sama.
+ */
+function publicSummary(room) {
+  const session = publicSession(room);
+  if (!session) return null;
+  return {
+    ...(typeof session.id === 'string' && session.id ? { id: session.id } : {}),
+    classCode: session.classCode,
+    title: session.title,
+    status: session.status,
+  };
+}
+
 function touch(room) {
   room.updatedAt = Date.now();
   room.rev += 1;
@@ -147,7 +162,7 @@ function sanitizeExercises(list) {
 }
 
 /** Snapshot topologi: hanya { nodes[{id,type,data}], edges[...] } dengan batas ukuran; selain itu ditolak (null). */
-function sanitizeSnapshot(raw) {
+function sanitizeSnapshot(raw, nested = false) {
   if (!raw || typeof raw !== 'object' || !Array.isArray(raw.nodes) || !Array.isArray(raw.edges)) return null;
   if (raw.nodes.length > 200 || raw.edges.length > 400) return null;
   const nodes = [];
@@ -166,6 +181,13 @@ function sanitizeSnapshot(raw) {
       targetHandle: typeof e.targetHandle === 'string' ? e.targetHandle : undefined,
       type: typeof e.type === 'string' ? e.type : undefined,
     });
+  }
+  if (!nested && raw.exerciseTopologies && typeof raw.exerciseTopologies === 'object' && !Array.isArray(raw.exerciseTopologies)) {
+    const entries = Object.entries(raw.exerciseTopologies);
+    if (entries.length > MAX_EXERCISES_PER_ROOM) return null;
+    const cleaned = entries.map(([id, snapshot]) => [id, sanitizeSnapshot(snapshot, true)]);
+    if (cleaned.some(([, snapshot]) => !snapshot)) return null;
+    return { nodes, edges, exerciseTopologies: Object.fromEntries(cleaned) };
   }
   return { nodes, edges };
 }
@@ -253,20 +275,18 @@ function buildStateView(room, req, since) {
       };
     }
     // Token tidak dikenal: mungkin relay baru restart / belum sempat join.
-    const session = publicSession(room);
     return {
       ...base,
       role: 'anonymous',
       me: { status: 'unknown' },
-      session: session && { classCode: session.classCode, title: session.title, status: session.status },
+      session: publicSummary(room),
     };
   }
 
-  const session = publicSession(room);
   return {
     ...base,
     role: 'anonymous',
-    session: session && { classCode: session.classCode, title: session.title, status: session.status },
+    session: publicSummary(room),
   };
 }
 
@@ -330,6 +350,7 @@ function handleClassCreated(rooms, code, event) {
   const room = normalizeRoom({
     session: {
       ...rest,
+      id: cleanText(rest.id, 64, undefined),
       classCode: code,
       title: cleanText(rest.title, 120, 'Kelas Jaringan Komputer'),
       status: VALID_STATUSES.has(rest.status) ? rest.status : 'open',
@@ -471,6 +492,15 @@ function handleSubmission(rooms, code, event) {
   requireParticipant(room, event, sub.participantId);
   const idx = room.participants.findIndex((p) => p.id === sub.participantId);
   if (idx === -1) throw new HttpError(403, 'Peserta tidak terdaftar di kelas ini.');
+  // Jawaban harus untuk soal yang sedang aktif di kelas ini (bukan sisa kelas/ronde lain dengan kode sama).
+  if (!room.activeExercises.some((ex) => ex.id === sub.exerciseId)) {
+    throw new HttpError(422, 'Jawaban ditolak: soal yang dikerjakan tidak ada di kelas ini. Guru mungkin sudah mengganti soal.');
+  }
+  // Satu kali kirim per siswa per ronde. Ronde baru (EXERCISE_STARTED) mengosongkan `room.submissions`.
+  // 409 khusus untuk kasus ini: klien memakainya untuk mempertahankan jawaban yang sudah tercatat.
+  if (room.submissions[sub.participantId]) {
+    throw new HttpError(409, 'Jawaban sudah dikirim untuk ronde ini dan tidak dapat diubah.');
+  }
 
   const score = clampInt(sub.score, 0, 100, 0);
   const status = VALID_SUBMISSION_STATUSES.has(sub.status)

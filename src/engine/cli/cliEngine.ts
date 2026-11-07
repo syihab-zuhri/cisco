@@ -1,4 +1,5 @@
 import { type DeviceData, type PhysicalPort, type RoutingEntry } from '../../types/network';
+import { getDeviceRoutes, routeInterfaceName } from '../../utils/routing';
 import {
   isValidIp,
   isValidSubnetMask,
@@ -252,8 +253,12 @@ export class CliSession {
       cmd === 'copy running-config startup-config' ||
       cmd === 'copy run start'
     ) {
-      this.deps.saveConfig?.();
-      return ['Building configuration...', '[OK]'];
+      try {
+        this.deps.saveConfig?.();
+        return ['Building configuration...', '[OK]', 'OpenPacket: simpan draft tab; running-config dan startup-config belum dipisahkan.'];
+      } catch (err) {
+        return [`% Gagal menyimpan: ${err instanceof Error ? err.message : String(err)}`];
+      }
     }
 
     if (
@@ -389,20 +394,10 @@ export class CliSession {
       ? `Gateway of last resort is ${defaultRoute.nextHop} to network 0.0.0.0`
       : 'Gateway of last resort is not set';
     const lines = ['Codes: C - connected, S - static, R - RIP', gatewayMsg];
-    for (const p of device.ports) {
-      if (!p.ipAddress || !p.subnetMask) continue;
-      const network = networkAddress(p.ipAddress, p.subnetMask);
-      lines.push(`C       ${network}/${prefixLength(p.subnetMask)} is directly connected, ${p.name}`);
-    }
-    for (const s of device.ports) {
-      for (const sub of s.subInterfaces ?? []) {
-        if (!sub.ipAddress || !sub.subnetMask) continue;
-        const network = networkAddress(sub.ipAddress, sub.subnetMask);
-        lines.push(`C       ${network}/${prefixLength(sub.subnetMask)} is directly connected, ${s.name}.${sub.vlanId}`);
-      }
-    }
-    for (const r of device.routes ?? []) {
-      if (r.source === 'rip') {
+    for (const r of getDeviceRoutes(device)) {
+      if (r.source === 'connected') {
+        lines.push(`C       ${r.network}/${prefixLength(r.subnetMask)} is directly connected, ${routeInterfaceName(device, r.interfaceId)}`);
+      } else if (r.source === 'rip') {
         lines.push(`R       ${r.network}/${r.subnetMask} [${r.metric ?? 1}/1] via ${r.nextHop}, ${r.interfaceId}`);
       } else {
         const isDirect =

@@ -1,7 +1,7 @@
 import type { Edge, Node } from '@xyflow/react';
 import type { DeviceData, TopologyLink } from '../../types/network';
 import { evaluateExercise } from './exerciseEvaluator';
-import type { Exercise, ExerciseEvaluation, Participant, Submission } from './types';
+import type { Exercise, ExerciseEvaluation, Participant, Submission, StarterTopology } from './types';
 
 /**
  * Ubah edge React Flow menjadi kontrak kabel engine — identik dengan yang dipakai simulasi
@@ -29,15 +29,19 @@ export async function evaluatePacket(
   exercises: Exercise[],
   nodes: Node<DeviceData>[],
   edges: Edge[],
-  previous: Record<string, ExerciseEvaluation> = {}
+  _previous: Record<string, ExerciseEvaluation> = {},
+  exerciseTopologies?: Record<string, StarterTopology>
 ): Promise<PacketResult> {
   const devices = nodes.map((n) => n.data);
   const links = edgesToLinks(edges);
-  const evaluations: Record<string, ExerciseEvaluation> = { ...previous };
+  const evaluations: Record<string, ExerciseEvaluation> = {};
   const exerciseScores: Record<string, number> = {};
 
   for (const ex of exercises) {
-    const res = await evaluateExercise(ex, devices, links);
+    const work = exerciseTopologies?.[ex.id];
+    const res = await evaluateExercise(ex,
+      exerciseTopologies ? (work?.nodes ?? []).map((n) => n.data) : devices,
+      exerciseTopologies ? edgesToLinks(work?.edges ?? []) : links);
     evaluations[ex.id] = res;
     exerciseScores[ex.id] = res.score;
   }

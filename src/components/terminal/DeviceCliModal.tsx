@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Terminal as TermIcon } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
+import { saveWorkspaceDraft } from '../../features/workspace/draft';
 import { CliSession } from '../../engine/cli/cliEngine';
 import { requestPing } from '../../hooks/useSimulationEngine';
 import {
@@ -103,7 +104,8 @@ export function DeviceCliModal() {
       },
       saveConfig: () => {
         const label = useAppStore.getState().nodes.find((n) => n.id === deviceId)?.data.label ?? deviceId;
-        useAppStore.getState().pushToast('success', `Konfigurasi ${label} berhasil disimpan ke NVRAM.`);
+        if (!saveWorkspaceDraft()) throw new Error('Draft tidak dapat disimpan. Ekspor topologi ke berkas.');
+        useAppStore.getState().pushToast('success', `Draft ${label} tersimpan di tab ini dan dipulihkan setelah refresh. Ekspor berkas untuk menyimpan di luar tab.`);
       },
       setSubInterfaceConfig: (parentPortId, vlanId, updates, oldVlanId) => {
         const dev = useAppStore.getState().nodes.find((n) => n.id === deviceId)?.data;

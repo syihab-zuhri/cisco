@@ -179,6 +179,8 @@ describe('Rigorous Audit: CLI Prompt Transitions & Command Navigation', () => {
   it('sub-interface dengan IP muncul dengan benar di show ip route', async () => {
     await session.handle('enable');
     await session.handle('conf t');
+    await session.handle('int fa0/0');
+    await session.handle('no shut');
     await session.handle('int fa0/0.10');
     await session.handle('encap dot1q 10');
     await session.handle('ip address 192.168.10.1 255.255.255.0');

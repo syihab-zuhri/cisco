@@ -21,11 +21,13 @@ import { generateMacAddress } from '../utils/ipUtils';
 import { type SimEvent } from '../types/protocol';
 import { LAB_SCENARIOS, evaluateLab, type LabScenario } from '../data/labs';
 import { abortSimulation } from '../hooks/useSimulationEngine';
+import { findIpConflicts } from '../utils/ipConflicts';
 
 export interface ToastItem {
   id: string;
   type: 'info' | 'success' | 'error' | 'warning';
   message: string;
+  durationMs?: number;
 }
 
 export interface ConfirmRequest {
@@ -1238,8 +1240,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   pushToast: (type, message, durationMs) => {
     const ttl = durationMs ?? (type === 'error' ? 6000 : 4000);
     const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    set((state) => ({ toasts: [...state.toasts.slice(-3), { id, type, message }] }));
-    window.setTimeout(() => {
+    set((state) => ({ toasts: [...state.toasts.slice(-3), { id, type, message, durationMs: ttl }] }));
+    globalThis.setTimeout(() => {
       useAppStore.getState().dismissToast(id);
     }, ttl);
   },
@@ -1250,3 +1252,23 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   requestConfirm: (req) => set({ confirmRequest: req }),
   cancelConfirm: () => set({ confirmRequest: null }),
 }));
+
+// GUI, CLI, impor dan pengkabelan memakai store yang sama. Peringatkan setiap
+// konflik baru sekali; perpindahan posisi node tidak memicu pemeriksaan ulang.
+let knownIpConflicts = new Set<string>();
+useAppStore.subscribe((state, previous) => {
+  if (state.edges === previous.edges && state.nodes.length === previous.nodes.length &&
+      state.nodes.every((n, i) => n.id === previous.nodes[i]?.id && n.data.ports === previous.nodes[i]?.data.ports)) return;
+  const conflicts = findIpConflicts(state.nodes.map((n) => n.data), state.edges.map((e) => ({
+    sourceNodeId: e.source, sourcePortId: e.sourceHandle ?? 'fa0',
+    targetNodeId: e.target, targetPortId: e.targetHandle ?? 'fa0',
+    kind: e.type === 'wirelessLink' ? 'wireless' : 'ethernet',
+  })));
+  const newlyDetected = conflicts.filter((c) => !knownIpConflicts.has(c.key));
+  knownIpConflicts = new Set(conflicts.map((c) => c.key));
+  for (const conflict of newlyDetected) {
+    const message = `Konflik IP ${conflict.address}: ${conflict.first.label} (${conflict.first.portId}) dan ${conflict.second.label} (${conflict.second.portId}) berada pada segmen jaringan yang sama. Gunakan alamat IP yang berbeda.`;
+    state.addSimulationLog('ERROR', message);
+    state.pushToast('warning', message, 8000);
+  }
+});

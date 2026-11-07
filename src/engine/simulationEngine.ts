@@ -1,3 +1,4 @@
+import { checkL2VlanHop } from '../utils/l2';
 import {
   type DeviceData,
   type PhysicalPort,
@@ -224,86 +225,6 @@ export class HeadlessSimulationEngine {
     return p.portMode === 'trunk' || (p.subInterfaces?.length ?? 0) > 0;
   }
 
-  /**
-   * Evaluasi aturan transmisi Layer 2 802.1Q antar hop fisik/logis.
-   * Mengembalikan { allowed, nextVlan } dengan nextVlan adalah VLAN frame di perangkat tujuan.
-   */
-  private checkL2VlanHop(
-    srcDev: DeviceData,
-    srcPort: PhysicalPort,
-    dstDev: DeviceData,
-    dstPort: PhysicalPort,
-    currentVlan?: number
-  ): { allowed: boolean; nextVlan?: number } {
-    let wireVlan = currentVlan;
-
-    // Larangan isolasi: dua port access switch dengan VLAN berbeda saling menolak
-    if (
-      srcDev.type === 'switch' &&
-      dstDev.type === 'switch' &&
-      !this.isTrunkPort(srcPort) &&
-      !this.isTrunkPort(dstPort) &&
-      (srcPort.vlanId ?? 1) !== (dstPort.vlanId ?? 1)
-    ) {
-      return { allowed: false };
-    }
-
-    // 1. Egress dari srcDev
-    if (srcDev.type === 'switch') {
-      const isTrunk = this.isTrunkPort(srcPort);
-      if (isTrunk) {
-        wireVlan = currentVlan;
-      } else {
-        const accessVlan = srcPort.vlanId ?? 1;
-        // Frame hanya boleh keluar dari access port yang VLAN-nya cocok
-        if (currentVlan !== undefined && currentVlan !== accessVlan) {
-          return { allowed: false };
-        }
-        // Access port melepas tag 802.1Q saat keluar ke kabel
-        wireVlan = undefined;
-      }
-    } else {
-      // Non-switch (Host / Router):
-      if (wireVlan === undefined && srcPort.vlanId) {
-        wireVlan = srcPort.vlanId;
-      }
-    }
-
-    // 2. Ingress ke dstDev
-    if (dstDev.type === 'switch') {
-      const isTrunk = this.isTrunkPort(dstPort);
-      if (isTrunk) {
-        const ingressVlan = wireVlan !== undefined ? wireVlan : (dstPort.vlanId ?? 1);
-        return { allowed: true, nextVlan: ingressVlan };
-      } else {
-        const accessVlan = dstPort.vlanId ?? 1;
-        // Port access switch menolak frame ber-tag yang berbeda VLAN
-        if (wireVlan !== undefined && wireVlan !== accessVlan) {
-          return { allowed: false };
-        }
-        // Frame untagged dimasukkan ke VLAN access port
-        return { allowed: true, nextVlan: accessVlan };
-      }
-    }
-
-    // L2 intermediate non-switch (hub, AP): transparan
-    if (isL2Intermediate(dstDev.type)) {
-      return { allowed: true, nextVlan: wireVlan };
-    }
-
-    // Host tujuan atau Router (dengan sub-interfaces / trunk)
-    if (this.isTrunkPort(dstPort)) {
-      return { allowed: true, nextVlan: wireVlan };
-    }
-
-    // Host biasa (PC / Laptop / Server):
-    if (dstPort.vlanId && wireVlan !== undefined && dstPort.vlanId !== wireVlan) {
-      return { allowed: false };
-    }
-
-    return { allowed: true, nextVlan: wireVlan };
-  }
-
   /** Kesesuaian SSID pada interface wireless (Bug 3). */
   private ssidAllows(a: PhysicalPort, b: PhysicalPort): boolean {
     if (a.ssid && b.ssid && a.ssid.trim() !== b.ssid.trim()) {
@@ -484,7 +405,7 @@ export class HeadlessSimulationEngine {
       };
 
       // Evaluasi aturan 802.1Q VLAN dan isolasi port
-      const { allowed, nextVlan } = this.checkL2VlanHop(
+      const { allowed, nextVlan } = checkL2VlanHop(
         dev,
         p,
         peerDev,
@@ -1509,7 +1430,7 @@ export class HeadlessSimulationEngine {
         macAddress: '00:00:00:00:00:00',
       };
 
-      const { allowed, nextVlan } = this.checkL2VlanHop(
+      const { allowed, nextVlan } = checkL2VlanHop(
         dev,
         p,
         peerDev,
@@ -1588,13 +1509,16 @@ export class HeadlessSimulationEngine {
     }
 
     if (port.status !== 'up') {
-      this.record(ctx, 'ERROR', `DHCP: Port ${port.name} dalam status DOWN (kabel belum terhubung).`);
+      const reason = this.findLink(client.id, port.id)
+        ? `Interface ${port.name} dinonaktifkan secara administratif (ADMIN DOWN). Aktifkan interface terlebih dahulu.`
+        : `Kabel pada ${port.name} belum terhubung (Link DOWN).`;
+      this.record(ctx, 'ERROR', `DHCP: ${reason}`);
       return {
         success: false,
         rttMs: 0,
         ttl: 0,
         logs: [],
-        outputLines: [`DHCP gagal: Port ${port.name} berstatus DOWN.`],
+        outputLines: [`DHCP gagal: ${reason}`],
         sent: 0,
         received: 0,
       };
@@ -2216,7 +2140,9 @@ export class HeadlessSimulationEngine {
     }
 
     if (sourcePort && sourcePort.status !== 'up' && !isLoopback) {
-      const msg = `${sourceDev.label}: Kabel tidak terhubung (Link DOWN).`;
+      const msg = this.findLink(sourceDev.id, sourcePort.id)
+        ? `${sourceDev.label}: Interface ${sourcePort.name} dinonaktifkan secara administratif (ADMIN DOWN). Aktifkan melalui konfigurasi atau perintah no shutdown.`
+        : `${sourceDev.label}: Kabel tidak terhubung (Link DOWN).`;
       this.record(ctx, 'ERROR', msg);
       return {
         success: false, rttMs: 0, ttl: 0, logs: [msg], outputLines: [msg], sent: 0, received: 0,

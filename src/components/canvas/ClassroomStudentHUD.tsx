@@ -17,12 +17,15 @@ import {
 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { classroomHub } from '../../features/classroom/classroomHub';
-import { exportSubmissionPackageFile } from '../../features/classroom/exerciseParser';
+import { exportWorkPackageFile } from '../../features/classroom/exerciseParser';
+import { gradingKey, studentWorkspace } from '../../features/classroom/studentWorkspace';
+import { workTopology } from '../../features/workspace/draft';
 import type {
   ClassSession,
   Participant,
   Exercise,
   ExerciseEvaluation,
+  StarterTopology,
   Submission,
 } from '../../features/classroom/types';
 import { Card } from '@/components/ui/card';
@@ -56,11 +59,74 @@ export function ClassroomStudentHUD() {
     Record<string, ExerciseEvaluation>
   >({});
   const [isEvaluating, setIsEvaluating] = useState(false);
+  // Jawaban resmi ronde ini (satu kali kirim). Dibaca ulang dari hub pada setiap event kelas.
+  const [mySubmission, setMySubmission] = useState<Submission | null>(() => classroomHub.getMySubmission());
+  const workspaceScope = session && participant ? `${session.id}:${participant.id}:${session.round ?? 0}` : null;
+  const workspaceRef = useRef<{ scope: string; exerciseId: string } | null>(null);
+  const switchingRef = useRef(false);
+  const exerciseIds = activeExercises.map((e) => e.id).join('|');
+  const rubricKey = JSON.stringify(activeExercises);
+  const currentRubricRef = useRef(rubricKey);
+  currentRubricRef.current = rubricKey;
+
+  useEffect(() => { setEvaluationsByExerciseId({}); }, [workspaceScope, rubricKey]);
+
+  useEffect(() => {
+    if (!workspaceScope || activeExercises.length === 0) return;
+    const work = studentWorkspace.read(workspaceScope);
+    const previous = workspaceRef.current;
+    if (previous?.scope !== workspaceScope || !activeExercises.some((e) => e.id === previous.exerciseId)) {
+      const index = Math.max(0, activeExercises.findIndex((e) => e.id === work.selectedExerciseId));
+      const exerciseId = activeExercises[index].id;
+      workspaceRef.current = { scope: workspaceScope, exerciseId };
+      setSelectedExerciseIndex(index);
+      const saved = work.topologies[exerciseId];
+      if (saved) loadTopology(saved);
+      else if (previous) loadTopology({ nodes: [], edges: [] });
+    }
+    const save = () => {
+      const current = workspaceRef.current;
+      if (current?.scope === workspaceScope) studentWorkspace.save(workspaceScope, current.exerciseId, useAppStore.getState());
+    };
+    save();
+    return useAppStore.subscribe((state, old) => {
+      if (state.nodes === old.nodes && state.edges === old.edges) return;
+      save();
+      if (!switchingRef.current && gradingKey(state) !== gradingKey(old)) {
+        const id = workspaceRef.current?.exerciseId;
+        if (id) setEvaluationsByExerciseId((prior) => {
+          if (!prior[id]) return prior;
+          const next = { ...prior }; delete next[id]; return next;
+        });
+      }
+    });
+  }, [workspaceScope, exerciseIds, loadTopology]);
+
+  const selectExercise = (index: number) => {
+    if (!workspaceScope || isEvaluating || index === selectedExerciseIndex) return;
+    const next = activeExercises[index];
+    if (!next) return;
+    const current = workspaceRef.current;
+    if (current?.scope === workspaceScope) studentWorkspace.save(workspaceScope, current.exerciseId, useAppStore.getState());
+    const saved = studentWorkspace.read(workspaceScope).topologies[next.id];
+    workspaceRef.current = { scope: workspaceScope, exerciseId: next.id };
+    switchingRef.current = true;
+    try { loadTopology(saved ?? { nodes: [], edges: [] }); }
+    finally { switchingRef.current = false; }
+    studentWorkspace.save(workspaceScope, next.id, useAppStore.getState());
+    setSelectedExerciseIndex(index);
+  };
+
+  const captureWork = (): StarterTopology => {
+    const current = workTopology(useAppStore.getState());
+    if (!workspaceScope || !activeExercise) return current;
+    studentWorkspace.save(workspaceScope, activeExercise.id, current);
+    const stored = studentWorkspace.read(workspaceScope).topologies;
+    return { ...current, exerciseTopologies: Object.fromEntries(activeExercises.map((ex) => [ex.id, stored[ex.id] ?? { nodes: [], edges: [] }])) };
+  };
   // Kuota cek mandiri disimpan di hub (sessionStorage): tidak hilang saat refresh dan otomatis
   // kembali penuh pada ronde baru. State ini hanya memicu render ulang.
   const [, setSelfCheckTick] = useState(0);
-  const participantRef = useRef<Participant | null>(participant);
-  participantRef.current = participant;
   // Pelacak perubahan soal/ronde dari polling (siswa lintas perangkat tidak menerima event realtime).
   const lastRoundRef = useRef<number>(classroomHub.getSession()?.round ?? 0);
   const lastExerciseKeyRef = useRef<string>(classroomHub.getActiveExercises().map((x) => x.id).join('|'));
@@ -119,6 +185,7 @@ export function ClassroomStudentHUD() {
   // Sinkronisasi realtime event
   useEffect(() => {
     const unsub = classroomHub.subscribe((event) => {
+      setMySubmission(classroomHub.getMySubmission());
       switch (event.type) {
         case 'CLASS_CREATED':
           setSession(classroomHub.getSession());
@@ -128,17 +195,6 @@ export function ClassroomStudentHUD() {
         case 'SYNC_RESPONSE':
           setSession(event.session);
           if (!event.session || event.session.status === 'closed') {
-            // Hanya keluarkan siswa jika memang kelas yang sama yang ditutup.
-            // Jangan keluarkan jika siswa baru join dan session stale dari sesi lama.
-            const curParticipant = classroomHub.getCurrentParticipant();
-            if (curParticipant) {
-              setActiveExercises([]);
-              setSelectedExerciseIndex(0);
-              setEvaluationsByExerciseId({});
-              setIsEvaluating(false);
-              setSession(null);
-              handleLeaveClass(false);
-            }
             break;
           }
           {
@@ -243,16 +299,22 @@ export function ClassroomStudentHUD() {
           }
           break;
 
-        case 'CLASS_CLOSED':
-          if (!session || !event.classCode || session.classCode === event.classCode) {
-            pushToast('warning', 'Sesi kelas telah diakhiri oleh guru.');
-            setActiveExercises([]);
-            setSelectedExerciseIndex(0);
-            setEvaluationsByExerciseId({});
-            setIsEvaluating(false);
-            setSession(null);
-            handleLeaveClass(false);
-          }
+        case 'STUDENT_SESSION_ENDED':
+          setParticipant(null);
+          setActiveExercises([]);
+          setSelectedExerciseIndex(0);
+          setEvaluationsByExerciseId({});
+          setIsEvaluating(false);
+          setSession(null);
+          pushToast(
+            'warning',
+            event.reason === 'kicked'
+              ? `Anda dikeluarkan dari kelas ${event.classCode} oleh guru. Topologi Anda tetap ada di kanvas.`
+              : event.reason === 'replaced'
+              ? `Kelas Anda sudah berakhir; kode ${event.classCode} kini dipakai kelas lain. Sesi Anda diakhiri dan jawaban tidak dikirim ke kelas tersebut; topologi tetap ada di kanvas.`
+              : `Kelas ${event.classCode} ditutup oleh guru. Sesi Anda telah berakhir; topologi tetap ada di kanvas.`,
+            8000
+          );
           break;
 
         case 'ROLE_CHANGED':
@@ -274,20 +336,6 @@ export function ClassroomStudentHUD() {
             setSession(null);
           }
           break;
-
-        case 'PARTICIPANT_KICKED': {
-          // Hub sudah mengosongkan peserta aktif sebelum event ini sampai ke sini, jadi bandingkan dengan ref.
-          if (participantRef.current && participantRef.current.id === event.participantId) {
-            pushToast('warning', 'Anda telah dikeluarkan dari kelas oleh guru.');
-            setActiveExercises([]);
-            setSelectedExerciseIndex(0);
-            setEvaluationsByExerciseId({});
-            setIsEvaluating(false);
-            setSession(null);
-            setParticipant(null);
-          }
-          break;
-        }
 
         case 'RELAY_REJECTED':
           pushToast('error', event.message);
@@ -340,9 +388,15 @@ export function ClassroomStudentHUD() {
       return;
     }
     setIsEvaluating(true);
+    const originalKey = gradingKey(useAppStore.getState());
+    const originalRubric = rubricKey;
     try {
       const evalResult = await runEvaluationForExercise(activeExercise);
       if (!evalResult) return;
+      if (originalKey !== gradingKey(useAppStore.getState()) || originalRubric !== currentRubricRef.current) {
+        pushToast('info', 'Pekerjaan berubah saat diperiksa. Jalankan Cek Mandiri lagi.');
+        return;
+      }
 
       // Increment counter (persisten per ronde)
       classroomHub.incrementSelfCheckCount(activeExercise.id);
@@ -374,21 +428,56 @@ export function ClassroomStudentHUD() {
     }
   };
 
+  useEffect(() => { setMySubmission(classroomHub.getMySubmission()); }, [participant, workspaceScope]);
+
+  // Kirim Jawaban: hanya sekali per ronde, dengan konfirmasi (klik Kirim → klik "Ya, Kirim Jawaban").
+  const confirmSubmitWork = () => {
+    if (!session || !participant || activeExercises.length === 0 || isEvaluating) return;
+    if (classroomHub.getMySubmission()) {
+      pushToast('info', 'Jawaban sudah dikirim untuk ronde ini dan tidak dapat diubah.');
+      return;
+    }
+    const count = activeExercises.length;
+    requestConfirm({
+      title: count > 1 ? 'Kirim Semua Jawaban?' : 'Kirim Jawaban?',
+      message:
+        `Jawaban hanya dapat dikirim SATU KALI untuk ronde ini${count > 1 ? ` (seluruh ${count} soal sekaligus)` : ''} ` +
+        'dan tidak dapat diubah setelah terkirim. ' +
+        (session.allowSelfCheck === false
+          ? 'Periksa kembali pekerjaan Anda sebelum mengirim.'
+          : 'Gunakan Cek Mandiri terlebih dahulu bila ingin memeriksa pekerjaan.'),
+      confirmLabel: 'Ya, Kirim Jawaban',
+      onConfirm: () => void handleSubmitWork(),
+    });
+  };
+
   // Handler Kirim Jawaban (Submit resmi seluruh soal ke Guru)
   const handleSubmitWork = async () => {
     if (!session || !participant || activeExercises.length === 0) return;
+    if (classroomHub.getMySubmission()) return;
     setIsEvaluating(true);
 
     try {
       // Evaluasi otomatis seluruh soal dalam paket ujian; skor akhir = rata-rata.
       const { evaluatePacket, buildPacketSubmission, compactTopology } = await loadGrading();
-      const packet = await evaluatePacket(activeExercises, nodes, edges, evaluationsByExerciseId);
+      const snapshot = captureWork();
+      const originalKey = gradingKey(useAppStore.getState());
+      const originalRubric = rubricKey;
+      const packet = await evaluatePacket(activeExercises, snapshot.nodes, snapshot.edges, {}, snapshot.exerciseTopologies);
+      if (originalKey !== gradingKey(useAppStore.getState()) || originalRubric !== currentRubricRef.current) {
+        pushToast('warning', 'Pekerjaan berubah saat dinilai. Kirim ulang jawaban.'); return;
+      }
       const avgScore = packet.averageScore;
       setEvaluationsByExerciseId(packet.evaluations);
 
       const submission = buildPacketSubmission(participant, activeExercises, activeExercise?.id, packet);
       // Snapshot topologi ikut dikirim agar guru dapat menilai ulang dan memverifikasi skor ini.
-      classroomHub.submitWork(session.classCode, submission, compactTopology(nodes, edges));
+      const sent = classroomHub.submitWork(session.classCode, submission, { ...compactTopology(snapshot.nodes, snapshot.edges), exerciseTopologies: snapshot.exerciseTopologies });
+      setMySubmission(classroomHub.getMySubmission());
+      if (!sent) {
+        pushToast('info', 'Jawaban sudah dikirim untuk ronde ini dan tidak dapat diubah.');
+        return;
+      }
 
       if (avgScore === 100) {
         if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
@@ -421,35 +510,10 @@ export function ClassroomStudentHUD() {
     if (!participant || !activeExercise) return;
     setIsEvaluating(true);
     try {
-      let currentEval = evaluation;
-      if (!currentEval) {
-        currentEval = await runEvaluationForExercise(activeExercise);
-        if (currentEval) {
-          setEvaluationsByExerciseId((prev) => ({
-            ...prev,
-            [activeExercise.id]: currentEval!,
-          }));
-        }
-      }
-      if (!currentEval) return;
-
-      const sub: Submission = {
-        participantId: participant.id,
-        nickname: participant.nickname,
-        exerciseId: activeExercise.id,
-        score: currentEval.score,
-        status: currentEval.status,
-        evaluation: currentEval,
-        evaluations: evaluationsByExerciseId,
-        submittedAt: Date.now(),
-      };
-
-      const topoDevices = nodes;
-      const topoEdges = edges;
-      exportSubmissionPackageFile(sub, { nodes: topoDevices, edges: topoEdges });
+      exportWorkPackageFile(participant, activeExercise.id, activeExercises.map((ex) => ex.id), captureWork());
       pushToast(
         'success',
-        'Berkas lembar jawaban (.opsub) berhasil diunduh. Anda dapat menyerahkannya ke guru.'
+        'Pekerjaan diekspor tanpa nilai. Guru akan menilai topologi di dalam berkas .opsub.'
       );
     } catch (err) {
       pushToast(
@@ -619,7 +683,7 @@ export function ClassroomStudentHUD() {
   return (
     <Card
       className={cn(
-        'absolute top-3 z-30 flex max-h-[80vh] w-[calc(100vw-1rem)] sm:w-[380px] max-w-[380px] flex-col overflow-hidden border-border/80 bg-card shadow-2xl transition-all duration-200',
+        'absolute top-3 z-30 flex max-h-[calc(100%_-_1.5rem)] w-[calc(100vw-1rem)] sm:w-[380px] max-w-[380px] flex-col overflow-hidden border-border/80 bg-card shadow-2xl transition-all duration-200',
         positionClass
       )}
     >
@@ -681,7 +745,7 @@ export function ClassroomStudentHUD() {
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  setSelectedExerciseIndex(idx);
+                  selectExercise(idx);
                 }}
                 className={cn(
                   'flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-all shrink-0 cursor-pointer select-none border touch-manipulation pointer-events-auto active:scale-95',
@@ -715,8 +779,10 @@ export function ClassroomStudentHUD() {
         </div>
       )}
 
+      <p className="shrink-0 border-b px-3 py-1.5 text-[10px] text-muted-foreground">Kanvas terpisah per soal. Draft dipulihkan setelah refresh pada tab ini; ekspor berkas sebelum menutup tab.</p>
+
       {/* Konten Scrollable */}
-      <div className="flex flex-1 flex-col gap-3.5 overflow-y-auto p-4 text-xs">
+      <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto p-4 text-xs">
         {/* Detail Soal Aktif */}
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center justify-between gap-1">
@@ -727,7 +793,7 @@ export function ClassroomStudentHUD() {
                   size="icon"
                   variant="ghost"
                   type="button"
-                  onClick={() => setSelectedExerciseIndex((prev) => Math.max(0, prev - 1))}
+                  onClick={() => selectExercise(Math.max(0, selectedExerciseIndex - 1))}
                   disabled={selectedExerciseIndex === 0}
                   className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground disabled:opacity-30 touch-manipulation"
                   title="Soal Sebelumnya"
@@ -742,9 +808,7 @@ export function ClassroomStudentHUD() {
                   variant="ghost"
                   type="button"
                   onClick={() =>
-                    setSelectedExerciseIndex((prev) =>
-                      Math.min(activeExercises.length - 1, prev + 1)
-                    )
+                    selectExercise(Math.min(activeExercises.length - 1, selectedExerciseIndex + 1))
                   }
                   disabled={selectedExerciseIndex === activeExercises.length - 1}
                   className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground disabled:opacity-30 touch-manipulation"
@@ -776,6 +840,11 @@ export function ClassroomStudentHUD() {
 
         {/* Daftar Target Penilaian */}
         <div className="flex flex-col gap-2 rounded-lg border bg-muted/20 p-3">
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            {activeExercise?.targets.some((target) => target.type === 'reachability')
+              ? 'Nilai mengikuti target rubrik di bawah, termasuk uji konektivitas pada target Ping.'
+              : 'Konektivitas tidak diuji oleh rubrik ini. Nilai 100 menunjukkan semua target yang tercantum terpenuhi.'}
+          </p>
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
               Target Praktikum ({activeExercise?.targets?.length ?? 0})
@@ -817,6 +886,12 @@ export function ClassroomStudentHUD() {
                     )}
 
                     <div className="flex flex-1 flex-col">
+                      <span className="text-[10px] font-semibold text-muted-foreground">
+                        {tgt.type === 'reachability' ? 'Konektivitas (Ping)'
+                          : tgt.type === 'link_exists' ? 'Sambungan kabel'
+                          : tgt.type === 'device_config' ? 'Konfigurasi IP'
+                          : tgt.type === 'vlan_config' ? 'Konfigurasi VLAN' : 'Jumlah perangkat'}
+                      </span>
                       <span
                         className={
                           check?.passed
@@ -904,18 +979,26 @@ export function ClassroomStudentHUD() {
 
           <Button
             size="sm"
-            onClick={handleSubmitWork}
-            disabled={isEvaluating}
+            onClick={confirmSubmitWork}
+            disabled={isEvaluating || Boolean(mySubmission)}
             className="h-8 gap-1.5 text-xs bg-primary hover:bg-primary/90"
+            title={mySubmission ? 'Jawaban sudah dikirim untuk ronde ini' : 'Jawaban hanya dapat dikirim satu kali per ronde'}
           >
-            <Send className="h-3.5 w-3.5" />
-            {isEvaluating
+            {mySubmission ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Send className="h-3.5 w-3.5" />}
+            {mySubmission
+              ? 'Jawaban Terkirim'
+              : isEvaluating
               ? 'Mengevaluasi…'
               : activeExercises.length > 1
               ? 'Kirim Semua Jawaban'
               : 'Kirim Jawaban'}
           </Button>
         </div>
+        {mySubmission && (
+          <p className="text-[11px] text-muted-foreground" role="status">
+            Jawaban sudah dikirim dan dikunci untuk ronde ini. Bila perlu mengirim ulang, minta guru memulai ronde baru.
+          </p>
+        )}
 
         <Button
           size="sm"
@@ -933,7 +1016,7 @@ export function ClassroomStudentHUD() {
           <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-1 border-t border-border/50">
             <button
               type="button"
-              onClick={() => setSelectedExerciseIndex((prev) => Math.max(0, prev - 1))}
+              onClick={() => selectExercise(Math.max(0, selectedExerciseIndex - 1))}
               disabled={selectedExerciseIndex === 0}
               className="flex items-center gap-1 hover:text-foreground disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed touch-manipulation active:scale-95"
             >
@@ -946,9 +1029,7 @@ export function ClassroomStudentHUD() {
             <button
               type="button"
               onClick={() =>
-                setSelectedExerciseIndex((prev) =>
-                  Math.min(activeExercises.length - 1, prev + 1)
-                )
+                selectExercise(Math.min(activeExercises.length - 1, selectedExerciseIndex + 1))
               }
               disabled={selectedExerciseIndex === activeExercises.length - 1}
               className="flex items-center gap-1 hover:text-foreground disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed touch-manipulation active:scale-95"

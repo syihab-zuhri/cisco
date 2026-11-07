@@ -1,6 +1,7 @@
 import { BaseEdge, EdgeLabelRenderer, getBezierPath, type EdgeProps } from '@xyflow/react';
 import { X, Zap } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
+import { PacketAnimation } from './PacketAnimation';
 import { packetColor as protocolColor, SELECTED_LINK_COLOR } from './packetColors';
 
 const packetColor = (protocol: string | undefined): string =>
@@ -33,7 +34,7 @@ export function NetworkCableEdge({
     targetPosition,
   });
 
-  const { activePackets, disconnectEdge } = useAppStore();
+  const { activePackets, disconnectEdge, simulationStatus } = useAppStore();
 
   const sourcePortName = data?.sourcePortName as string | undefined;
   const targetPortName = data?.targetPortName as string | undefined;
@@ -95,56 +96,12 @@ export function NetworkCableEdge({
       />
 
       {/* FLYING ENVELOPE / PACKET ANIMATION ALONG SVG PATH */}
-      {activePacket && (
-        <g className="pointer-events-none">
-          <circle r="7" fill={packetColor(activePacket.currentProtocol)}>
-            <animateMotion
-              path={edgePath}
-              dur="0.8s"
-              repeatCount="indefinite"
-              keyPoints={isForwardDirection ? '0;1' : '1;0'}
-              keyTimes="0;1"
-            />
-          </circle>
-
-          {/* Amplop surat penanda paket PDU */}
-          <g>
-            <animateMotion
-              path={edgePath}
-              dur="0.8s"
-              repeatCount="indefinite"
-              keyPoints={isForwardDirection ? '0;1' : '1;0'}
-              keyTimes="0;1"
-            />
-            <rect
-              x="-11"
-              y="-8"
-              width="22"
-              height="16"
-              rx="3"
-              fill="var(--surface)"
-              stroke={packetColor(activePacket.currentProtocol)}
-              strokeWidth="2"
-            />
-            <line
-              x1="-9"
-              y1="-6"
-              x2="0"
-              y2="1"
-              stroke={packetColor(activePacket.currentProtocol)}
-              strokeWidth="1.5"
-            />
-            <line
-              x1="9"
-              y1="-6"
-              x2="0"
-              y2="1"
-              stroke={packetColor(activePacket.currentProtocol)}
-              strokeWidth="1.5"
-            />
-          </g>
-        </g>
-      )}
+      {activePacket && <PacketAnimation
+        key={`${activePacket.packetId}:${activePacket.sourceNodeId}:${activePacket.targetNodeId}:${activePacket.sourcePortId}:${activePacket.targetPortId}`}
+        path={edgePath}
+        color={packetColor(activePacket.currentProtocol)}
+        forward={Boolean(isForwardDirection)}
+      />}
 
       {/* Interactive Label badge on the cable (SHOWS ON CLICK/SELECTED OR IN-FLIGHT) */}
       <EdgeLabelRenderer>
@@ -163,7 +120,7 @@ export function NetworkCableEdge({
         >
           <span
             className={`flex h-2 w-2 rounded-full ${
-              activePacket ? 'bg-viz-green animate-ping' : 'bg-viz-green animate-pulse'
+              activePacket ? `bg-viz-green ${simulationStatus === 'paused' ? '' : 'animate-ping'}` : 'bg-viz-green animate-pulse'
             }`}
           />
           {activePacket ? (

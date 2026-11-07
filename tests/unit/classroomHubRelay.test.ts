@@ -476,6 +476,7 @@ describe('Hub: kelas pulih otomatis setelah relay restart', () => {
     const teacher = deviceWithSession();
     teacher.hub.setLockedRole('teacher');
     teacher.hub.createClass('Kelas', code, undefined, [EX('ex-1')]);
+    await until(() => rooms.get(code)?.round === 1, 'kelas + ronde 1 di relay'); // join sebelum kelas ada = 404
     const ani = await joinStudent(code, 'Ani');
     ani.hub.submitWork(code, fakeSubmission(ani.participant.id, 'Ani', 70));
     await until(() => Boolean(rooms.get(code).submissions[ani.participant.id]), 'jawaban');
@@ -533,14 +534,95 @@ describe('Hub: kelas pulih otomatis setelah relay restart', () => {
     expect(rooms.get(code).session.title).toBe('Pengambil Alih');
     expect(rooms.get(code).hostToken).toBe(t2.hub.getSession()!.hostToken);
   });
+
+  it('siswa kelas lama TIDAK ikut masuk ke kelas guru lain yang memakai kode sama; sesinya diakhiri dengan alasan "replaced"', async () => {
+    const code = uniqueCode('IPA');
+    const guruA = deviceWithSession();
+    guruA.hub.setLockedRole('teacher');
+    guruA.hub.createClass('Kelas IPA 5 (Guru A)', code, undefined, [EX('ex-a')]);
+    await until(() => rooms.get(code)?.round === 1, 'kelas A');
+
+    const ani = deviceWithSession();
+    ani.hub.setLockedRole('student');
+    const p = ani.hub.joinClass(code, 'Ani')!;
+    await until(() => rooms.get(code).participants.length === 1, 'Ani bergabung ke kelas A');
+    await ani.hub.syncWithServer(code); // sesi lokal siswa kini memakai id sesi kelas A
+    expect(ani.hub.getSession()?.id).toBe(guruA.hub.getSession()!.id);
+    ani.hub.submitWork(code, { ...fakeSubmission(p.id, 'Ani', 80), exerciseId: 'ex-a' }, SNAP as never);
+    await until(() => Boolean(rooms.get(code).submissions[p.id]), 'jawaban Ani di kelas A');
+
+    restartRelay();
+    const guruB = deviceWithSession();
+    guruB.hub.setLockedRole('teacher');
+    guruB.hub.createClass('Kelas IPA 5 (Guru B)', code, undefined, [EX('ex-b')]);
+    await until(() => rooms.get(code)?.session.title === 'Kelas IPA 5 (Guru B)', 'guru B memakai kode');
+
+    ageParticipant(ani);
+    await ani.hub.syncWithServer(code);
+    await new Promise((r) => setTimeout(r, 300));
+
+    // relay: kelas B bersih dari peserta & jawaban kelas A
+    expect(rooms.get(code).participants).toEqual([]);
+    expect(rooms.get(code).submissions).toEqual({});
+    // siswa: sesi diakhiri dengan alasan jelas, tidak mengadopsi judul/soal kelas B
+    const ended = ani.events.find((e) => e.type === 'STUDENT_SESSION_ENDED') as Extract<ClassroomEvent, { type: 'STUDENT_SESSION_ENDED' }>;
+    expect(ended?.reason).toBe('replaced');
+    expect(ani.events.some((e) => e.type === 'RELAY_RESTORED')).toBe(false);
+    expect(ani.hub.getSession()).toBeNull();
+    expect(ani.hub.getCurrentParticipant()).toBeNull();
+    // guru B tidak melihat siswa asing
+    await guruB.hub.syncWithServer(code);
+    expect(guruB.hub.getParticipants()).toEqual([]);
+    expect(guruB.hub.getSubmissions()).toEqual({});
+  });
+
+  it('kelas yang dipulihkan guru yang SAMA tetap dikenali siswa (id sesi sama) sehingga siswa tersambung kembali', async () => {
+    const code = uniqueCode('IPA');
+    const guru = deviceWithSession();
+    guru.hub.setLockedRole('teacher');
+    guru.hub.createClass('Kelas IPA 5', code, undefined, [EX('ex-a')]);
+    await until(() => rooms.get(code)?.round === 1, 'kelas');
+    const ani = deviceWithSession();
+    ani.hub.setLockedRole('student');
+    const p = ani.hub.joinClass(code, 'Ani')!;
+    await until(() => rooms.get(code).participants.length === 1, 'Ani bergabung');
+    await ani.hub.syncWithServer(code);
+
+    restartRelay();
+    await guru.hub.syncWithServer(code);
+    await until(() => rooms.has(code), 'guru memulihkan kelas');
+    expect(rooms.get(code).session.id).toBe(guru.hub.getSession()!.id);
+
+    ageParticipant(ani);
+    await ani.hub.syncWithServer(code);
+    await until(() => rooms.get(code).participants.some((x: { id: string }) => x.id === p.id), 'Ani tersambung kembali');
+    expect(ani.events.some((e) => e.type === 'STUDENT_SESSION_ENDED')).toBe(false);
+  });
 });
 
 describe('Hub: snapshot topologi untuk verifikasi guru', () => {
+  it('relay preserves independent question snapshots only in the authenticated teacher snapshot endpoint', async () => {
+    const code = uniqueCode('PACKET');
+    const teacher = deviceWithSession();
+    teacher.hub.setLockedRole('teacher');
+    teacher.hub.createClass('Kelas', code, undefined, [EX('ex-1')]);
+    await until(() => rooms.has(code), 'dibuat');
+    const ani = await joinStudent(code, 'Ani');
+    const packet = { ...SNAP, exerciseTopologies: { e1: SNAP, e2: { nodes: [], edges: [] } } };
+    ani.hub.submitWork(code, fakeSubmission(ani.participant.id, 'Ani', 50), packet as never);
+    await until(() => Boolean(rooms.get(code).snapshots[ani.participant.id]), 'snapshot paket');
+    const snapshot = await teacher.hub.fetchSnapshot(code, ani.participant.id);
+    expect(snapshot?.exerciseTopologies?.e1.nodes[0].id).toBe('pc-1');
+    expect(snapshot?.exerciseTopologies?.e2).toEqual({ nodes: [], edges: [] });
+    const publicView = await fetch(`${baseUrl}/api/classroom/state?code=${code}`);
+    expect(JSON.stringify(await publicView.json())).not.toContain('exerciseTopologies');
+  });
+
   it('guru dapat mengambil snapshot siswa; siswa/anonim tidak; poll biasa tidak membawa snapshot', async () => {
     const code = uniqueCode('SNP');
     const teacher = deviceWithSession();
     teacher.hub.setLockedRole('teacher');
-    teacher.hub.createClass('Kelas', code);
+    teacher.hub.createClass('Kelas', code, undefined, [EX('ex-1')]);
     await until(() => rooms.has(code), 'dibuat');
     const ani = await joinStudent(code, 'Ani');
     const budi = await joinStudent(code, 'Budi');
@@ -570,19 +652,21 @@ describe('Hub: snapshot topologi untuk verifikasi guru', () => {
     teacher.hub.createClass('Kelas', code, undefined, [EX('ex-1')]);
     await until(() => rooms.has(code), 'dibuat');
     const ani = await joinStudent(code, 'Ani');
+    const budi = await joinStudent(code, 'Budi');
+    const cici = await joinStudent(code, 'Cici');
 
     ani.hub.submitWork(code, fakeSubmission(ani.participant.id, 'Ani', 50), { nodes: 'rusak', edges: [] } as never);
     await until(() => Boolean(rooms.get(code).submissions[ani.participant.id]), 'jawaban diterima');
     expect(rooms.get(code).snapshots[ani.participant.id]).toBeUndefined();
 
     const huge = { nodes: [{ id: 'x', data: { blob: 'x'.repeat(400 * 1024) } }], edges: [] };
-    ani.hub.submitWork(code, fakeSubmission(ani.participant.id, 'Ani', 55), huge as never);
-    await new Promise((r) => setTimeout(r, 300));
-    expect(rooms.get(code).submissions[ani.participant.id].score).toBe(55);
-    expect(rooms.get(code).snapshots[ani.participant.id]).toBeUndefined();
+    budi.hub.submitWork(code, fakeSubmission(budi.participant.id, 'Budi', 55), huge as never);
+    await until(() => Boolean(rooms.get(code).submissions[budi.participant.id]), 'jawaban Budi diterima');
+    expect(rooms.get(code).submissions[budi.participant.id].score).toBe(55);
+    expect(rooms.get(code).snapshots[budi.participant.id]).toBeUndefined();
 
-    ani.hub.submitWork(code, fakeSubmission(ani.participant.id, 'Ani', 60), SNAP as never);
-    await until(() => Boolean(rooms.get(code).snapshots[ani.participant.id]), 'snapshot valid');
+    cici.hub.submitWork(code, fakeSubmission(cici.participant.id, 'Cici', 60), SNAP as never);
+    await until(() => Boolean(rooms.get(code).snapshots[cici.participant.id]), 'snapshot valid');
     teacher.hub.startExercises(code, [EX('ex-2')]);
     await until(() => rooms.get(code).round === 2, 'ronde baru');
     expect(rooms.get(code).snapshots).toEqual({});
@@ -596,5 +680,114 @@ describe('Hub: snapshot topologi untuk verifikasi guru', () => {
     teacher.hub.importSubmissions([{ submission: fakeSubmission('off-1', 'Eka', 60), topology: SNAP as never }]);
     expect((await teacher.hub.fetchSnapshot('APA', 'off-1'))?.nodes[0].id).toBe('pc-1');
     expect(await teacher.hub.fetchSnapshot('APA', 'tidak-ada')).toBeNull();
+  });
+});
+
+describe('Hub: Kirim Jawaban hanya satu kali per ronde', () => {
+  /** Siswa dengan fetch yang dapat dikendalikan untuk POST SUBMISSION_RECEIVED (gagal jaringan / lambat). */
+  async function studentWithControlledSubmit(code: string, nickname: string, mode: { fail?: boolean; delayMs?: number }) {
+    const local = new MemoryKV();
+    const sessionKV = new MemoryKV();
+    local.setItem(STORAGE_KEY_RELAY_URL, baseUrl);
+    const controlledFetch: typeof fetch = async (input, init) => {
+      if (typeof init?.body === 'string' && init.body.includes('"SUBMISSION_RECEIVED"')) {
+        if (mode.fail) throw new TypeError('Failed to fetch');
+        if (mode.delayMs) await new Promise((r) => setTimeout(r, mode.delayMs));
+      }
+      return globalThis.fetch(input, init);
+    };
+    const hub = new ClassroomHub({ localStorage: local, sessionStorage: sessionKV, fetch: controlledFetch });
+    const events: ClassroomEvent[] = [];
+    hub.subscribe((e) => events.push(e));
+    hub.setLockedRole('student');
+    const participant = hub.joinClass(code, nickname)!;
+    await until(() => rooms.get(code)?.participants.some((x: { id: string }) => x.id === participant.id), `relay menerima ${nickname}`);
+    await hub.syncWithServer(code);
+    return { hub, events, participant };
+  }
+
+  it('kiriman kedua diabaikan di perangkat (false) dan jawaban pertama tetap di relay', async () => {
+    const code = uniqueCode('ONCE');
+    const teacher = device();
+    await startClass(teacher, code);
+    const ani = await joinStudent(code, 'Ani');
+    expect(ani.hub.getMySubmission()).toBeNull();
+
+    expect(ani.hub.submitWork(code, fakeSubmission(ani.participant.id, 'Ani', 40))).toBe(true);
+    await until(() => Boolean(rooms.get(code).submissions[ani.participant.id]), 'jawaban pertama');
+    expect(ani.hub.submitWork(code, fakeSubmission(ani.participant.id, 'Ani', 100))).toBe(false);
+    await new Promise((r) => setTimeout(r, 200));
+    expect(rooms.get(code).submissions[ani.participant.id].score).toBe(40);
+    await ani.hub.syncWithServer(code);
+    expect(ani.hub.getMySubmission()?.score).toBe(40);
+  });
+
+  it('ronde baru dari guru membuka kembali kesempatan kirim', async () => {
+    const code = uniqueCode('ONCE');
+    const teacher = device();
+    await startClass(teacher, code);
+    const ani = await joinStudent(code, 'Ani');
+    ani.hub.submitWork(code, fakeSubmission(ani.participant.id, 'Ani', 40));
+    await until(() => Boolean(rooms.get(code).submissions[ani.participant.id]), 'jawaban ronde 1');
+    await ani.hub.syncWithServer(code);
+
+    teacher.hub.startExercises(code, [EX('ex-2')]);
+    await until(() => rooms.get(code).round === 2, 'ronde 2');
+    await ani.hub.syncWithServer(code);
+    expect(ani.hub.getMySubmission()).toBeNull();
+    expect(ani.events.some((e) => e.type === 'RELAY_REJECTED')).toBe(false); // bukan "jawaban hilang"
+
+    expect(ani.hub.submitWork(code, { ...fakeSubmission(ani.participant.id, 'Ani', 90), exerciseId: 'ex-2' })).toBe(true);
+    await until(() => rooms.get(code).submissions[ani.participant.id]?.score === 90, 'jawaban ronde 2');
+  });
+
+  it('kiriman yang ditolak relay (soal sudah diganti) dibatalkan sehingga siswa dapat mengirim lagi', async () => {
+    const code = uniqueCode('ONCE');
+    const teacher = device();
+    await startClass(teacher, code);
+    const ani = await joinStudent(code, 'Ani');
+    teacher.hub.updateClassExercises(code, [EX('ex-baru')]);
+    await until(() => rooms.get(code).activeExercises[0]?.id === 'ex-baru', 'soal diganti');
+
+    expect(ani.hub.submitWork(code, fakeSubmission(ani.participant.id, 'Ani', 70))).toBe(true); // masih soal lama
+    await until(() => ani.events.some((e) => e.type === 'RELAY_REJECTED'), 'penolakan');
+    expect(ani.hub.getMySubmission()).toBeNull();
+    expect(ani.hub.submitWork(code, { ...fakeSubmission(ani.participant.id, 'Ani', 70), exerciseId: 'ex-baru' })).toBe(true);
+    await until(() => Boolean(rooms.get(code).submissions[ani.participant.id]), 'kiriman kedua diterima');
+  });
+
+  it('kiriman gagal karena jaringan: sinkronisasi berikutnya memberi tahu siswa dan tombol kirim aktif lagi', async () => {
+    const code = uniqueCode('ONCE');
+    const teacher = device();
+    await startClass(teacher, code);
+    const mode = { fail: true };
+    const ani = await studentWithControlledSubmit(code, 'Ani', mode);
+
+    expect(ani.hub.submitWork(code, fakeSubmission(ani.participant.id, 'Ani', 80))).toBe(true);
+    await new Promise((r) => setTimeout(r, 100));
+    expect(rooms.get(code).submissions[ani.participant.id]).toBeUndefined();
+    await ani.hub.syncWithServer(code); // relay terjangkau tetapi tidak memegang jawaban ini
+    expect(ani.hub.getMySubmission()).toBeNull();
+    await until(() => ani.events.some((e) => e.type === 'RELAY_REJECTED' && e.message.includes('belum diterima server')), 'pemberitahuan');
+
+    mode.fail = false;
+    expect(ani.hub.submitWork(code, fakeSubmission(ani.participant.id, 'Ani', 80))).toBe(true);
+    await until(() => rooms.get(code).submissions[ani.participant.id]?.score === 80, 'kiriman ulang diterima');
+  });
+
+  it('jawaban yang masih di perjalanan tidak dihapus oleh polling', async () => {
+    const code = uniqueCode('ONCE');
+    const teacher = device();
+    await startClass(teacher, code);
+    const ani = await studentWithControlledSubmit(code, 'Ani', { delayMs: 400 });
+
+    expect(ani.hub.submitWork(code, fakeSubmission(ani.participant.id, 'Ani', 80))).toBe(true);
+    await ani.hub.syncWithServer(code); // relay belum menerima POST
+    expect(rooms.get(code).submissions[ani.participant.id]).toBeUndefined();
+    expect(ani.hub.getMySubmission()?.score).toBe(80);
+    expect(ani.events.some((e) => e.type === 'RELAY_REJECTED')).toBe(false);
+    await until(() => Boolean(rooms.get(code).submissions[ani.participant.id]), 'POST tiba');
+    await ani.hub.syncWithServer(code);
+    expect(ani.hub.getMySubmission()?.score).toBe(80);
   });
 });

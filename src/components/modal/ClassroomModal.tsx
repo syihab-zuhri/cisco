@@ -30,11 +30,13 @@ import {
 import { useAppStore } from '../../store/useAppStore';
 import {
   classroomHub,
+  normalizeClassCode,
 } from '../../features/classroom/classroomHub';
 import { evaluatePacket, buildPacketSubmission } from '../../features/classroom/submissionBuilder';
 import { prepareStarterTopology } from '../../features/classroom/starterTopology';
 import { csvCell } from '../../features/classroom/csv';
-import { verifySubmission, type VerificationResult } from '../../features/classroom/verification';
+import { verifySubmission, gradeImportedWork, compactTopology, type VerificationResult } from '../../features/classroom/verification';
+import { studentWorkspace } from '../../features/classroom/studentWorkspace';
 import {
   loadExercises,
   saveExercises,
@@ -141,6 +143,7 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
   const [submissions, setSubmissions] = useState<Record<string, Submission>>({});
   const [history, setHistory] = useState<RoundHistory[]>([]);
   const [isJoining, setIsJoining] = useState(false);
+  const [isCreatingClass, setIsCreatingClass] = useState(false);
   // Hasil verifikasi ulang skor siswa (dinilai ulang dari snapshot topologi, hanya di memori perangkat guru).
   const [verification, setVerification] = useState<Record<string, VerificationResult>>({});
   const [isVerifying, setIsVerifying] = useState(false);
@@ -320,6 +323,8 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
             setParticipants([]);
             setSubmissions({});
           }
+          // Jawaban siswa ditolak/tidak sampai: hub sudah membatalkannya, tombol kirim aktif kembali.
+          if (event.eventType === 'SUBMISSION_RECEIVED') setSubmissions(classroomHub.getSubmissions());
           pushToast('error', event.message);
           break;
 
@@ -583,10 +588,30 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
 
 
   // Handler Guru: Buat Kelas Baru
-  const handleCreateClass = () => {
+  const handleCreateClass = async () => {
+    if (isCreatingClass) return;
     const chosen = exercises.filter((e) => selectedExamExerciseIds.includes(e.id));
     if (rejectUnscorable(chosen)) return;
     const toUse = chosen.length > 0 ? chosen : [];
+    // Kode kustom: periksa dulu di relay agar guru tidak melihat "Kelas dibuka" lalu langsung ditolak.
+    // Kode otomatis tidak perlu: bentrokannya sudah dicoba ulang diam-diam oleh hub.
+    const wantedCode = normalizeClassCode(customCode);
+    if (wantedCode) {
+      setIsCreatingClass(true);
+      let check: Awaited<ReturnType<typeof classroomHub.checkClass>>;
+      try {
+        check = await classroomHub.checkClass(wantedCode);
+      } finally {
+        setIsCreatingClass(false);
+      }
+      if (check.status === 'found' && check.classStatus !== 'closed') {
+        pushToast(
+          'error',
+          `Kode kelas ${wantedCode} sedang dipakai kelas lain yang masih aktif. Gunakan kode lain, atau kosongkan agar kode dibuat otomatis.`
+        );
+        return;
+      }
+    }
     const newSession = classroomHub.createClass(
       classTitle,
       customCode,
@@ -891,7 +916,8 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
         const text = await file.text();
         const res = parseSubmissionJson(text);
         if (res.success && res.submission) {
-          valid.push({ submission: res.submission, topology: res.topology });
+          const submission = await gradeImportedWork(res.submission, res.topology ?? null, [...exercises, ...currentRoundExercises()]);
+          valid.push({ submission, topology: res.topology });
         } else {
           problems.push(`${file.name}: ${res.error ?? 'format tidak dikenali'}`);
         }
@@ -984,7 +1010,9 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
 
   const renderVerification = (participantId: string, sub: Submission) => {
     const v = verification[participantId];
-    if (!v || v.submittedAt !== sub.submittedAt) return null;
+    if (!v || v.submittedAt !== sub.submittedAt) return (
+      <Badge variant="outline" className="ml-2 text-[10px] text-muted-foreground">{sub.ungraded ? 'Belum dinilai' : 'Belum diverifikasi'}</Badge>
+    );
     if (v.status === 'match') {
       return (
         <Badge
@@ -1052,7 +1080,7 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
           : [];
         const total = evals.reduce((n, ev) => n + ev.checks.length, 0);
         const passed = evals.reduce((n, ev) => n + ev.checks.filter((c) => c.passed).length, 0);
-        const perExercise = sub?.exerciseScores
+        const perExercise = sub?.exerciseScores && !sub.ungraded
           ? Object.entries(sub.exerciseScores).map(([id, s]) => `${titleById.get(id) ?? id}: ${s}`).join('; ')
           : '-';
         rows.push(
@@ -1060,11 +1088,11 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
             no,
             r.round,
             csvCell(p.nickname),
-            csvCell(sub ? sub.status : p.status),
-            sub ? sub.score : 0,
+            csvCell(sub?.ungraded ? 'ungraded' : sub ? sub.status : p.status),
+            sub && !sub.ungraded ? sub.score : '',
             csvCell(perExercise),
-            csvCell(sub ? `${passed}/${total}` : '0'),
-            csvCell(sub ? sub.evaluation.feedback : '-'),
+            csvCell(sub && !sub.ungraded ? `${passed}/${total}` : '-'),
+            csvCell(sub?.ungraded ? 'Belum dinilai oleh guru.' : sub ? sub.evaluation.feedback : '-'),
             csvCell(sub ? new Date(sub.submittedAt).toLocaleTimeString() : '-'),
             csvCell(sub && r.round === (session?.round ?? 0) ? verificationLabel(p.id, sub) : '-'),
           ].join(',')
@@ -1119,21 +1147,50 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
     }
   };
 
+  // Siswa: Kirim Jawaban hanya sekali per ronde, dengan konfirmasi (sama dengan HUD).
+  const mySubmitted = Boolean(joinedParticipant && submissions[joinedParticipant.id]);
+  const confirmSubmitWork = () => {
+    if (!activeExercise || !joinedParticipant || !session || isEvaluating) return;
+    if (classroomHub.getMySubmission()) {
+      pushToast('info', 'Jawaban sudah dikirim untuk ronde ini dan tidak dapat diubah.');
+      return;
+    }
+    requestConfirm({
+      title: 'Kirim Jawaban?',
+      message:
+        'Jawaban hanya dapat dikirim SATU KALI untuk ronde ini dan tidak dapat diubah setelah terkirim. ' +
+        (session.allowSelfCheck === false
+          ? 'Periksa kembali pekerjaan Anda sebelum mengirim.'
+          : 'Gunakan Cek Mandiri terlebih dahulu bila ingin memeriksa pekerjaan.'),
+      confirmLabel: 'Ya, Kirim Jawaban',
+      onConfirm: () => void handleSubmitWork(),
+    });
+  };
+
   // Handler Siswa: Submit Jawaban & Evaluasi Otomatis
   const handleSubmitWork = async () => {
     if (!activeExercise || !joinedParticipant || !session) return;
+    if (classroomHub.getMySubmission()) return;
     setIsEvaluating(true);
 
     try {
       // Sama dengan HUD: seluruh soal dalam paket dinilai, skor akhir = rata-rata.
       const active = classroomHub.getActiveExercises();
       const packetExercises = active.length > 0 ? active : [activeExercise];
-      const packet = await evaluatePacket(packetExercises, nodes, edges);
+      const scope = `${session.id}:${joinedParticipant.id}:${session.round ?? 0}`;
+      const stored = studentWorkspace.read(scope);
+      const focusId = stored.selectedExerciseId ?? activeExercise.id;
+      studentWorkspace.save(scope, focusId, useAppStore.getState());
+      const topologies = studentWorkspace.read(scope).topologies;
+      const packet = await evaluatePacket(packetExercises, nodes, edges, {}, topologies);
       const evaluation = packet.evaluations[activeExercise.id] ?? Object.values(packet.evaluations)[0];
       setMyEvaluation(evaluation);
 
       const submission = buildPacketSubmission(joinedParticipant, packetExercises, activeExercise.id, packet);
-      classroomHub.submitWork(session.classCode, submission);
+      if (!classroomHub.submitWork(session.classCode, submission, { ...compactTopology(nodes, edges), exerciseTopologies: topologies })) {
+        pushToast('info', 'Jawaban sudah dikirim untuk ronde ini dan tidak dapat diubah.');
+        return;
+      }
 
       pushToast(
         packet.status === 'passed' ? 'success' : 'info',
@@ -1572,9 +1629,9 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
                     </div>
 
                     <div className="mt-5 flex justify-end">
-                      <Button onClick={handleCreateClass} className="gap-2">
+                      <Button onClick={() => void handleCreateClass()} disabled={isCreatingClass} className="gap-2">
                         <Play className="h-4 w-4" />
-                        Mulai Buka Kelas
+                        {isCreatingClass ? 'Memeriksa kode kelas…' : 'Mulai Buka Kelas'}
                       </Button>
                     </div>
                   </Card>
@@ -1845,7 +1902,7 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
                                     )}
                                   </td>
                                   <td className="p-2.5">
-                                    {sub ? (
+                                    {sub && !sub.ungraded ? (
                                       <span
                                         className={`font-mono font-bold ${
                                           sub.score === 100
@@ -2174,12 +2231,13 @@ export function ClassroomModal({ isOpen, onClose }: ClassroomModalProps) {
                           Susun topologi di kanvas, konfigurasi IP port, lalu klik Submit untuk dinilai otomatis.
                         </p>
                         <Button
-                          onClick={handleSubmitWork}
-                          disabled={isEvaluating}
+                          onClick={confirmSubmitWork}
+                          disabled={isEvaluating || mySubmitted}
                           className="gap-2"
+                          title={mySubmitted ? 'Jawaban sudah dikirim untuk ronde ini' : 'Jawaban hanya dapat dikirim satu kali per ronde'}
                         >
                           <Send className="h-4 w-4" />
-                          {isEvaluating ? 'Mengevaluasi…' : 'Kirim Jawaban (Submit)'}
+                          {mySubmitted ? 'Jawaban Terkirim' : isEvaluating ? 'Mengevaluasi…' : 'Kirim Jawaban (Submit)'}
                         </Button>
                       </div>
                     </Card>

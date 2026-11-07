@@ -6,6 +6,7 @@ import {
 } from '@xyflow/react';
 import { X } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
+import { PacketAnimation } from './PacketAnimation';
 import { packetColor as protocolColor, SELECTED_LINK_COLOR } from './packetColors';
 
 /**
@@ -39,7 +40,7 @@ export function WirelessLinkEdge({
     targetPosition,
   });
 
-  const { activePackets, disconnectEdge } = useAppStore();
+  const { activePackets, disconnectEdge, simulationStatus } = useAppStore();
 
   const ssid = (data?.ssid as string | undefined) ?? 'WiFi';
 
@@ -93,40 +94,12 @@ export function WirelessLinkEdge({
       />
 
       {/* Paket berjalan di sepanjang asosiasi */}
-      {activePacket && (
-        <g className="pointer-events-none">
-          <circle r="7" fill={color}>
-            <animateMotion
-              path={edgePath}
-              dur="0.8s"
-              repeatCount="indefinite"
-              keyPoints={isForwardDirection ? '0;1' : '1;0'}
-              keyTimes="0;1"
-            />
-          </circle>
-          <g>
-            <animateMotion
-              path={edgePath}
-              dur="0.8s"
-              repeatCount="indefinite"
-              keyPoints={isForwardDirection ? '0;1' : '1;0'}
-              keyTimes="0;1"
-            />
-            <rect
-              x="-11"
-              y="-8"
-              width="22"
-              height="16"
-              rx="3"
-              fill="var(--surface)"
-              stroke={color}
-              strokeWidth="2"
-            />
-            <line x1="-9" y1="-6" x2="0" y2="1" stroke={color} strokeWidth="1.5" />
-            <line x1="9" y1="-6" x2="0" y2="1" stroke={color} strokeWidth="1.5" />
-          </g>
-        </g>
-      )}
+      {activePacket && <PacketAnimation
+        key={`${activePacket.packetId}:${activePacket.sourceNodeId}:${activePacket.targetNodeId}:${activePacket.sourcePortId}:${activePacket.targetPortId}`}
+        path={edgePath}
+        color={color}
+        forward={Boolean(isForwardDirection)}
+      />}
 
       <EdgeLabelRenderer>
         <div
@@ -143,7 +116,7 @@ export function WirelessLinkEdge({
           }`}
         >
           <span
-            className={`flex h-2 w-2 rounded-full ${activePacket ? 'animate-ping' : 'animate-pulse'}`}
+            className={`flex h-2 w-2 rounded-full ${activePacket ? (simulationStatus === 'paused' ? '' : 'animate-ping') : 'animate-pulse'}`}
             style={{ backgroundColor: color }}
           />
           <span className="font-bold font-sans tracking-wide" style={{ color: activePacket ? color : WIFI_COLOR }}>
