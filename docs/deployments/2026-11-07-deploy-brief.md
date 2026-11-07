@@ -31,9 +31,13 @@ Akses server memakai alias SSH `vps` (akun `zuhri`, `sudo -n`) seperti rilis seb
 
 ## 3. Risiko dan kompatibilitas
 
+- **Deploy dua fase.** Fase A (frontend + backup) boleh berjalan walau ada kelas aktif. Fase B (relay core + restart)
+  hanya berjalan bila tidak ada kelas nyata. Fase B boleh dilakukan pada sesi terpisah, misalnya malam hari.
 - **Relay harus direstart** agar aturan 409/422 dan `session.id` aktif. Room disimpan di memori, sehingga restart
   menghapus semua kelas. Klien guru memulihkan kelasnya otomatis, tetapi tetap ada jeda.
-  Restart **hanya** jika `activeRooms` = 0 pada dua pemeriksaan berturut-turut, atau jika pemilik proyek menyetujuinya.
+  Restart **hanya** jika tidak ada kelas selain kelas uji `DEPLOY-1107-*` milik agent sendiri (lihat langkah 7),
+  atau jika pemilik proyek menyetujuinya. Kelas yang ditinggalkan terhapus otomatis 24 jam setelah event terakhirnya;
+  kelas tertutup terhapus 2 jam setelah ditutup (pembersihan berjalan tiap 30 menit).
 - **Frontend baru dengan relay lama:** aman. Pengecekan `session.id` tidak aktif (tidak ada id), dan batas satu kali kirim
   tetap berlaku di sisi klien.
 - **Tab lama dengan relay baru:** kirim kedua mendapat pesan error dari relay. Ini diharapkan; tidak ada data yang rusak.
@@ -63,25 +67,44 @@ Ikuti pola rilis `20261025T012131Z` (lihat `2026-10-25-openpacket.md`).
    - Lokasi skrip relay yang dijalankan PM2: `pm2 describe openpacket-relay`. Bandingkan SHA-256 relay core di server
      dengan `ad43e90b…986c`. Jika berbeda, **berhenti dan laporkan** (ada perubahan di server yang tidak tercatat).
    - `curl -s https://openpacket.zuhri.my.id/api/classroom/health` → catat `activeRooms`.
+   - Catat `uptime -s` serta uptime dan jumlah restart proses PM2 (PID relay berubah dari 194678 pada 25 Okt).
+   - Cari backup rilis sebelumnya **dengan `sudo -n`** (bisa jadi hanya tidak terbaca tanpa root):
+     `sudo -n ls -la /var/backups/ /var/backups/openpacket /var/lib/openpacket /var/lib/openpacket/releases`.
+     Ini **hanya temuan untuk dilaporkan**, bukan syarat deploy. Backup lama tidak diperlukan karena langkah 5
+     membuat backup baru dari keadaan produksi sekarang, yang sudah terverifikasi identik dengan rilis 25 Okt.
+     Jangan memperbaiki atau membuat ulang backup lama.
 3. **Kemas dan unggah:** `dist/` + `scripts/classroom-relay-core.mjs` dari `a2baed9`. Hitung SHA-256 arsip lokal, unggah,
    dan cocokkan di server sebelum ekstraksi.
 4. **Release ID:** stempel waktu UTC `YYYYMMDDTHHMMSSZ`. Ekstrak ke `/var/lib/openpacket/releases/<ID>`.
-5. **Backup:** salin web root lama dan relay core lama ke `/var/backups/openpacket/<ID>/`. Buat `rollback.sh` dengan pola
-   yang sama seperti `/var/backups/openpacket/20261025T012131Z/rollback.sh` (pulihkan aset, relay core, dan HTML lama;
-   periksa hash dan health relay). Periksa sintaksnya (`bash -n`), tetapi jangan dijalankan.
+5. **Backup (wajib, sebelum mengubah apa pun):** buat `/var/backups/openpacket/<ID>/` (`sudo -n mkdir -p`, mode 700).
+   Salin seluruh web root (`webroot/`) dan relay core yang sedang dijalankan PM2 (`relay/classroom-relay-core.mjs`).
+   Tulis `SHA256SUMS` untuk `index.html` dan relay core yang dibackup. Pastikan isi backup terbaca ulang dan hash-nya cocok.
+   Tulis `rollback.sh` sendiri (tidak ada templat lama). Skrip harus:
+   - `set -euo pipefail`;
+   - mengembalikan `index.html` lama via salin ke berkas sementara lalu `mv` atomik; aset lama tidak perlu dipulihkan
+     karena deploy tidak menghapusnya;
+   - bila relay core sudah diganti: memulihkan berkas lama dari backup lalu `pm2 restart openpacket-relay`;
+   - memeriksa hash `index.html` dan relay core terhadap `SHA256SUMS` serta health relay `ok`, dan keluar non-zero bila gagal.
+   Periksa sintaksnya (`bash -n`), tetapi jangan dijalankan.
 6. **Pasang frontend:** normalisasi izin (direktori 755, berkas 644, pemilik sama dengan web root yang ada). Salin aset baru
    terlebih dahulu, lalu ganti `index.html` dengan rename atomik.
-7. **Pasang relay:** ganti relay core di lokasi PM2 dengan versi `a2baed9` dan cocokkan SHA-256 `94b2f3fe…a478`.
-   Periksa `/health` dua kali. Jika `activeRooms` = 0 keduanya, jalankan `pm2 restart openpacket-relay`, catat PID sebelum
-   dan sesudah, lalu pastikan health kembali `ok`. Jika `activeRooms` > 0, **jangan restart**. Tanyakan pemilik proyek
-   dan laporkan bahwa frontend sudah terpasang tetapi relay belum aktif.
+   Fase A selesai di sini. Jalankan pemeriksaan produksi Fase A (bagian 6.1 dan 6.3).
+7. **Fase B — pasang relay (hanya bila aman).** Periksa `/health` dua kali dengan jeda ±1 menit.
+   Restart aman bila `activeRooms` = 0, **atau** `activeRooms` sama dengan jumlah kelas uji `DEPLOY-1107-*` yang dibuat
+   agent sendiri dan semuanya berstatus `closed` (cek tiap kode lewat `GET /api/classroom/state?code=…`).
+   - Aman: ganti relay core di lokasi PM2 dengan versi `a2baed9` (cocokkan SHA-256 `94b2f3fe…a478`), jalankan
+     `pm2 restart openpacket-relay`, catat PID sebelum dan sesudah, pastikan health `ok`, lalu jalankan pemeriksaan 6.2.
+   - Tidak aman: **jangan ganti berkas dan jangan restart**. Laporkan bahwa Fase A terpasang dan Fase B tertunda,
+     beserta `activeRooms` terakhir. Fase B dijalankan kemudian sebagai sesi terpisah, mulai lagi dari langkah 7,
+     setelah memeriksa ulang bahwa relay core di server masih `ad43e90b…986c`.
 
 ## 6. Pemeriksaan produksi
 
 Simpan bukti (tangkapan layar/JSON) di `audit-output/2026-11-07/` dan rujuk dari catatan hasil.
 
-1. **Artefak:** HTML publik = HTML origin = build lokal. Semua aset yang dirujuk HTML merespons 200. Health relay `ok`.
-2. **Relay (curl, kelas sintetis).** Buat token uji acak dengan `openssl rand -hex 16`. Jangan tulis token ke catatan.
+1. **(Fase A) Artefak:** HTML publik = HTML origin = build lokal. Semua aset yang dirujuk HTML merespons 200. Health relay `ok`.
+2. **(Fase B, setelah restart relay) Relay (curl, kelas sintetis).** Buat token uji acak dengan `openssl rand -hex 16`.
+   Jangan tulis token ke catatan.
    - `POST /api/classroom/event` `CLASS_CREATED` untuk `DEPLOY-1107-A` dengan `session.id` sintetis dan satu soal `ex-a`.
    - `GET /api/classroom/state?code=DEPLOY-1107-A` (tanpa header) memuat `session.id` dan **tidak** memuat `hostToken`.
    - `PARTICIPANT_JOINED` (id dan token peserta sintetis), lalu `SUBMISSION_RECEIVED` untuk `ex-a` → 200.
@@ -89,7 +112,7 @@ Simpan bukti (tangkapan layar/JSON) di `audit-output/2026-11-07/` dan rujuk dari
    - Peserta kedua mengirim untuk `exerciseId` yang tidak aktif → **422**.
    - `CLASS_CLOSED` dengan token host → kelas berstatus `closed`.
    Bentuk event persis dapat dilihat di `tests/unit/classroomRelayHardening.test.ts` (fungsi `createClass`, `join`, `submit`).
-3. **Browser, dua konteks (guru dan siswa):**
+3. **(Fase A; perilaku klien, berlaku juga dengan relay lama) Browser, dua konteks (guru dan siswa):**
    - Guru membuka kelas `DEPLOY-1107-B` dengan satu soal. Konteks guru kedua mencoba kode yang sama dari form Buat Kelas
      → error *"sedang dipakai kelas lain"* dan **tanpa** toast "Kelas dibuka".
    - Siswa bergabung. Klik **Kirim Jawaban** → dialog muncul. **Batal** → guru tidak menerima jawaban. Klik lagi →
@@ -105,7 +128,8 @@ Simpan bukti (tangkapan layar/JSON) di `audit-output/2026-11-07/` dan rujuk dari
 
 - Tulis `docs/deployments/2026-11-07-openpacket.md`: release ID, commit sumber `a2baed9`, lokasi release dan backup,
   hash (arsip, HTML sebelum/sesudah, relay core), PID PM2 sebelum/sesudah (atau alasan tidak direstart), hasil setiap
-  pemeriksaan, perintah rollback.
+  pemeriksaan, perintah rollback, status Fase A/B, dan temuan backup rilis sebelumnya.
+- Bila Fase B dijalankan pada sesi terpisah, tambahkan bagian "Fase B" ke berkas catatan yang sama.
 - Commit catatan hasil ke `feat/audit-improvements` (tanpa push). `audit-output/` tetap tidak di-commit.
 - Laporkan ke pemilik proyek: berhasil/gagal per langkah, apakah relay sudah direstart, temuan di luar rencana, dan
   perintah rollback.
@@ -116,6 +140,13 @@ Simpan bukti (tangkapan layar/JSON) di `audit-output/2026-11-07/` dan rujuk dari
 ssh vps 'sudo -n /var/backups/openpacket/<ID>/rollback.sh'
 ```
 
-Rollback mengembalikan HTML, aset, dan relay core rilis `20261025T012131Z`. Relay lama tidak mengenal aturan 409/422,
-tetapi frontend baru tetap kompatibel dengannya. Bila hanya frontend yang perlu dikembalikan, cukup pulihkan `index.html` lama
-(aset lama masih ada).
+Rollback mengembalikan HTML dan (bila sudah diganti) relay core rilis `20261025T012131Z` dari backup yang dibuat pada
+langkah 5. Relay lama tidak mengenal aturan 409/422, tetapi frontend baru tetap kompatibel dengannya. Bila hanya frontend
+yang perlu dikembalikan, cukup pulihkan `index.html` lama (aset lama masih ada).
+
+## 9. Riwayat brief
+
+- Revisi 1 (7 Nov): percobaan pertama berhenti dengan benar sebelum mengubah produksi, karena backup
+  `/var/backups/openpacket/20261025T012131Z` yang dirujuk sebagai templat `rollback.sh` tidak ditemukan dan `activeRooms` = 1.
+  Brief diubah agar tidak bergantung pada backup lama, deploy dibagi Fase A/B, dan pencarian backup lama memakai `sudo -n`
+  sebagai temuan saja.
